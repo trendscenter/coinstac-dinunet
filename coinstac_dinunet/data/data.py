@@ -59,37 +59,67 @@ class COINNDataset(_Dataset):
         return COINNDataLoader.new(dataset=self, shuffle=shuffle, batch_size=batch_size,
                                    num_workers=num_workers, pin_memory=pin_memory, **kw)
 
+    def cache_data_indices(self, cache, min_batch_size=4):
+        """
+        Parse and load dataset and save to cache:
+        so that in next global iteration we dont have to do that again.
+        The data IO depends on use case-For a instance, if your data can fit in RAM, you can load
+         and save the entire dataset in cache. But, in general,
+         it is better to save indices in cache, and load only a mini-batch at a time
+         (logic in __nextitem__) of the data loader.
+        """
+        split = _json.loads(open(cache['split_dir'] + _sep + cache['split_file']).read())
+        self.load_indices(files=split['train'])
 
-def cache_data_indices(dataset, cache, min_batch_size=4):
-    """
-    Parse and load dataset and save to cache:
-    so that in next global iteration we dont have to do that again.
-    The data IO depends on use case-For a instance, if your data can fit in RAM, you can load
-     and save the entire dataset in cache. But, in general,
-     it is better to save indices in cache, and load only a mini-batch at a time
-     (logic in __nextitem__) of the data loader.
-    """
-    split = _json.loads(open(cache['split_dir'] + _sep + cache['split_file']).read())
-    dataset.load_indices(files=split['train'])
+        cache['data_indices'] = self.indices
+        if len(self) % cache['batch_size'] >= min_batch_size:
+            cache['data_len'] = len(self)
+        else:
+            cache['data_len'] = (len(self) // cache['batch_size']) * cache['batch_size']
 
-    cache['data_indices'] = dataset.indices
-    if len(dataset) % cache['batch_size'] >= min_batch_size:
-        cache['data_len'] = len(dataset)
+    def next_batch(self, cache):
+        self.indices = cache['data_indices'][cache['cursor']:]
+        loader = self.loader(batch_size=cache['batch_size'], num_workers=cache.get('num_workers', 0),
+                             pin_memory=cache.get('pin_memory', True))
+        return next(loader.__iter__())
+
+
+def create_ratio_split(cache, shuffle_files=True, name='SPLIT', ):
+    files = os.listdir(state['baseDirectory'] + sep + cache['data_dir'])
+    save_to_dir = cache['split_dir']
+    ratio = cache.get('split_ratio', (0.6, 0.2, 0.2))
+    first_key = cache.get('first_key', 'train')
+
+    if shuffle_files:
+        shuffle(files)
+
+    keys = [first_key]
+    if len(ratio) == 2:
+        keys.append('test')
+    elif len(ratio) == 3:
+        keys.append('validation')
+        keys.append('test')
+
+    _ratio = ratio[::-1]
+    locs = _np.array([sum(_ratio[0:i + 1]) for i in range(len(ratio) - 1)])
+    locs = (locs * len(files)).astype(int)
+    splits = _np.split(files[::-1], locs)[::-1]
+    splits = dict([(k, sp.tolist()[::-1]) for k, sp in zip(keys, splits)])
+    if save_to_dir:
+        f = open(save_to_dir + _sep + f'{name}.json', "w")
+        f.write(_json.dumps(splits))
+        f.close()
     else:
-        cache['data_len'] = (len(dataset) // cache['batch_size']) * cache['batch_size']
+        return splits
 
 
-def next_batch(dataset, cache, mode='train'):
-    dataset.indices = cache['data_indices'][cache['cursor']:]
-    dataset.mode = mode
-    loader = dataset.loader(batch_size=cache['batch_size'], num_workers=cache.get('num_workers', 0),
-                            pin_memory=cache.get('pin_memory', True))
-    return next(loader.__iter__())
-
-
-def create_k_fold_splits(files, k=0, save_to_dir=None, shuffle_files=True):
+def create_k_fold_splits(cache, shuffle_files=True, name='SPLIT'):
     from random import shuffle
     import numpy as np
+
+    files = os.listdir(state['baseDirectory'] + sep + cache['data_dir'])
+    k = cache['num_folds']
+    save_to_dir = cache['split_dir']
 
     if shuffle_files:
         shuffle(files)
@@ -105,14 +135,14 @@ def create_k_fold_splits(files, k=0, save_to_dir=None, shuffle_files=True):
                   'test': [files[ix] for ix in test_ix]}
 
         if save_to_dir:
-            f = open(save_to_dir + os.sep + 'SPLIT_' + str(i) + '.json', "w")
+            f = open(save_to_dir + os.sep + f'{name}_' + str(i) + '.json', "w")
             f.write(json.dumps(splits))
             f.close()
         else:
             return splits
 
 
-def init_k_folds(cache, state):
+def init_k_folds(cache, state, data_splitter=create_k_fold_splits):
     """
     If one wants to use custom splits:- Populate splits_dir as specified in inputs spec with split files(.json)
         with list of file names on each train, validation, and test keys.
@@ -129,15 +159,13 @@ def init_k_folds(cache, state):
     os.makedirs(cache['split_dir'], exist_ok=True)
 
     if not os.path.exists(split_dir) or len(os.listdir(split_dir)) == 0:
-        create_k_fold_splits(files=os.listdir(state['baseDirectory'] + sep + cache['data_dir']),
-                             k=cache['num_folds'],
-                             save_to_dir=cache['split_dir'])
-    elif len(os.listdir(split_dir)) == cache['num_folds']:
-        [shutil.copy(split_dir + sep + f, cache['split_dir'] + sep + f) for f in os.listdir(split_dir)]
-    else:
-        raise ValueError(f"Number of splits in {split_dir} of site {state['clientId']} \
-                         must be {cache['num_folds']} instead of {len(os.listdir(split_dir))}")
+        data_splitter(cache)
 
+    elif cache.get('num_folds') and len(os.listdir(split_dir)) != cache['num_folds']:
+        raise ValueError(f"Number of splits in {split_dir} of site {state['clientId']} \
+                                must be {cache['num_folds']} instead of {len(os.listdir(split_dir))}")
+
+    [shutil.copy(split_dir + sep + f, cache['split_dir'] + sep + f) for f in os.listdir(split_dir)]
     splits = sorted(os.listdir(cache['split_dir']))
     cache['splits'] = dict(zip(range(len(splits)), splits))
     out['num_folds'] = cache['num_folds']

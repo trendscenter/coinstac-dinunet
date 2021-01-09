@@ -14,11 +14,12 @@ import coinstac_dinunet.data as _dt
 
 
 class COINNLocal:
-    def __init__(self, **kw):
+    def __init__(self, data_splitter=_dt.init_k_folds, **kw):
         self.out = {}
         self.cache = kw['cache']
         self.input = kw['input']
         self.state = kw['state']
+        self.data_splitter = data_splitter
 
     def compute(self, dataset_cls, trainer_cls):
         trainer = trainer_cls(cache=self.cache, input=self.input, state=self.state)
@@ -28,7 +29,7 @@ class COINNLocal:
             Generate folds as specified.
             """
             self.cache.update(**self.input)
-            self.out.update(**_dt.init_k_folds(self.cache, self.state))
+            self.out.update(**self.data_splitter(self.cache, self.state))
             self.cache['_mode_'] = self.input['mode']
             self.out['mode'] = self.cache['mode']
 
@@ -49,7 +50,7 @@ class COINNLocal:
             trainer.save_checkpoint(name=self.cache['current_nn_state'])
 
             dataset = dataset_cls(cache=self.cache, state=self.state, mode=self.cache['mode'])
-            _dt.cache_data_indices(dataset, self.cache, self.cache.get('min_batch_size', 4))
+            dataset.cache_data_indices(dataset, self.cache, self.cache.get('min_batch_size', 4))
             nxt_phase = 'computation'
 
         if nxt_phase == 'computation':

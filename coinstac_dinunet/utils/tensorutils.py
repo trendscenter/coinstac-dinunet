@@ -7,6 +7,8 @@
 import numpy as _np
 import torch as _torch
 
+import coinstac_dinunet.config as _conf
+
 
 def safe_concat(large, small):
     r"""
@@ -36,3 +38,37 @@ def initialize_weights(*models):
             elif isinstance(module, _torch.nn.BatchNorm2d):
                 module.weight.data.fill_(1)
                 module.bias.data.zero_()
+
+
+def caste_tensor(a):
+    if _conf.grad_file_format == '.npy':
+        return a.numpy().astype(f'float{_conf.grad_precision_bit}')
+    elif _conf.grad_file_format == '.tar':
+        if _conf.grad_precision_bit == 16:
+            return a.half()
+        elif _conf.grad_precision_bit == 32:
+            return a.float()
+        elif _conf.grad_precision_bit == 64:
+            return a.double()
+    return a
+
+
+def extract_grads(model):
+    return [caste_tensor(p.grad.detach().cpu()) for p in model.parameters()]
+
+
+def save_grads(file_name, grads):
+    if _conf.grads_numpy:
+        _np.save(file_name, _np.asarray(grads))
+    elif _conf.grads_torch:
+        _torch.save(grads, file_name)
+
+
+def load_grads(file_name, model, device):
+    avg_grads = None
+    if _conf.grads_numpy:
+        avg_grads = _np.load(file_name, allow_pickle=True)
+    if _conf.grads_torch:
+        avg_grads = _torch.load(file_name)
+    for i, param in enumerate(model.parameters()):
+        param.grad = _torch.tensor(avg_grads[i], dtype=_torch.float32).to(device)

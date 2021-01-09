@@ -4,17 +4,18 @@
 @ref: https://github.com/sraashis/easytorch
 """
 
-import random as _rd
-from os import sep as _sep
-
-from torch.nn import functional as _F
-import coinstac_dinunet.metrics as _base_metrics
-import coinstac_dinunet.data as _dt
-import coinstac_dinunet.utils.tensorutils as _tu
-import numpy as _np
 import json as _json
+import numpy as _np
+import random as _rd
 import torch as _torch
-import coinstac_dinunet.config as _cs
+from os import sep as _sep
+from torch.nn import functional as _F
+
+import coinstac_dinunet.config as _conf
+import coinstac_dinunet.data as _data
+import coinstac_dinunet.data as _dt
+import coinstac_dinunet.metrics as _base_metrics
+import coinstac_dinunet.utils.tensorutils as _tu
 
 
 class COINNIter:
@@ -62,6 +63,7 @@ class COINNTrainer(COINNIter):
         self.nn = {}
         self.optimizer = {}
         self.device = {}
+        self.local_iterations = kw.get('local_iter', 1)
 
     def init_nn(self, init_weights=False):
         self._init_nn_model()
@@ -105,29 +107,17 @@ class COINNTrainer(COINNIter):
     def backward(self, it):
         out = {}
         it['loss'].backward()
-        out['grads_file'] = _cs.grads_file
-
+        out['grads_file'] = f'grads.{_conf.grad_file_format}'
         first_model = list(self.nn.keys())[0]
-        if _cs.is_format_numpy:
-            grads = [p.grad.type(_torch.float16).detach().cpu().numpy() for p in self.nn[first_model].parameters()]
-            _np.save(self.state['transferDirectory'] + _sep + out['grads_file'], _np.asarray(grads))
-        elif _cs.is_format_torch:
-            grads = [p.grad.type(_cs.float_precision) for p in self.nn[first_model].parameters()]
-            _torch.save(grads, self.state['transferDirectory'] + _sep + out['grads_file'])
-
-        self.cache['train_log'].append([vars(it['avg_loss']), vars(it['score'])])
+        _tu.save_grads(self.state['transferDirectory'] + _sep + out['grads_file'],
+                       grads=_tu.extract_grads(self.nn[first_model]))
         return out
 
     def step(self):
-        if _cs.is_format_numpy:
-            avg_grads = _np.load(self.state['baseDirectory'] + _sep + self.input['avg_grads'], allow_pickle=True)
-        if _cs.is_format_torch:
-            avg_grads = _torch.load(self.state['baseDirectory'] + _sep + self.input['avg_grads'])
-
         first_model = list(self.nn.keys())[0]
-        for i, param in enumerate(self.nn[first_model].parameters()):
-            param.grad = _torch.tensor(avg_grads[i], dtype=_torch.float32).to(self.device['gpu'])
-
+        _tu.load_grads(self.state['baseDirectory'] + _sep + self.input['avg_grads'],
+                       model=self.nn[first_model],
+                       device=self.device['gpu'])
         first_optim = list(self.optimizer.keys())[0]
         self.optimizer[first_optim].step()
 
@@ -254,34 +244,38 @@ class COINNTrainer(COINNIter):
             self.save_checkpoint(name=self.cache['best_nn_state'])
             self.cache['best_epoch'] = self.cache['epoch']
 
+        """
+       All sites must begin/resume the training the same time.
+       To enforce this, we have a 'val_waiting' status. Lagged sites will go to this status, 
+           and reshuffle the data,
+        take part in the training with everybody until all sites go to 'val_waiting' status.
+       """
         if any(m == 'train' for m in self.input['global_modes'].values()):
-            """
-            All sites must begin/resume the training the same time.
-            To enforce this, we have a 'val_waiting' status. Lagged sites will go to this status, 
-                and reshuffle the data,
-             take part in the training with everybody until all sites go to 'val_waiting' status.
-            """
             dataset = dataset_cls(cache=self.cache, state=self.state, mode='train')
-            it = self.iteration(dataset.next_batch(dataset, self.cache, mode='train'))
-            out.update(**self.backward(it))
-            out.update(**self.next_iter())
+            itr_avgs, itr_metrics = self.new_averages(), self.new_metrics()
+            for _ in range(self.local_iterations):
+                it = self.iteration(dataset.next_batch(self.cache))
+                out.update(**self.backward(it))
+                out.update(**self.next_iter())
+                itr_avgs.accumulate(it['averages'])
+                itr_metrics.accumulate(it['metrics'])
+            self.cache['train_log'].append([vars(itr_avgs), vars(itr_metrics)])
 
         if self.input.get('avg_grads'):
             self.step()
             self.save_checkpoint(name=self.cache['current_nn_state'])
 
+        """
+        Once all sites are in 'val_waiting' status, remote issues 'validation' signal. 
+        Once all sites run validation phase, they go to 'train_waiting' status. 
+        Once all sites are in this status, remote issues 'train' signal
+         and all sites reshuffle the indices and resume training.
+        We send the confusion matrix to the remote to accumulate global score for model selection.
+        """
         if out['mode'] == 'validation':
-            """
-            Once all sites are in 'val_waiting' status, remote issues 'validation' signal. 
-            Once all sites run validation phase, they go to 'train_waiting' status. 
-            Once all sites are in this status, remote issues 'train' signal
-             and all sites reshuffle the indices and resume training.
-            We send the confusion matrix to the remote to accumulate global score for model selection.
-            """
             with open(self.cache['split_dir'] + _sep + self.cache['split_file']) as split_file:
                 split = _json.loads(split_file.read())
                 val_dataset = dataset_cls(cache=self.cache, state=self.state, mode='eval')
-                val_dataset.load_indices()
                 val_dataset.load_indices(files=split['validation'])
                 avg, scores = self.evaluation([val_dataset], save_pred=False)
                 out['validation_log'] = [vars(avg), vars(scores)]
@@ -292,7 +286,6 @@ class COINNTrainer(COINNIter):
                 split = _json.loads(split_file.read())
                 self._load_checkpoint(name=self.cache['best_nn_state'])
                 test_dataset = dataset_cls(cache=self.cache, state=self.state, mode='eval')
-                test_dataset.load_indices()
                 test_dataset.load_indices(files=split['validation'])
                 avg, scores = self.evaluation([test_dataset], save_pred=True)
                 out['test_log'] = [vars(avg), vars(scores)]
