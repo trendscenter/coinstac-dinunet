@@ -9,29 +9,64 @@ import os as _os
 import shutil as _shutil
 import sys as _sys
 from os import sep as _sep
-from typing import Callable as _Callable
 
 import coinstac_dinunet.data.datautils as _du
 from coinstac_dinunet.utils import FrozenDict as _FrozenDict
+from typing import List as _List, Callable as _Callable
+import coinstac_dinunet.config as _conf
 
 
 class COINNLocal:
 
-    def __init__(self, data_splitter: _Callable = None, **kw):
+    def __init__(self, cache: dict=None, input: dict=None, state: dict=None,
+                 mode: str = None,
+                 batch_size: int = 4,
+                 epochs: int = 21,
+                 learning_rate: float = 0.001,
+                 gpus: _List[int] = None,
+                 pin_memory: bool = _conf.gpu_available,
+                 num_workers: int = 0,
+                 load_limit: int = float('inf'),
+                 pretrained_path: str = None,
+                 patience: int = 5,
+                 load_sparse: bool = False,
+                 num_folds: int = None,
+                 split_ratio: _List[float] = (0.6, 0.2, 0.2),
+                 data_splitter: _Callable = None, **kw):
         self.out = {}
-        self.cache = kw['cache']
-        self.input = kw['input']
-        self.state = kw['state']
+        self.cache = cache
+        self.input = _FrozenDict(input)
+        self.state = _FrozenDict(state)
         self.data_splitter = data_splitter
+        self.args = {}
+        self.args['mode'] = mode  # test/train
+        self.args['batch_size'] = batch_size
+        self.args['epochs'] = epochs
+        self.args['learning_rate'] = learning_rate
+        self.args['gpus'] = gpus
+        self.args['pin_memory'] = pin_memory
+        self.args['num_workers'] = num_workers
+        self.args['load_limit'] = load_limit
+        self.args['pretrained_path'] = pretrained_path
+        self.args['patience'] = patience
+        self.args['load_sparse'] = load_sparse
+        self.args['num_folds'] = num_folds
+        self.args['split_ratio'] = split_ratio
+        self.args.update(**kw)
 
     def compute(self, dataset_cls, trainer_cls):
         trainer = trainer_cls(cache=self.cache, input=self.input, state=self.state)
         nxt_phase = self.input.get('phase', 'init_runs')
         if nxt_phase == 'init_runs':
             """ Generate folds as specified.   """
+
             self.cache.update(**self.input)
+            for k in self.args:
+                if self.cache.get(k) is None:
+                    self.cache[k] = self.args[k]
+
             self.out.update(_du.init_k_folds(self.cache, self.state, self.data_splitter))
-            self.cache['args'] = _FrozenDict(self.input)
+            self.cache['args'] = _FrozenDict(self.cache)
             self.out['mode'] = self.cache['mode']
 
         if nxt_phase == 'init_nn':

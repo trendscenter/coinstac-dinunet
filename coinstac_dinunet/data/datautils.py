@@ -68,8 +68,8 @@ def init_k_folds(cache, state, data_splitter=None):
     Splits will be copied/created in output directory to have everything of a result at the same place.
     """
 
-    if not data_splitter and cache.get('split_ratio'): data_splitter = create_ratio_split
-    if not data_splitter and cache.get('num_folds'): data_splitter = create_k_fold_splits
+    if not data_splitter and cache.get('split_ratio') is not None: data_splitter = create_ratio_split
+    if not data_splitter and cache.get('num_folds') is not None: data_splitter = create_k_fold_splits
 
     out = {}
     cache['split_dir'] = cache.get('split_dir', 'splits')

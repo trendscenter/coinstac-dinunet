@@ -17,6 +17,7 @@ class FSDataset(COINNDataset):
     def __init__(self, **kw):
         super().__init__(**kw)
 
+
     def load_indices(self, files=None, **kw):
         labels_file = os.listdir(self.label_dir)[0]
         labels = pd.read_csv(self.label_dir + os.sep + labels_file).set_index('freesurferfile')

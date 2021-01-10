@@ -4,9 +4,6 @@
 @ref: https://github.com/sraashis/easytorch
 """
 
-import json as _json
-import os as _os
-
 from torch.utils.data import DataLoader as _DataLoader, Dataset as _Dataset
 from torch.utils.data._utils.collate import default_collate as _default_collate
 
@@ -50,14 +47,14 @@ class COINNDataset(_Dataset):
         self.args = {}
         self.indices = []
 
-    def load_index(self, dataset_name, file):
+    def load_index(self, id, file):
         r"""
         Logic to load indices of a single file.
         -Sometimes one image can have multiple indices like U-net where we have to get multiple patches of images.
         """
-        self.indices.append([dataset_name, file])
+        self.indices.append([id, file])
 
-    def _load_indices(self, dataset_name, files, **kw):
+    def _load_indices(self, id, files, **kw):
         r"""
         We load the proper indices/names(whatever is called) of the files in order to prepare minibatches.
         Only load lim numbr of files so that it is easer to debug(Default is infinite, -lim/--load-lim argument).
@@ -65,10 +62,10 @@ class COINNDataset(_Dataset):
         for file in files:
             if len(self) >= self.limit:
                 break
-            self.load_index(dataset_name, file)
+            self.load_index(id, file)
 
         if kw.get('verbose', True):
-            print(f'{dataset_name}, {self.mode}, {len(self)} Indices Loaded')
+            print(f'{id}, {self.mode}, {len(self)} Indices Loaded')
 
     def __getitem__(self, index):
         r"""
@@ -86,5 +83,4 @@ class COINNDataset(_Dataset):
     def add(self, files, cache: dict = None, state: dict = None):
         self.dataspecs[state['clientId']] = state
         self.args[state['clientId']] = cache['args']
-        self._load_indices(dataset_name=state['clientId'], files=files, verbose=False)
-
+        self._load_indices(id=state['clientId'], files=files, verbose=False)
