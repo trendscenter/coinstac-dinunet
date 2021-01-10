@@ -5,80 +5,34 @@
 """
 
 import abc as _abc
-import time as _time
-import typing as _typing
-
 import numpy as _np
+import time as _time
 import torch as _torch
-
-_eps = 10e-5
-_num_precision = 5
-
-
-class ETAverages:
-    def __init__(self, num_averages=1):
-        r"""
-        This class can keep track of K averages.
-        For example, in GAN we need to keep track of Generators loss
-        """
-        self.values = _np.array([0.0] * num_averages, dtype=_np.float)
-        self.counts = _np.array([0.0] * num_averages, dtype=_np.float)
-        self.num_averages = num_averages
-
-    def add(self, val, n=1, index=0):
-        r"""
-        Keep adding val, n to get the average later.
-        Index is the position on where to add the values.
-        For example:
-            avg = ETAverages(num_averages=2)
-            avg.add(lossG.item(), len(batch), 0)
-            avg.add(lossD.item(), len(batch), 1)
-        """
-        self.values[index] += val * n
-        self.counts[index] += n
-
-    def accumulate(self, other):
-        r"""
-        Add another ETAverage object to self
-        """
-        self.values += other.values
-        self.counts += other.counts
-
-    def reset(self):
-        r"""
-        Clear all the content of self.
-        """
-        self.values = _np.array([0.0] * self.num_averages)
-        self.counts = _np.array([0.0] * self.num_averages)
-
-    def get(self) -> _typing.List[float]:
-        r"""
-        Computes/Returns self.num_averages number of averages in vectorized way.
-        """
-        counts = self.counts.copy()
-        counts[counts == 0] = _np.inf
-        return _np.round(self.values / counts, self.num_precision)
-
-    def average(self, reduce_mean=True):
-        avgs = self.get()
-        if reduce_mean:
-            return round(sum(avgs) / len(avgs), self.num_precision)
-        return avgs
-
-    @property
-    def eps(self):
-        return _eps
-
-    @property
-    def num_precision(self):
-        return _num_precision
-
-    @property
-    def time(self):
-        return _time.time()
+import typing as _typing
+from coinstac_dinunet.config import metrics_eps as _eps, metrics_num_precision as _num_precision
 
 
-class ETMetrics:
+class SerializableMetrics:
+    def __init__(self, **kw):
+        pass
+
+    def __getattribute__(self, attribute):
+        if attribute == "__dict__":
+            obj = object.__getattribute__(self, attribute)
+            for k in obj:
+                if isinstance(obj[k], _np.ndarray):
+                    obj[k] = obj[k].tolist()
+                elif isinstance(obj[k], _torch.Tensor):
+                    obj[k] = obj[k].cpu().tolist()
+            return obj
+        else:
+            return object.__getattribute__(self, attribute)
+
+
+class ETMetrics(SerializableMetrics):
+    def __init__(self, **kw):
+        super().__init__(**kw)
+
     @_abc.abstractmethod
     def update(self, *args, **kw):
         raise NotImplementedError('Must be implemented.')
@@ -95,7 +49,7 @@ class ETMetrics:
         """
         raise NotImplementedError('Must be implemented.')
 
-    def accumulate(self, other):
+    def accumulate(self, other, **kw):
         r"""
         Add all the content from another ETMetrics object.
         """
@@ -133,23 +87,79 @@ class ETMetrics:
         return _time.time()
 
 
+class ETAverages(ETMetrics):
+    def __init__(self, num_averages=1, **kw):
+        r"""
+        This class can keep track of K averages.
+        For example, in GAN we need to keep track of Generators loss
+        """
+        super().__init__(**kw)
+        self.values = _np.array([0.0] * num_averages, dtype=_np.float)
+        self.counts = _np.array([0.0] * num_averages, dtype=_np.float)
+        self.num_averages = num_averages
+
+    def add(self, val=0, n=1, index=0):
+        r"""
+        Keep adding val, n to get the average later.
+        Index is the position on where to add the values.
+        For example:
+            avg = ETAverages(num_averages=2)
+            avg.add(lossG.item(), len(batch), 0)
+            avg.add(lossD.item(), len(batch), 1)
+        """
+        self.values[index] += val * n
+        self.counts[index] += n
+
+    def update(self, values=0, count=0, **kw):
+        self.values += values
+        self.counts += count
+
+    def accumulate(self, other, **kw):
+        r"""
+        Add another ETAverage object to self
+        """
+        self.values += other.values
+        self.counts += other.counts
+
+    def reset(self, **kw):
+        r"""
+        Clear all the content of self.
+        """
+        self.values = _np.array([0.0] * self.num_averages)
+        self.counts = _np.array([0.0] * self.num_averages)
+
+    def get(self, **kw) -> _typing.List[float]:
+        r"""
+        Computes/Returns self.num_averages number of averages in vectorized way.
+        """
+        counts = self.counts.copy()
+        counts[counts == 0] = _np.inf
+        return _np.round(self.values / counts, self.num_precision)
+
+    def average(self, reduce_mean=True, **kw):
+        avgs = self.get()
+        if reduce_mean:
+            return round(sum(avgs) / len(avgs), self.num_precision)
+        return avgs
+
+
 class Prf1a(ETMetrics):
     r"""
     A class that has GPU based computation of:
         Precision, Recall, F1 Score, Accuracy, and Overlap(IOU).
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kw):
+        super().__init__(**kw)
         self.tn, self.fp, self.fn, self.tp = 0, 0, 0, 0
 
-    def update(self, tn=0, fp=0, fn=0, tp=0):
+    def update(self, tn=0, fp=0, fn=0, tp=0, **kw):
         self.tp += tp
         self.fp += fp
         self.tn += tn
         self.fn += fn
 
-    def add(self, pred, true):
+    def add(self, pred, true, **kw):
         y_true = true.clone().int().view(1, -1).squeeze()
         y_pred = pred.clone().int().view(1, -1).squeeze()
 
@@ -163,7 +173,7 @@ class Prf1a(ETMetrics):
         self.tn += _torch.sum(y_cases == 0).item()
         self.fn += _torch.sum(y_cases == 2).item()
 
-    def accumulate(self, other):
+    def accumulate(self, other, **kw):
         self.tp += other.tp
         self.fp += other.fp
         self.tn += other.tn
@@ -215,24 +225,24 @@ class ConfusionMatrix(ETMetrics):
     x-axis is predicted. y-axis is true label.
     F1 score from average precision and recall is calculated
     """
-
-    def __init__(self, num_classes=None, device='cpu'):
+    def __init__(self, num_classes=None, **kw):
+        super().__init__(**kw)
         self.num_classes = num_classes
         self.matrix = _torch.zeros(num_classes, num_classes).float()
-        self.device = device
+        self.device = kw.get('device', 'cpu')
 
     def reset(self):
         self.matrix = _torch.zeros(self.num_classes, self.num_classes).float()
         return self
 
-    def update(self, matrix):
-        self.matrix += matrix
+    def update(self, matrix=0, **kw):
+        self.matrix += _np.array(matrix)
 
-    def accumulate(self, other):
+    def accumulate(self, other, **kw):
         self.matrix += other.matrix
         return self
 
-    def add(self, pred, true):
+    def add(self, pred, true, **kw):
         pred = pred.clone().long().reshape(1, -1).squeeze()
         true = true.clone().long().reshape(1, -1).squeeze()
         self.matrix += _torch.sparse.LongTensor(
@@ -271,15 +281,3 @@ class ConfusionMatrix(ETMetrics):
 
     def get(self):
         return self.prfa()
-
-    def __getattribute__(self, attribute):
-        if attribute == "__dict__":
-            obj = object.__getattribute__(self, attribute)
-            for k in obj:
-                if isinstance(obj[k], _np.ndarray):
-                    obj[k] = obj[k].tolist()
-                elif isinstance(obj[k], _torch.Tensor):
-                    obj[k] = obj[k].cpu().tolist()
-            return obj
-        else:
-            return object.__getattribute__(self, attribute)

@@ -6,54 +6,50 @@
 
 import datetime as _datetime
 import json as _json
+import numpy as _np
 import os as _os
 import random as _random
 import shutil as _shutil
 import sys as _sys
-
-import numpy as _np
 import torch as _torch
+from typing import Callable as _Callable
 
-import coinstac_dinunet.config as _cs
+import coinstac_dinunet.config as _conf
 import coinstac_dinunet.metrics as _metric
-from coinstac_dinunet.vision import plot as _plot
+import coinstac_dinunet.utils.tensorutils as _tu
+from coinstac_dinunet.vision import plotter as _plot
+
+
+def average_sites_gradients(cache, input, state):
+    """
+    Average each sites gradients and pass it to all sites.
+    """
+    out = {}
+    grads = []
+    for site, site_vars in input.items():
+        grads_file = state['baseDirectory'] + _os.sep + site + _os.sep + site_vars['grads_file']
+        grads.append(_tu.load_grads(grads_file))
+        out['avg_grads'] = f"avg_{site_vars['grads_file']}"
+
+    avg_grads = []
+    for layer_grad in zip(*tensors):
+        if _conf.grads_numpy:
+            avg_grads.append(caste_tensor(_np.array(layer_grad).mean(0)))
+        if _conf.grads_torch:
+            """ RuntimeError: "sum_cpu" not implemented for 'Half' so must convert to float32. """
+            layer_grad = [lg.type(_torch.float32).cpu() for lg in layer_grad]
+            avg_grads.append(caste_tensor(_torch.stack(layer_grad).mean(0)))
+    _torch.save(avg_grads, state['transferDirectory'] + _os.sep + out['avg_grads'])
+    return out
 
 
 class COINNRemote:
-    def __init__(self, **kw):
+    def __init__(self, sites_reducer: _Callable = average_sites_gradients, **kw):
         self.out = {}
         self.cache = kw['cache']
         self.input = kw['input']
         self.state = kw['state']
-
-    def _aggregate_sites_info(self):
-        """
-        Average each sites gradients and pass it to all sites.
-        """
-        out = {}
-        grads = []
-        for site, site_vars in self.input.items():
-            grad_file = self.state['baseDirectory'] + _os.sep + site + _os.sep + site_vars['grads_file']
-            if _cs.is_format_torch: grads.append(_torch.load(grad_file))
-            if _cs.is_format_numpy: grads.append(_np.load(grad_file, allow_pickle=True))
-        out['avg_grads'] = _cs.avg_grads_file
-        avg_grads = []
-
-        if _cs.is_format_numpy:
-            numpy_float_precision = _np.float16 if str(_cs.float_precision).endswith('float16') else _np.float
-            for layer_grad in zip(*grads):
-                avg_grads.append(_np.array(layer_grad, dtype=numpy_float_precision).mean(0))
-            _np.save(self.state['transferDirectory'] + _os.sep + out['avg_grads'], _np.array(avg_grads))
-        elif _cs.is_format_torch:
-            for layer_grad in zip(*grads):
-                """
-                RuntimeError: "sum_cpu" not implemented for 'Half' so must convert to float32.
-                """
-                layer_grad = [lg.type(_torch.float32).cpu() for lg in layer_grad]
-                avg_grads.append(_torch.stack(layer_grad).mean(0).type(_cs.float_precision))
-            _torch.save(avg_grads, self.state['transferDirectory'] + _os.sep + out['avg_grads'])
-
-        return out
+        self.sites_reducer = sites_reducer
 
     def _init_runs(self):
         self.cache.update(id=[v['id'] for _, v in self.input.items()][0])
@@ -123,18 +119,17 @@ class COINNRemote:
         val_scores = self._new_metrics()
         val_loss = self._new_averages()
         for site, site_vars in self.input.items():
-            for tl, tp in site_vars['train_log']:
-                train_loss.add(tl['sum'], tl['count'])
-                train_scores.update(tp=tp['tp'], tn=tp['tn'], fn=tp['fn'], fp=tp['fp'])
-            vl, vp = site_vars['validation_log']
-            val_loss.add(vl['sum'], vl['count'])
-            val_scores.update(tp=vp['tp'], tn=vp['tn'], fn=vp['fn'], fp=vp['fp'])
+            for ta, tm in site_vars['train_log']:
+                train_loss.update(**ta)
+                train_scores.update(**tm)
+            va, vm = site_vars['validation_log']
+            val_loss.update(**va)
+            val_scores.update(**vm)
 
         self.cache['train_log'].append([*train_loss.get(), *train_scores.get()])
         self.cache['validation_log'].append([*val_loss.get(), *val_scores.get()])
         self._save_if_better(val_scores)
-        _plot.plot_progress(self.cache, self.cache['log_dir'], log_headers=self._get_log_headers(),
-                            plot_keys=['train_log', 'validation_log'])
+        _plot.plot_progress(self.cache, self.cache['log_dir'], plot_keys=['train_log', 'validation_log'])
         return out
 
     def _save_if_better(self, metrics):
@@ -164,30 +159,28 @@ class COINNRemote:
         test_scores = self._new_metrics()
         test_loss = self._new_averages()
         for site, site_vars in self.input.items():
-            vl, vp = site_vars['test_log']
-            test_loss.add(vl['sum'], vl['count'])
-            test_scores.update(tp=vp['tp'], tn=vp['tn'], fn=vp['fn'], fp=vp['fp'])
+            va, vm = site_vars['test_log']
+            test_loss.update(**va)
+            test_scores.update(**vm)
         self.cache['test_log'].append([*test_loss.get(), *test_scores.get()])
         self.cache['test_scores'] = _json.dumps(vars(test_scores))
         self.cache['global_test_score'].append(vars(test_scores))
-        _plot.plot_progress(self.cache, self.cache['log_dir'], plot_keys=['train_log', 'validation_log'],
-                            log_headers=self._get_log_headers())
+        _plot.plot_progress(self.cache, self.cache['log_dir'], plot_keys=['train_log', 'validation_log'])
         _plot.save_scores(self.cache, self.cache['log_dir'], file_keys=['test_log', 'test_scores'])
 
     def _send_global_scores(self):
         out = {}
         score = self._new_metrics()
         for sc in self.cache['global_test_score']:
-            score.update(tp=sc['tp'], tn=sc['tn'], fn=sc['fn'], fp=sc['fp'])
+            score.update(**sc)
         self.cache['global_test_score'] = ['Precision,Recall,F1,Accuracy']
-        self.cache['global_test_score'].append(score.prfa())
-        _plot.save_scores(self.cache, self.state['outputDirectory'] + _os.sep + self.cache['id'],
-                          log_header=self._get_log_headers(), file_keys=['global_test_score'])
+        self.cache['global_test_score'].append(score.get())
+        _plot.save_scores(self.cache, self.state['outputDirectory'] + _os.sep + self.cache['id'], file_keys=['global_test_score'])
         _plot.save_cache(self.cache, self.state['log_dir'], self.cache['id'])
 
         out['results_zip'] = f"{self.cache['id']}_" + '_'.join(str(_datetime.datetime.now()).split(' '))
         _shutil.make_archive(f"{self.state['transferDirectory']}{_os.sep}{out['results_zip']}",
-                            'zip', self.cache['log_dir'])
+                             'zip', self.cache['log_dir'])
         return out
 
     def _set_mode(self, mode=None):
@@ -217,7 +210,7 @@ class COINNRemote:
             nxt_phase = 'computation'
             self.out['global_modes'] = self._set_mode()
             if self._check(all, 'grads_file', _cs.grads_file, self.input):
-                self.out.update(**self._aggregate_sites_info())
+                self.out.update(**self.sites_reducer(self.cache, self.input, self.state))
 
             if self._check(all, 'mode', 'val_waiting', self.input):
                 self.out['global_modes'] = self._set_mode(mode='validation')

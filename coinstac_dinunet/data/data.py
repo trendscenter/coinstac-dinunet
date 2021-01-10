@@ -5,7 +5,7 @@
 """
 
 import json as _json
-from os import sep as _sep
+import os as _os
 
 from torch.utils.data import Dataset as _Dataset, DataLoader as _DataLoader
 from torch.utils.data._utils.collate import default_collate as _default_collate
@@ -41,12 +41,12 @@ class COINNDataLoader(_DataLoader):
 
 class COINNDataset(_Dataset):
     def __init__(self, cache={}, state={}, mode=None, **kw):
-        self.data_dir = state.get('baseDirectory', '') + _sep + cache.get('data_dir', '')
-        self.label_dir = state.get('baseDirectory', '') + _sep + cache.get('label_dir', '')
+        self.data_dir = _os.path.join(patstate.get('baseDirectory', ''), cache.get('data_dir', ''))
+        self.label_dir = _os.path.join(state.get('baseDirectory', ''), cache.get('label_dir', ''))
         self.mode = mode
         self.indices = kw.get('indices', [])
 
-    def load_indices(self, **kw):
+    def load_indices(self, files=None, **kw):
         return NotImplementedError('Must be implemented.')
 
     def __getitem__(self, ix):
@@ -68,7 +68,7 @@ class COINNDataset(_Dataset):
          it is better to save indices in cache, and load only a mini-batch at a time
          (logic in __nextitem__) of the data loader.
         """
-        split = _json.loads(open(cache['split_dir'] + _sep + cache['split_file']).read())
+        split = _json.loads(open(cache['split_dir'] + _os.sep + cache['split_file']).read())
         self.load_indices(files=split['train'])
 
         cache['data_indices'] = self.indices
@@ -106,7 +106,7 @@ def create_ratio_split(cache, shuffle_files=True, name='SPLIT', ):
     splits = _np.split(files[::-1], locs)[::-1]
     splits = dict([(k, sp.tolist()[::-1]) for k, sp in zip(keys, splits)])
     if save_to_dir:
-        f = open(save_to_dir + _sep + f'{name}.json', "w")
+        f = open(save_to_dir + _os.sep + f'{name}.json', "w")
         f.write(_json.dumps(splits))
         f.close()
     else:
@@ -142,7 +142,7 @@ def create_k_fold_splits(cache, shuffle_files=True, name='SPLIT'):
             return splits
 
 
-def init_k_folds(cache, state, data_splitter=create_k_fold_splits):
+def init_k_folds(cache, state, data_splitter=None):
     """
     If one wants to use custom splits:- Populate splits_dir as specified in inputs spec with split files(.json)
         with list of file names on each train, validation, and test keys.
@@ -150,6 +150,10 @@ def init_k_folds(cache, state, data_splitter=create_k_fold_splits):
     If nothing is provided, random k-splits will be created.
     Splits will be copied/created in output directory to have everything of a result at the same place.
     """
+
+    if not data_splitter and cache.get('split_ratio'): data_splitter = create_ratio_split
+    if not data_splitter and cache.get('num_folds'): data_splitter = create_k_fold_splits
+
     out = {}
     cache['split_dir'] = cache.get('split_dir', 'splits')
     split_dir = state['baseDirectory'] + sep + cache['split_dir']

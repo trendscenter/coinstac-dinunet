@@ -1,3 +1,3 @@
-from .local import *
-from .remote import *
+from .local import COINNLocal
+from .remote import COINNRemote
 

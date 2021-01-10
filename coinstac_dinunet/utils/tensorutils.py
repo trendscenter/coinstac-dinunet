@@ -64,11 +64,10 @@ def save_grads(file_name, grads):
         _torch.save(grads, file_name)
 
 
-def load_grads(file_name, model, device):
-    avg_grads = None
+def load_grads(file_name):
+    grads = None
     if _conf.grads_numpy:
-        avg_grads = _np.load(file_name, allow_pickle=True)
+        grads = _np.load(file_name, allow_pickle=True)
     if _conf.grads_torch:
-        avg_grads = _torch.load(file_name)
-    for i, param in enumerate(model.parameters()):
-        param.grad = _torch.tensor(avg_grads[i], dtype=_torch.float32).to(device)
+        grads = _torch.load(file_name)
+    return grads
