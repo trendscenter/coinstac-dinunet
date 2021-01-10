@@ -5,11 +5,12 @@
 """
 
 import abc as _abc
-import numpy as _np
 import time as _time
-import torch as _torch
 import typing as _typing
-from coinstac_dinunet.config import metrics_eps as _eps, metrics_num_precision as _num_precision
+
+import numpy as _np
+import torch as _torch
+from coinstac_dinunet.config import metrics_num_precision as _nump, metrics_eps as _eps
 
 
 class SerializableMetrics:
@@ -41,6 +42,7 @@ class ETMetrics(SerializableMetrics):
     def add(self, *args, **kw):
         r"""
         Add two tensor to collect scores.
+        Example implementation easytorch.utils.measurements.Prf1a().
         Calculate/store all True Positives, False Positives, True Negatives, False Negatives:
            out = F.softmax(core(x), 1)
            _, pred = torch.max(out, 1)
@@ -49,7 +51,7 @@ class ETMetrics(SerializableMetrics):
         """
         raise NotImplementedError('Must be implemented.')
 
-    def accumulate(self, other, **kw):
+    def accumulate(self, other):
         r"""
         Add all the content from another ETMetrics object.
         """
@@ -64,6 +66,7 @@ class ETMetrics(SerializableMetrics):
     def get(self, *args, **kw) -> _typing.List[float]:
         r"""
         Computes/returns list of scores.
+            Example: easytorch.utils.measurements.Prf1a() returns
             Precision, Recall, F1, Accuracy from the collected TP, TN, FP, FN.
         """
         return [0.0]
@@ -80,7 +83,7 @@ class ETMetrics(SerializableMetrics):
         r"""
         Numerical Precision(default 5) for nice looking numbers.
         """
-        return _num_precision
+        return _nump
 
     @property
     def time(self):
@@ -114,21 +117,21 @@ class ETAverages(ETMetrics):
         self.values += values
         self.counts += count
 
-    def accumulate(self, other, **kw):
+    def accumulate(self, other):
         r"""
         Add another ETAverage object to self
         """
         self.values += other.values
         self.counts += other.counts
 
-    def reset(self, **kw):
+    def reset(self):
         r"""
         Clear all the content of self.
         """
         self.values = _np.array([0.0] * self.num_averages)
         self.counts = _np.array([0.0] * self.num_averages)
 
-    def get(self, **kw) -> _typing.List[float]:
+    def get(self) -> _typing.List[float]:
         r"""
         Computes/Returns self.num_averages number of averages in vectorized way.
         """
@@ -136,11 +139,23 @@ class ETAverages(ETMetrics):
         counts[counts == 0] = _np.inf
         return _np.round(self.values / counts, self.num_precision)
 
-    def average(self, reduce_mean=True, **kw):
+    def average(self, reduce_mean=True):
         avgs = self.get()
         if reduce_mean:
             return round(sum(avgs) / len(avgs), self.num_precision)
         return avgs
+
+    @property
+    def eps(self):
+        return _eps
+
+    @property
+    def num_precision(self):
+        return _nump
+
+    @property
+    def time(self):
+        return _time.time()
 
 
 class Prf1a(ETMetrics):
@@ -149,8 +164,8 @@ class Prf1a(ETMetrics):
         Precision, Recall, F1 Score, Accuracy, and Overlap(IOU).
     """
 
-    def __init__(self, **kw):
-        super().__init__(**kw)
+    def __init__(self):
+        super().__init__()
         self.tn, self.fp, self.fn, self.tp = 0, 0, 0, 0
 
     def update(self, tn=0, fp=0, fn=0, tp=0, **kw):
@@ -159,7 +174,7 @@ class Prf1a(ETMetrics):
         self.tn += tn
         self.fn += fn
 
-    def add(self, pred, true, **kw):
+    def add(self, pred, true):
         y_true = true.clone().int().view(1, -1).squeeze()
         y_pred = pred.clone().int().view(1, -1).squeeze()
 
@@ -173,7 +188,7 @@ class Prf1a(ETMetrics):
         self.tn += _torch.sum(y_cases == 0).item()
         self.fn += _torch.sum(y_cases == 2).item()
 
-    def accumulate(self, other, **kw):
+    def accumulate(self, other):
         self.tp += other.tp
         self.fp += other.fp
         self.tn += other.tn
@@ -225,11 +240,12 @@ class ConfusionMatrix(ETMetrics):
     x-axis is predicted. y-axis is true label.
     F1 score from average precision and recall is calculated
     """
-    def __init__(self, num_classes=None, **kw):
+
+    def __init__(self, num_classes=None, device='cpu', **kw):
         super().__init__(**kw)
         self.num_classes = num_classes
         self.matrix = _torch.zeros(num_classes, num_classes).float()
-        self.device = kw.get('device', 'cpu')
+        self.device = device
 
     def reset(self):
         self.matrix = _torch.zeros(self.num_classes, self.num_classes).float()
@@ -238,11 +254,11 @@ class ConfusionMatrix(ETMetrics):
     def update(self, matrix=0, **kw):
         self.matrix += _np.array(matrix)
 
-    def accumulate(self, other, **kw):
+    def accumulate(self, other):
         self.matrix += other.matrix
         return self
 
-    def add(self, pred, true, **kw):
+    def add(self, pred, true):
         pred = pred.clone().long().reshape(1, -1).squeeze()
         true = true.clone().long().reshape(1, -1).squeeze()
         self.matrix += _torch.sparse.LongTensor(
@@ -277,7 +293,8 @@ class ConfusionMatrix(ETMetrics):
         return self.matrix.trace().item() / max(self.matrix.sum().item(), self.eps)
 
     def prfa(self):
-        return [self.precision(), self.recall(), self.f1(), self.accuracy()]
+        return [round(self.precision(), self.num_precision), round(self.recall(), self.num_precision),
+                round(self.f1(), self.num_precision), round(self.accuracy(), self.num_precision)]
 
     def get(self):
         return self.prfa()

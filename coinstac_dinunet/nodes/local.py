@@ -11,10 +11,12 @@ import sys as _sys
 from os import sep as _sep
 from typing import Callable as _Callable
 
-import coinstac_dinunet.data as _dt
+import coinstac_dinunet.data.datautils as _du
+from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 
 
 class COINNLocal:
+
     def __init__(self, data_splitter: _Callable = None, **kw):
         self.out = {}
         self.cache = kw['cache']
@@ -28,8 +30,8 @@ class COINNLocal:
         if nxt_phase == 'init_runs':
             """ Generate folds as specified.   """
             self.cache.update(**self.input)
-            self.out.update(_dt.init_k_folds(self.cache, self.state, self.data_splitter))
-            self.cache['_mode_'] = self.input['mode']
+            self.out.update(_du.init_k_folds(self.cache, self.state, self.data_splitter))
+            self.cache['args'] = _FrozenDict(self.input)
             self.out['mode'] = self.cache['mode']
 
         if nxt_phase == 'init_nn':
@@ -45,9 +47,7 @@ class COINNLocal:
             self.cache['current_nn_state'] = 'current.nn.pt'
             self.cache['best_nn_state'] = 'best.nn.pt'
             trainer.save_checkpoint(name=self.cache['current_nn_state'])
-
-            dataset = dataset_cls(cache=self.cache, state=self.state, mode=self.cache['mode'])
-            dataset.cache_data_indices(dataset, self.cache, self.cache.get('min_batch_size', 4))
+            trainer.load_data_indices(dataset_cls, split_key='train')
             nxt_phase = 'computation'
 
         if nxt_phase == 'computation':
@@ -55,10 +55,10 @@ class COINNLocal:
             self.out.update(mode=self.input['global_modes'].get(self.state['clientId'], self.cache['mode']))
 
             trainer.init_nn(init_weights=False)
-            self._load_checkpoint(name=self.cache['current_nn_state'])
+            trainer.load_checkpoint_from_key(key='current_nn_state')
 
             if self.input.get('save_current_as_best'):
-                self.save_checkpoint(name=self.cache['best_nn_state'])
+                trainer.save_checkpoint(file_name=self.cache['best_nn_state'])
                 self.cache['best_epoch'] = self.cache['epoch']
 
             if any(m == 'train' for m in self.input['global_modes'].values()):
@@ -68,7 +68,7 @@ class COINNLocal:
                    and reshuffle the data,
                 take part in the training with everybody until all sites go to 'val_waiting' status.
                 """
-                self.out.update(**trainer.distributed_training(dataset_cls))
+                self.out.update(**trainer.train(dataset_cls))
 
             elif self.out['mode'] == 'validation':
                 """
@@ -82,7 +82,7 @@ class COINNLocal:
 
             elif self.out['mode'] == 'test':
                 self.out.update(**trainer.test(dataset_cls))
-                out['mode'] = self.cache['_mode_']
+                self.out['mode'] = self.cache['args']['mode']
                 nxt_phase = 'next_run_waiting'
 
         elif nxt_phase == 'success':

@@ -24,7 +24,8 @@ setup(
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
     ],
-    packages=['coinstac_dinunet', 'coinstac_dinunet.config', 'coinstac_dinunet.data', 'coinstac_dinunet.metrics', 'coinstac_dinunet.nodes', 'coinstac_dinunet.utils', 'coinstac_dinunet.vision'],
+    packages=['coinstac_dinunet', 'coinstac_dinunet.config', 'coinstac_dinunet.data',
+              'coinstac_dinunet.metrics', 'coinstac_dinunet.nodes', 'coinstac_dinunet.utils', 'coinstac_dinunet.vision'],
     include_package_data=True,
     install_requires=['numpy', 'scipy', 'scikit-learn', 'scikit-image',
                       'pillow', 'matplotlib', 'opencv-python', 'pandas', 'seaborn']
