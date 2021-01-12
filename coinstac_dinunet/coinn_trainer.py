@@ -75,11 +75,6 @@ class COINNTrainer:
         self.load_checkpoint(self.cache['log_dir'] + _sep + self.cache[key])
 
     def load_checkpoint(self, full_path):
-        r"""
-        Load checkpoint from the given path:
-            If it is an easytorch checkpoint, try loading all the models.
-            If it is not, assume it's weights to a single model and laod to first model.
-        """
         try:
             chk = _torch.load(full_path)
         except:
@@ -140,12 +135,6 @@ class COINNTrainer:
         _torch.save(checkpoint, self.cache['log_dir'] + _sep + file_name)
 
     def evaluation(self, dataset_list=None, save_pred=False):
-        r"""
-        Evaluation phase that handles validation/test phase
-        split-key: the key to list of files used in this particular evaluation.
-        The program will create k-splits(json files) as per specified in --nf -num_of_folds
-         argument with keys 'train', ''validation', and 'test'.
-        """
         for k in self.nn:
             self.nn[k].eval()
 
@@ -195,13 +184,6 @@ class COINNTrainer:
         return {'metrics': _base_metrics.ETMetrics(), 'averages': _base_metrics.ETAverages(num_averages=1)}
 
     def save_predictions(self, dataset, its):
-        r"""
-        If one needs to save complex predictions result like predicted segmentations.
-         -Especially with U-Net architectures, we split images and train.
-        Once the argument --sp/-sparse-load is set to True,
-        the argument 'its' will receive all the patches of single image at a time.
-        From there, we can recreate the whole image.
-        """
         pass
 
     def train(self, dataset_cls):
@@ -300,17 +282,9 @@ class COINNTrainer:
         return test_dataset_list
 
     def new_metrics(self):
-        r"""
-        User can override to supply desired implementation of easytorch.metrics.ETMetrics().
-            Example: easytorch.metrics.Pr11a() will work with precision, recall, F1, Accuracy, IOU scores.
-        """
         return _base_metrics.Prf1a()
 
     def new_averages(self):
-        r""""
-        Should supply an implementation of easytorch.metrics.ETAverages() that can keep track of multiple averages.
-            Example: multiple loss, or any other values.
-        """
         return _base_metrics.ETAverages(num_averages=1)
 
     def next_iter(self):
