@@ -22,7 +22,7 @@ jobs:
         pip install setuptools wheel twine
     - name: Build and publish
       env:
-        TWINE_USERNAME: ${{ __token__ }}
+        TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
         TWINE_PASSWORD: ${{ secrets.TRENDS_PYPI_ACCESS }}
       run: | 
         python setup.py clean sdist
