@@ -41,7 +41,7 @@ class COINNTrainer:
         """
         if self.cache.get('pretrained_path') is not None:
             self.load_checkpoint(self.cache['pretrained_path'])
-        elif self.cache('mode') == MODE_TRAIN:
+        elif self.cache('mode') == Mode.TRAIN:
             _torch.manual_seed(self.cache('seed'))
             for mk in self.nn:
                 _tu.initialize_weights(self.nn[mk])
@@ -291,7 +291,7 @@ class COINNTrainer:
         out = {}
         self.cache['cursor'] += self.cache['batch_size']
         if self.cache['cursor'] >= self.cache['data_len']:
-            out['mode'] = MODE_VALIDATION_WAITING
+            out['mode'] = Mode.VALIDATION_WAITING
             self.cache['cursor'] = 0
             _rd.shuffle(self.cache['data_indices'])
         return out
@@ -312,10 +312,10 @@ class COINNTrainer:
         self.cache['epoch'] += 1
         if self.cache['epoch'] - self.cache.get('best_epoch', self.cache['epoch']) \
                 >= self.cache['patience'] or self.cache['epoch'] >= self.cache['epochs']:
-            out['mode'] = MODE_TEST
+            out['mode'] = Mode.TEST
         else:
             self.cache['cursor'] = 0
-            out['mode'] = MODE_TRAIN_WAITING
+            out['mode'] = Mode.TRAIN_WAITING
             _rd.shuffle(self.cache['data_indices'])
 
         out['train_log'] = self.cache['train_log']

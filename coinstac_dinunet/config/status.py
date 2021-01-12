@@ -1,11 +1,17 @@
-PHASE_INIT_RUNS = 'init_run'
-PHASE_INIT_NN = 'init_nn'
-PHASE_COMPUTATION = 'computation'
-PHASE_SUCCESS = 'success'
-PHASE_NEXT_RUN_WAITING = 'next_run_waiting'
+from enum import Enum as _Enum
 
-MODE_TRAIN = 'train'
-MODE_VALIDATION = 'validation'
-MODE_TEST = 'test'
-MODE_VALIDATION_WAITING = 'validation_waiting'
-MODE_TRAIN_WAITING = 'train_waiting'
+
+class Phase(str, _Enum):
+    INIT_RUNS = 'init_runs'
+    INIT_NN = 'init_nn'
+    COMPUTATION = 'computation'
+    NEXT_RUN_WAITING = 'next_run_waiting'
+    SUCCESS = 'success'
+
+
+class Mode(str, _Enum):
+    TRAIN = 'train'
+    VALIDATION = 'validation'
+    TEST = 'test'
+    VALIDATION_WAITING = 'validation_waiting'
+    TRAIN_WAITING = 'train_waiting'
