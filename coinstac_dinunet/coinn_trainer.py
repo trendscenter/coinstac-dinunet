@@ -16,6 +16,7 @@ from coinstac_dinunet.data import COINNDataLoader as _COINNDLoader
 from collections import OrderedDict as _ODict
 import coinstac_dinunet.metrics as _base_metrics
 import coinstac_dinunet.data as _data
+from coinstac_dinunet.config.status import *
 
 
 class COINNTrainer:
@@ -40,7 +41,7 @@ class COINNTrainer:
         """
         if self.cache.get('pretrained_path') is not None:
             self.load_checkpoint(self.cache['pretrained_path'])
-        elif self.cache('mode') == 'train':
+        elif self.cache('mode') == MODE_TRAIN:
             _torch.manual_seed(self.cache('seed'))
             for mk in self.nn:
                 _tu.initialize_weights(self.nn[mk])
@@ -84,7 +85,7 @@ class COINNTrainer:
         except:
             chk = _torch.load(full_path, map_location='cpu')
 
-        if chk.get('source', 'Unknown').lower() == 'easytorch':
+        if chk.get('source', 'Unknown').lower() == 'coinstac':
             for m in chk['models']:
                 try:
                     self.nn[m].module.load_state_dict(chk['models'][m])
@@ -316,7 +317,7 @@ class COINNTrainer:
         out = {}
         self.cache['cursor'] += self.cache['batch_size']
         if self.cache['cursor'] >= self.cache['data_len']:
-            out['mode'] = 'val_waiting'
+            out['mode'] = MODE_VALIDATION_WAITING
             self.cache['cursor'] = 0
             _rd.shuffle(self.cache['data_indices'])
         return out
@@ -337,10 +338,10 @@ class COINNTrainer:
         self.cache['epoch'] += 1
         if self.cache['epoch'] - self.cache.get('best_epoch', self.cache['epoch']) \
                 >= self.cache['patience'] or self.cache['epoch'] >= self.cache['epochs']:
-            out['mode'] = 'test'
+            out['mode'] = MODE_TEST
         else:
             self.cache['cursor'] = 0
-            out['mode'] = 'train_waiting'
+            out['mode'] = MODE_TRAIN_WAITING
             _rd.shuffle(self.cache['data_indices'])
 
         out['train_log'] = self.cache['train_log']

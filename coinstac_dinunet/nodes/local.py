@@ -14,10 +14,10 @@ import coinstac_dinunet.data.datautils as _du
 from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 from typing import List as _List, Callable as _Callable
 import coinstac_dinunet.config as _conf
+from coinstac_dinunet.config.status import *
 
 
 class COINNLocal:
-
     def __init__(self, cache: dict=None, input: dict=None, state: dict=None,
                  mode: str = None,
                  batch_size: int = 4,
@@ -56,8 +56,8 @@ class COINNLocal:
 
     def compute(self, dataset_cls, trainer_cls):
         trainer = trainer_cls(cache=self.cache, input=self.input, state=self.state)
-        nxt_phase = self.input.get('phase', 'init_runs')
-        if nxt_phase == 'init_runs':
+        nxt_phase = self.input.get('phase', PHASE_INIT_RUNS)
+        if nxt_phase == PHASE_INIT_RUNS:
             """ Generate folds as specified.   """
 
             self.cache.update(**self.input)
@@ -69,7 +69,7 @@ class COINNLocal:
             self.cache['args'] = _FrozenDict(self.cache)
             self.out['mode'] = self.cache['mode']
 
-        if nxt_phase == 'init_nn':
+        if nxt_phase == PHASE_INIT_NN:
             """  Initialize neural network/optimizer and GPUs  """
 
             self.cache.update(**self.input['run'][self.state['clientId']], epoch=0, cursor=0, train_log=[])
@@ -83,9 +83,9 @@ class COINNLocal:
             self.cache['best_nn_state'] = 'best.nn.pt'
             trainer.save_checkpoint(name=self.cache['current_nn_state'])
             trainer.load_data_indices(dataset_cls, split_key='train')
-            nxt_phase = 'computation'
+            nxt_phase = PHASE_COMPUTATION
 
-        if nxt_phase == 'computation':
+        if nxt_phase == PHASE_COMPUTATION:
             """ Train/validation and test phases """
             self.out.update(mode=self.input['global_modes'].get(self.state['clientId'], self.cache['mode']))
 
@@ -96,7 +96,7 @@ class COINNLocal:
                 trainer.save_checkpoint(file_name=self.cache['best_nn_state'])
                 self.cache['best_epoch'] = self.cache['epoch']
 
-            if any(m == 'train' for m in self.input['global_modes'].values()):
+            if any(m == MODE_TRAIN for m in self.input['global_modes'].values()):
                 """
                 All sites must begin/resume the training the same time.
                 To enforce this, we have a 'val_waiting' status. Lagged sites will go to this status, 
@@ -105,7 +105,7 @@ class COINNLocal:
                 """
                 self.out.update(**trainer.train(dataset_cls))
 
-            elif self.out['mode'] == 'validation':
+            elif self.out['mode'] == MODE_VALIDATION:
                 """
                 Once all sites are in 'val_waiting' status, remote issues 'validation' signal.
                 Once all sites run validation phase, they go to 'train_waiting' status.
@@ -115,12 +115,12 @@ class COINNLocal:
                 """
                 self.out.update(**trainer.validation(dataset_cls))
 
-            elif self.out['mode'] == 'test':
+            elif self.out['mode'] == MODE_TEST:
                 self.out.update(**trainer.test(dataset_cls))
                 self.out['mode'] = self.cache['args']['mode']
-                nxt_phase = 'next_run_waiting'
+                nxt_phase = PHASE_NEXT_RUN_WAITING
 
-        elif nxt_phase == 'success':
+        elif nxt_phase == PHASE_SUCCESS:
             """ This phase receives global scores from the aggregator."""
             _shutil.copy(f"{self.state['baseDirectory']}{_sep}{self.input['results_zip']}.zip",
                          f"{self.state['outputDirectory'] + _sep + self.cache['id']}{_sep}{self.input['results_zip']}.zip")

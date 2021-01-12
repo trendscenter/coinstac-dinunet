@@ -19,6 +19,7 @@ import coinstac_dinunet.config as _conf
 import coinstac_dinunet.metrics as _metric
 import coinstac_dinunet.utils as _utils
 import coinstac_dinunet.utils.tensorutils as _tu
+from coinstac_dinunet.config.status import *
 from coinstac_dinunet.vision import plotter as _plot
 
 
@@ -45,11 +46,12 @@ def average_sites_gradients(cache, input, state):
 
 
 class COINNRemote:
-    def __init__(self, sites_reducer: _Callable = average_sites_gradients, **kw):
+    def __init__(self, cache: dict = None, input: dict = None, state: dict = None,
+                 sites_reducer: _Callable = average_sites_gradients, **kw):
         self.out = {}
-        self.cache = kw['cache']
-        self.input = kw['input']
-        self.state = kw['state']
+        self.cache = cache
+        self.input = input
+        self.state = state
         self.sites_reducer = sites_reducer
 
     def _init_runs(self):
@@ -193,8 +195,8 @@ class COINNRemote:
 
     def compute(self):
 
-        nxt_phase = self.input.get('phase', 'init_runs')
-        if self._check(all, 'phase', 'init_runs', self.input):
+        nxt_phase = self.input.get('phase', PHASE_INIT_RUNS)
+        if self._check(all, 'phase', PHASE_INIT_RUNS, self.input):
             """
             Initialize all folds and loggers
             """
@@ -202,30 +204,30 @@ class COINNRemote:
             self._init_runs()
             self.out['run'] = self._next_run()
             self.out['global_modes'] = self._set_mode()
-            nxt_phase = 'init_nn'
+            nxt_phase = PHASE_INIT_NN
 
-        if self._check(all, 'phase', 'computation', self.input):
+        if self._check(all, 'phase', PHASE_COMPUTATION, self.input):
             """
             Main computation phase where we aggregate sites information
             We also handle train/validation/test stages of local sites by sending corresponding signals from here
             """
-            nxt_phase = 'computation'
+            nxt_phase = PHASE_COMPUTATION
             self.out['global_modes'] = self._set_mode()
             if self._check(all, 'grads_file', _conf.grads_file, self.input):
                 self.out.update(**self.sites_reducer(self.cache, self.input, self.state))
 
-            if self._check(all, 'mode', 'val_waiting', self.input):
-                self.out['global_modes'] = self._set_mode(mode='validation')
+            if self._check(all, 'mode', MODE_VALIDATION_WAITING, self.input):
+                self.out['global_modes'] = self._set_mode(mode=MODE_VALIDATION)
 
-            if self._check(all, 'mode', 'train_waiting', self.input):
+            if self._check(all, 'mode', MODE_TRAIN_WAITING, self.input):
                 self.out.update(**self._on_epoch_end())
-                self.out['global_modes'] = self._set_mode(mode='train')
+                self.out['global_modes'] = self._set_mode(mode=MODE_TRAIN)
 
-            if self._check(all, 'mode', 'test', self.input):
+            if self._check(all, 'mode', MODE_TEST, self.input):
                 self.out.update(**self._on_epoch_end())
-                self.out['global_modes'] = self._set_mode(mode='test')
+                self.out['global_modes'] = self._set_mode(mode=MODE_TEST)
 
-        if self._check(all, 'phase', 'next_run_waiting', self.input):
+        if self._check(all, 'mode', PHASE_NEXT_RUN_WAITING, self.input):
             """
             This block runs when a fold has completed all train, test, validation phase.
             We save all the scores and plot the results.
@@ -236,14 +238,15 @@ class COINNRemote:
                 self.out['nn'] = {}
                 self.out['run'] = self._next_run()
                 self.out['global_modes'] = self._set_mode()
-                nxt_phase = 'init_nn'
+                nxt_phase = PHASE_INIT_NN
             else:
                 self.out.update(**self._send_global_scores())
-                nxt_phase = 'success'
+                nxt_phase = PHASE_SUCCESS
 
         self.out['phase'] = nxt_phase
 
     def send(self):
         output = _json.dumps(
-            {'output': self.out, 'cache': self.cache, 'success': self._check(all, 'phase', 'success', self.input)})
+            {'output': self.out, 'cache': self.cache,
+             'success': self._check(all, 'phase', PHASE_SUCCESS, self.input)})
         _sys.stdout.write(output)
