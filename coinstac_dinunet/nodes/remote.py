@@ -50,8 +50,8 @@ class COINNRemote:
                  sites_reducer: _Callable = average_sites_gradients, **kw):
         self.out = {}
         self.cache = cache
-        self.input = input
-        self.state = state
+        self.input = _utils.FrozenDict(input)
+        self.state = _utils.FrozenDict(state)
         self.sites_reducer = sites_reducer
 
     def _init_runs(self):
@@ -195,8 +195,8 @@ class COINNRemote:
 
     def compute(self):
 
-        nxt_phase = self.input.get('phase', PHASE_INIT_RUNS)
-        if self._check(all, 'phase', PHASE_INIT_RUNS, self.input):
+        nxt_phase = self.input.get('phase', Phase.INIT_RUNS)
+        if self._check(all, 'phase', Phase.INIT_RUNS, self.input):
             """
             Initialize all folds and loggers
             """
@@ -204,30 +204,30 @@ class COINNRemote:
             self._init_runs()
             self.out['run'] = self._next_run()
             self.out['global_modes'] = self._set_mode()
-            nxt_phase = PHASE_INIT_NN
+            nxt_phase = Phase.INIT_NN
 
-        if self._check(all, 'phase', PHASE_COMPUTATION, self.input):
+        if self._check(all, 'phase', Phase.COMPUTATION, self.input):
             """
             Main computation phase where we aggregate sites information
             We also handle train/validation/test stages of local sites by sending corresponding signals from here
             """
-            nxt_phase = PHASE_COMPUTATION
+            nxt_phase = Phase.COMPUTATION
             self.out['global_modes'] = self._set_mode()
             if self._check(all, 'grads_file', _conf.grads_file, self.input):
                 self.out.update(**self.sites_reducer(self.cache, self.input, self.state))
 
-            if self._check(all, 'mode', MODE_VALIDATION_WAITING, self.input):
-                self.out['global_modes'] = self._set_mode(mode=MODE_VALIDATION)
+            if self._check(all, 'mode', Mode.VALIDATION_WAITING, self.input):
+                self.out['global_modes'] = self._set_mode(mode=Mode.VALIDATION)
 
-            if self._check(all, 'mode', MODE_TRAIN_WAITING, self.input):
+            if self._check(all, 'mode', Mode.TRAIN_WAITING, self.input):
                 self.out.update(**self._on_epoch_end())
-                self.out['global_modes'] = self._set_mode(mode=MODE_TRAIN)
+                self.out['global_modes'] = self._set_mode(mode=Mode.TRAIN)
 
-            if self._check(all, 'mode', MODE_TEST, self.input):
+            if self._check(all, 'mode', Mode.TEST, self.input):
                 self.out.update(**self._on_epoch_end())
-                self.out['global_modes'] = self._set_mode(mode=MODE_TEST)
+                self.out['global_modes'] = self._set_mode(mode=Mode.TEST)
 
-        if self._check(all, 'mode', PHASE_NEXT_RUN_WAITING, self.input):
+        if self._check(all, 'mode', Phase.NEXT_RUN_WAITING, self.input):
             """
             This block runs when a fold has completed all train, test, validation phase.
             We save all the scores and plot the results.
@@ -238,15 +238,15 @@ class COINNRemote:
                 self.out['nn'] = {}
                 self.out['run'] = self._next_run()
                 self.out['global_modes'] = self._set_mode()
-                nxt_phase = PHASE_INIT_NN
+                nxt_phase = Phase.INIT_NN
             else:
                 self.out.update(**self._send_global_scores())
-                nxt_phase = PHASE_SUCCESS
+                nxt_phase = Phase.SUCCESS
 
         self.out['phase'] = nxt_phase
 
     def send(self):
         output = _json.dumps(
             {'output': self.out, 'cache': self.cache,
-             'success': self._check(all, 'phase', PHASE_SUCCESS, self.input)})
+             'success': self._check(all, 'phase', Phase.SUCCESS, self.input)})
         _sys.stdout.write(output)
