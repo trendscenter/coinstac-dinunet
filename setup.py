@@ -29,5 +29,6 @@ setup(
               'coinstac_dinunet.utils', 'coinstac_dinunet.vision'],
     include_package_data=True,
     install_requires=['numpy', 'scipy', 'scikit-learn', 'scikit-image',
-                      'pillow', 'matplotlib', 'opencv-python', 'pandas', 'seaborn']
+                      'pillow', 'matplotlib', 'opencv-python',
+                      'pandas', 'seaborn', 'coinstac-pyprofiler']
 )
