@@ -50,8 +50,8 @@ class COINNRemote:
                  sites_reducer: _Callable = average_sites_gradients, **kw):
         self.out = {}
         self.cache = cache
-        self.input = input
-        self.state = state
+        self.input = _utils.FrozenDict(input)
+        self.state = _utils.FrozenDict(state)
         self.sites_reducer = sites_reducer
 
     def _init_runs(self):

@@ -6,24 +6,25 @@
 
 import json as _json
 import random as _rd
+from collections import OrderedDict as _ODict
 from os import sep as _sep
 
 import torch as _torch
 
 import coinstac_dinunet.config as _conf
-import coinstac_dinunet.utils.tensorutils as _tu
-from coinstac_dinunet.data import COINNDataLoader as _COINNDLoader
-from collections import OrderedDict as _ODict
-import coinstac_dinunet.metrics as _base_metrics
 import coinstac_dinunet.data as _data
+import coinstac_dinunet.metrics as _base_metrics
+import coinstac_dinunet.utils.tensorutils as _tu
 from coinstac_dinunet.config.status import *
+from coinstac_dinunet.data import COINNDataLoader as _COINNDLoader
+from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 
 
 class COINNTrainer:
-    def __init__(self, **kw):
-        self.cache = kw['cache']
-        self.input = kw['input']
-        self.state = kw['state']
+    def __init__(self, cache: dict = None, input: dict = None, state: dict = None, **kw):
+        self.cache = cache
+        self.input = _FrozenDict(input)
+        self.state = _FrozenDict(state)
         self.nn = _ODict()
         self.device = _ODict()
         self.optimizer = _ODict()
@@ -41,8 +42,8 @@ class COINNTrainer:
         """
         if self.cache.get('pretrained_path') is not None:
             self.load_checkpoint(self.cache['pretrained_path'])
-        elif self.cache('mode') == Mode.TRAIN:
-            _torch.manual_seed(self.cache('seed'))
+        elif self.cache['mode'] == Mode.TRAIN:
+            _torch.manual_seed(self.cache['seed'])
             for mk in self.nn:
                 _tu.initialize_weights(self.nn[mk])
 
