@@ -55,7 +55,7 @@ class COINNRemote:
         self.sites_reducer = sites_reducer
 
     def _init_runs(self):
-        self.cache.update(id=[v['id'] for _, v in self.input.items()][0])
+        self.cache.update(id=[v['task_name'] for _, v in self.input.items()][0])
         self.cache.update(num_folds=[v['num_folds'] for _, v in self.input.items()][0])
         self.cache.update(seed=[v.get('seed') for _, v in self.input.items()][0])
         self.cache.update(seed=_random.randint(0, int(1e6)) if self.cache['seed'] is None else self.cache['seed'])
@@ -72,7 +72,7 @@ class COINNRemote:
         self.cache['fold'] = self.cache['folds'].pop()
         self.cache.update(
             log_dir=self.state['outputDirectory'] + _os.sep + self.cache[
-                'id'] + _os.sep + f"fold_{self.cache['fold']['split_ix']}")
+                'task_name'] + _os.sep + f"fold_{self.cache['fold']['split_ix']}")
         _os.makedirs(self.cache['log_dir'], exist_ok=True)
 
         metric_direction = self._monitor_metric()[1]
@@ -179,10 +179,10 @@ class COINNRemote:
             score.update(**sc)
         self.cache['global_test_score'] = ['Precision,Recall,F1,Accuracy']
         self.cache['global_test_score'].append(score.get())
-        _utils.save_scores(self.cache, self.state['outputDirectory'] + _os.sep + self.cache['id'],
+        _utils.save_scores(self.cache, self.state['outputDirectory'] + _os.sep + self.cache['task_name'],
                            file_keys=['global_test_score'])
 
-        out['results_zip'] = f"{self.cache['id']}_" + '_'.join(str(_datetime.datetime.now()).split(' '))
+        out['results_zip'] = f"{self.cache['task_name']}_" + '_'.join(str(_datetime.datetime.now()).split(' '))
         _shutil.make_archive(f"{self.state['transferDirectory']}{_os.sep}{out['results_zip']}",
                              'zip', self.cache['log_dir'])
         return out

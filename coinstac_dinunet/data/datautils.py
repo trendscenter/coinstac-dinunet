@@ -75,7 +75,7 @@ def init_k_folds(cache, state, data_splitter=None):
     cache['split_dir'] = cache.get('split_dir', 'splits')
     split_dir = state['baseDirectory'] + _os.sep + cache['split_dir']
 
-    cache['split_dir'] = state['outputDirectory'] + _os.sep + cache['id'] + _os.sep + cache['split_dir']
+    cache['split_dir'] = state['outputDirectory'] + _os.sep + cache['task_name'] + _os.sep + cache['split_dir']
     _shutil.rmtree(cache['split_dir'], ignore_errors=True)
     _os.makedirs(cache['split_dir'], exist_ok=True)
 
@@ -90,6 +90,6 @@ def init_k_folds(cache, state, data_splitter=None):
     splits = sorted(_os.listdir(cache['split_dir']))
     cache['splits'] = dict(zip(range(len(splits)), splits))
     out['num_folds'] = cache['num_folds']
-    out['id'] = cache['id']
+    out['task_name'] = cache['task_name']
     out['seed'] = cache.get('seed')
     return out
