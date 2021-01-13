@@ -9,16 +9,20 @@ import os as _os
 import shutil as _shutil
 import sys as _sys
 from os import sep as _sep
-
-import coinstac_dinunet.data.datautils as _du
-from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 from typing import List as _List, Callable as _Callable
+
 import coinstac_dinunet.config as _conf
+import coinstac_dinunet.data.datautils as _du
 from coinstac_dinunet.config.status import *
+from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 
 
 class COINNLocal:
-    def __init__(self, cache: dict=None, input: dict=None, state: dict=None,
+    _PROMPT_TASK_ = "Task name must be given."
+    _PROMPT_MODE_ = f"Mode must be provided and should be one of {[Mode.TRAIN, Mode.TEST]}."
+
+    def __init__(self, cache: dict = None, input: dict = None, state: dict = None,
+                 task_name=None,
                  mode: str = None,
                  batch_size: int = 4,
                  epochs: int = 21,
@@ -39,6 +43,7 @@ class COINNLocal:
         self.state = _FrozenDict(state)
         self.data_splitter = data_splitter
         self.args = {}
+        self.args['task_name'] = task_name  # test/train
         self.args['mode'] = mode  # test/train
         self.args['batch_size'] = batch_size
         self.args['epochs'] = epochs
@@ -53,6 +58,11 @@ class COINNLocal:
         self.args['num_folds'] = num_folds
         self.args['split_ratio'] = split_ratio
         self.args.update(**kw)
+        self._check_args()
+
+    def _check_args(self):
+        assert self.cache['task_name'] is not None, self._PROMPT_TASK_
+        assert self.cache['mode'] in [Mode.TRAIN, Mode.TEST], self._PROMPT_TASK_
 
     def compute(self, dataset_cls, trainer_cls):
         trainer = trainer_cls(cache=self.cache, input=self.input, state=self.state)
@@ -75,7 +85,7 @@ class COINNLocal:
             self.cache.update(**self.input['run'][self.state['clientId']], epoch=0, cursor=0, train_log=[])
             self.cache['split_file'] = self.cache['splits'][str(self.cache['split_ix'])]
             self.cache['log_dir'] = self.state['outputDirectory'] + _sep + self.cache[
-                'id'] + _sep + f"fold_{self.cache['split_ix']}"
+                'task_name'] + _sep + f"fold_{self.cache['split_ix']}"
             _os.makedirs(self.cache['log_dir'], exist_ok=True)
 
             trainer.init_nn(init_weights=True)
@@ -123,7 +133,7 @@ class COINNLocal:
         elif nxt_phase == Phase.SUCCESS:
             """ This phase receives global scores from the aggregator."""
             _shutil.copy(f"{self.state['baseDirectory']}{_sep}{self.input['results_zip']}.zip",
-                         f"{self.state['outputDirectory'] + _sep + self.cache['id']}{_sep}{self.input['results_zip']}.zip")
+                         f"{self.state['outputDirectory'] + _sep + self.cache['task_name']}{_sep}{self.input['results_zip']}.zip")
 
         self.out['phase'] = nxt_phase
 
