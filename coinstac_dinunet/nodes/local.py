@@ -43,7 +43,7 @@ class COINNLocal:
         self.state = _FrozenDict(state)
         self.data_splitter = data_splitter
         self.args = {}
-        self.args['task_name'] = task_name  # test/train
+        self.args['task_name'] = task_name  #
         self.args['mode'] = mode  # test/train
         self.args['batch_size'] = batch_size
         self.args['epochs'] = epochs
@@ -62,7 +62,7 @@ class COINNLocal:
 
     def _check_args(self):
         assert self.cache['task_name'] is not None, self._PROMPT_TASK_
-        assert self.cache['mode'] in [Mode.TRAIN, Mode.TEST], self._PROMPT_TASK_
+        assert self.cache['mode'] in [Mode.TRAIN, Mode.TEST], self._PROMPT_MODE_
 
     def compute(self, dataset_cls, trainer_cls):
         trainer = trainer_cls(cache=self.cache, input=self.input, state=self.state)
