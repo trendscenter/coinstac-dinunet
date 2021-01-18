@@ -105,8 +105,8 @@ class COINNTrainer:
         it['loss'].backward()
         out['grads_file'] = _conf.grads_file
         first_model = list(self.nn.keys())[0]
-        _tu.save_grads(self.state['transferDirectory'] + _sep + out['grads_file'],
-                       grads=_tu.extract_grads(self.nn[first_model]))
+        grads = _tu.extract_grads(self.nn[first_model])
+        _tu.save_grads(self.state['transferDirectory'] + _sep + out['grads_file'], grads)
         return out
 
     def step(self):
@@ -141,7 +141,7 @@ class COINNTrainer:
 
         eval_avg = self.new_averages()
         eval_metrics = self.new_metrics()
-        eval_loaders = [_data.COINNDataLoader.new(dataset=d, mode='eval', **self.cache) for d in dataset_list]
+        eval_loaders = [_data.COINNDataLoader.new(dataset=d, **self.cache) for d in dataset_list]
         with _torch.no_grad():
             for loader in eval_loaders:
                 its = []
@@ -239,8 +239,8 @@ class COINNTrainer:
          (logic in __nextitem__) of the data loader.
         """
         dataset = dataset_cls(mode='eval', limit=self.cache.get('load_limit', float('inf')))
-        split_file = open(self.cache['split_dir'] + _sep + self.cache['split_file']).read()
-        with open(split_file) as split_file:
+        file = self.cache['split_dir'] + _sep + self.cache['split_file']
+        with open(file) as split_file:
             split = _json.loads(split_file.read())
             dataset.add(files=split[split_key], cache=self.cache, state=self.state)
 
@@ -258,7 +258,7 @@ class COINNTrainer:
         file = self.cache['split_dir'] + _sep + self.cache['split_file']
         with open(file) as split_file:
             split = _json.loads(split_file.read())
-            val_dataset = dataset_cls(mode='eval', limit=self.cache.get('load_limit', float('inf')))
+            val_dataset = dataset_cls(mode='eval', limit=self.cache.get('load_limit', _conf.data_load_lim))
             val_dataset.add(files=split['validation'], cache=self.cache, state=self.state)
             val_dataset_list.append(val_dataset)
         return val_dataset_list
@@ -273,11 +273,11 @@ class COINNTrainer:
             split = _json.loads(split_file.read())
             if self.cache.get('load_sparse'):
                 for f in split.get('test', []):
-                    test_dataset = dataset_cls(mode='eval', limit=self.cache.get('load_limit', float('inf')))
+                    test_dataset = dataset_cls(mode='eval', limit=self.cache.get('load_limit', _conf.data_load_lim))
                     test_dataset.add(files=[f], cache=self.cache, state=self.state)
                     test_dataset_list.append(test_dataset)
             else:
-                test_dataset = dataset_cls(mode='eval', limit=self.cache.get('load_limit', float('inf')))
+                test_dataset = dataset_cls(mode='eval', limit=self.cache.get('load_limit', _conf.data_load_lim))
                 test_dataset.add(files=split['test'], cache=self.cache, state=self.state)
                 test_dataset_list.append(test_dataset)
         return test_dataset_list
@@ -298,9 +298,10 @@ class COINNTrainer:
         return out
 
     def next_batch(self, dataset_cls, mode='train'):
-        dataset = dataset_cls(mode='eval', limit=self.cache.get('load_limit', float('inf')))
+        dataset = dataset_cls(mode=mode, limit=self.cache.get('load_limit', _conf.data_load_lim))
         dataset.indices = self.cache['data_indices'][self.cache['cursor']:]
-        loader = _COINNDLoader.new(mode=mode, **self.cache)
+        dataset.add(files=[], cache=self.cache, state=self.state)
+        loader = _COINNDLoader.new(dataset=dataset, **self.cache)
         return next(loader.__iter__())
 
     def next_epoch(self):

@@ -35,13 +35,8 @@ def average_sites_gradients(cache, input, state):
 
     avg_grads = []
     for layer_grad in zip(*grads):
-        if _conf.grads_numpy:
-            avg_grads.append(_tu.caste_tensor(_np.array(layer_grad).mean(0)))
-        if _conf.grads_torch:
-            """ RuntimeError: "sum_cpu" not implemented for 'Half' so must convert to float32. """
-            layer_grad = [lg.type(_torch.float32).cpu() for lg in layer_grad]
-            avg_grads.append(_tu.caste_tensor(_torch.stack(layer_grad).mean(0)))
-    _torch.save(avg_grads, state['transferDirectory'] + _os.sep + out['avg_grads_file'])
+        avg_grads.append(_np.array(layer_grad).mean(0))
+    _tu.save_grads(state['transferDirectory'] + _os.sep + out['avg_grads_file'], avg_grads)
     return out
 
 
@@ -55,7 +50,7 @@ class COINNRemote:
         self.sites_reducer = sites_reducer
 
     def _init_runs(self):
-        self.cache.update(id=[v['task_name'] for _, v in self.input.items()][0])
+        self.cache.update(computation_id=[v['computation_id'] for _, v in self.input.items()][0])
         self.cache.update(num_folds=[v['num_folds'] for _, v in self.input.items()][0])
         self.cache.update(seed=[v.get('seed') for _, v in self.input.items()][0])
         self.cache.update(seed=_random.randint(0, int(1e6)) if self.cache['seed'] is None else self.cache['seed'])
@@ -72,7 +67,7 @@ class COINNRemote:
         self.cache['fold'] = self.cache['folds'].pop()
         self.cache.update(
             log_dir=self.state['outputDirectory'] + _os.sep + self.cache[
-                'task_name'] + _os.sep + f"fold_{self.cache['fold']['split_ix']}")
+                'computation_id'] + _os.sep + f"fold_{self.cache['fold']['split_ix']}")
         _os.makedirs(self.cache['log_dir'], exist_ok=True)
 
         metric_direction = self._monitor_metric()[1]
@@ -144,8 +139,8 @@ class COINNRemote:
         if callable(sc):
             sc = sc()
 
-        if (direction == 'maximize' and sc >= self.cache['best_score']) or (
-                direction == 'minimize' and sc <= self.cache['best_score']):
+        if (direction == 'maximize' and sc >= self.cache['best_val_score']) or (
+                direction == 'minimize' and sc <= self.cache['best_val_score']):
             self.out['save_current_as_best'] = True
             self.cache['best_val_score'] = sc
         else:
@@ -179,10 +174,10 @@ class COINNRemote:
             score.update(**sc)
         self.cache['global_test_score'] = ['Precision,Recall,F1,Accuracy']
         self.cache['global_test_score'].append(score.get())
-        _utils.save_scores(self.cache, self.state['outputDirectory'] + _os.sep + self.cache['task_name'],
+        _utils.save_scores(self.cache, self.state['outputDirectory'] + _os.sep + self.cache['computation_id'],
                            file_keys=['global_test_score'])
 
-        out['results_zip'] = f"{self.cache['task_name']}_" + '_'.join(str(_datetime.datetime.now()).split(' '))
+        out['results_zip'] = f"{self.cache['computation_id']}_" + '_'.join(str(_datetime.datetime.now()).split(' '))
         _shutil.make_archive(f"{self.state['transferDirectory']}{_os.sep}{out['results_zip']}",
                              'zip', self.cache['log_dir'])
         return out
