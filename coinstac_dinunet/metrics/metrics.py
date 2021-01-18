@@ -113,7 +113,7 @@ class ETAverages(ETMetrics):
         self.values[index] += val * n
         self.counts[index] += n
 
-    def update(self, values: list = None, counts: list = None, **kw):
+    def update(self, values: _typing.List[float] = None, counts: _typing.List[int] = None, **kw):
         self.values += _np.array(values)
         self.counts += _np.array(counts)
 
