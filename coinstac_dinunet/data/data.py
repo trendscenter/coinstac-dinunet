@@ -3,9 +3,10 @@
 @email: sraashis@gmail.com
 @ref: https://github.com/sraashis/easytorch
 """
-
+import os as _os
 from torch.utils.data import DataLoader as _DataLoader, Dataset as _Dataset
 from torch.utils.data._utils.collate import default_collate as _default_collate
+import coinstac_dinunet.config as _conf
 
 
 def safe_collate(batch):
@@ -16,9 +17,6 @@ def safe_collate(batch):
 
 
 class COINNDataLoader(_DataLoader):
-
-    def __init__(self, **kw):
-        super(COINNDataLoader, self).__init__(**kw)
 
     @classmethod
     def new(cls, **kw):
@@ -40,11 +38,11 @@ class COINNDataLoader(_DataLoader):
 
 
 class COINNDataset(_Dataset):
-    def __init__(self, mode='init', limit=float('inf')):
+    def __init__(self, mode='init', limit=_conf.data_load_lim):
         self.mode = mode
         self.limit = limit
+        self.state = {}
         self.dataspecs = {}
-        self.args = {}
         self.indices = []
 
     def load_index(self, id, file):
@@ -80,7 +78,10 @@ class COINNDataset(_Dataset):
     def transforms(self, **kw):
         return None
 
+    def path(self, id, dspec_key, root_dir='baseDirectory'):
+        return self.state[id][root_dir] + _os.sep + self.dataspecs[id][dspec_key]
+
     def add(self, files, cache: dict = None, state: dict = None):
-        self.dataspecs[state['clientId']] = state
-        self.args[state['clientId']] = cache['args']
+        self.state[state['clientId']] = state
+        self.dataspecs[state['clientId']] = cache['args']
         self._load_indices(id=state['clientId'], files=files, verbose=False)

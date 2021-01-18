@@ -40,34 +40,17 @@ def initialize_weights(*models):
                 module.bias.data.zero_()
 
 
-def caste_tensor(a):
-    if _conf.grad_file_format == '.npy':
-        return a.numpy().astype(f'float{_conf.grad_precision_bit}')
-    elif _conf.grad_file_format == '.tar':
-        if _conf.grad_precision_bit == 16:
-            return a.half()
-        elif _conf.grad_precision_bit == 32:
-            return a.float()
-        elif _conf.grad_precision_bit == 64:
-            return a.double()
-    return a
+def caste_ndarray(a):
+    return a.astype(f'float{_conf.grad_precision_bit}')
 
 
 def extract_grads(model):
-    return [caste_tensor(p.grad.detach().cpu()) for p in model.parameters()]
+    return [caste_ndarray(p.grad.detach().cpu().numpy()) for p in model.parameters()]
 
 
 def save_grads(file_name, grads):
-    if _conf.grads_numpy:
-        _np.save(file_name, _np.asarray(grads))
-    elif _conf.grads_torch:
-        _torch.save(grads, file_name)
+    _np.save(file_name, grads)
 
 
 def load_grads(file_name):
-    grads = None
-    if _conf.grads_numpy:
-        grads = _np.load(file_name, allow_pickle=True)
-    if _conf.grads_torch:
-        grads = _torch.load(file_name)
-    return grads
+    return _np.load(file_name, allow_pickle=True)

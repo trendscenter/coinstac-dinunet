@@ -1,1 +1,1 @@
-from .imageutils import *
+from coinstac_dinunet.vision.imageutils import Image
