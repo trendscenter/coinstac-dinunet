@@ -150,7 +150,7 @@ class COINNTrainer:
                 for i, batch in enumerate(loader):
                     it = self.iteration(batch)
                     if not it.get('metrics'):
-                        it['metrics'] = _base_metrics.ETMetrics()
+                        it['metrics'] = _base_metrics.COINNMetrics()
                     metrics.accumulate(it['metrics'])
                     avg.accumulate(it['averages'])
                     if save_pred:
@@ -182,7 +182,7 @@ class COINNTrainer:
             -we need to keep track of loss
             -we need to keep track of metrics
         """
-        return {'metrics': _base_metrics.ETMetrics(), 'averages': _base_metrics.ETAverages(num_averages=1)}
+        return {'metrics': _base_metrics.COINNMetrics(), 'averages': _base_metrics.COINNAverages(num_averages=1)}
 
     def save_predictions(self, dataset, its):
         pass
@@ -286,7 +286,7 @@ class COINNTrainer:
         return _base_metrics.Prf1a()
 
     def new_averages(self):
-        return _base_metrics.ETAverages(num_averages=1)
+        return _base_metrics.COINNAverages(num_averages=1)
 
     def next_iter(self):
         out = {}

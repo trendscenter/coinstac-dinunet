@@ -94,7 +94,7 @@ class COINNRemote:
         return _metric.Prf1a()
 
     def _new_averages(self):
-        return _metric.ETAverages()
+        return _metric.COINNAverages()
 
     def _monitor_metric(self):
         return 'f1', 'maximize'

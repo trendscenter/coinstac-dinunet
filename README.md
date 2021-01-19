@@ -30,30 +30,95 @@ torchvision==0.6.1+cu92
 
 ![DINUNET](assets/dinunet.png)
 
+### Full working examples
+1. ####[FreeSurfer volumes classification.](https://github.com/trendscenter/dinunet/tree/packaging)
+2. ####[VBM 3D images classification.](https://github.com/trendscenter/dinunet_vbm)
 ### General use case:
+####imports
+```python
+from coinstac_dinunet import COINNDataset, COINNTrainer, COINNRemote, COINNLocal
+from coinstac_dinunet.metrics import COINNAverages, Prf1a
+```
 
 #### 1. Define Data Loader
 ```python
+class MyDataset(COINNDataset):
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.labels = None
 
+    def load_index(self, id, file):
+        data_dir = self.path(id, 'data_dir') # data_dir comes from inputspecs.json
+        ...
+        self.indices.append([id, file])
+
+    def __getitem__(self, ix):
+        id, file = self.indices[ix]
+        data_dir = self.path(id, 'data_dir') # data_dir comes from inputspecs.json
+        label_dir = self.path(id, 'label_dir') # label_dir comes from inputspecs.json
+        ...
+        # Logic to load, transform single data item.
+        ...
+        return {'inputs':.., 'labels': ...}
 ```
 
-#### 2. Define Local Node
+#### 2. Define Trainer
 ```python
+class MyTrainer(COINNTrainer):
+    def __init__(self, **kw):
+        super().__init__(**kw)
 
+    def _init_nn_model(self):
+        self.nn['model'] = MYModel(in_size=self.cache['input_size'], out_size=self.cache['num_class'])
+
+    def iteration(self, batch):
+        inputs, labels = batch['inputs'].to(self.device['gpu']).float(), batch['labels'].to(self.device['gpu']).long()
+
+        out = F.log_softmax(self.nn['model'](inputs), 1)
+        loss = F.nll_loss(out, labels)
+        _, predicted = torch.max(out, 1)
+        score = self.new_metrics()
+        score.add(predicted, labels)
+        val = self.new_averages()
+        val.add(loss.item(), len(inputs))
+        return {'out': out, 'loss': loss, 'averages': val,
+                'metrics': score, 'prediction': predicted}
 ```
-#### 3. Define Remote Node
+#### 3. Supply to local Node
 ```python
-
+if __name__ == "__main__":
+    args = json.loads(sys.stdin.read())
+    local = COINNLocal(cache=args['cache'], input=args['input'], state=args['state'])
+    local.compute(MyDataset, MyTrainer)
+    local.send()
 ```
-#### 4. Define Trainer
-```python
+#### 4. Define Remote Node
 
+```python
+class MyRemote(COINNRemote):
+
+    def _new_metrics(self):  #
+        return coinstac_dinunet.metrics.Prf1a()
+
+    def _new_averages(self):
+        return coinstac_dinunet.metrics.COINNAverages()
+
+    def _monitor_metric(self):
+        return 'f1', 'maximize'
+
+
+if __name__ == "__main__":
+    args = json.loads(sys.stdin.read())
+    remote = MyRemote(cache=args['cache'], input=args['input'], state=args['state'])
+    remote.compute()
+    remote.send()
 ```
 
 #### 5. Define custom metrics
-```python
 
-```
+- **Extend [coinstac_dinunet.metrics.COINNMetrics](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py)**
+- **Example: [coinstac_dinunet.metrics.Prf1a](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py) for Precision, Recall, F1, and Accuracy**
+
 
 ### Default arguments:
 * ***task_name***: str = None, Name of the task. [Required]

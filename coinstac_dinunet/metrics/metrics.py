@@ -30,7 +30,7 @@ class SerializableMetrics:
             return object.__getattribute__(self, attribute)
 
 
-class ETMetrics(SerializableMetrics):
+class COINNMetrics(SerializableMetrics):
     def __init__(self, **kw):
         super().__init__(**kw)
 
@@ -90,7 +90,7 @@ class ETMetrics(SerializableMetrics):
         return _time.time()
 
 
-class ETAverages(ETMetrics):
+class COINNAverages(COINNMetrics):
     def __init__(self, num_averages=1, **kw):
         r"""
         This class can keep track of K averages.
@@ -158,7 +158,7 @@ class ETAverages(ETMetrics):
         return _time.time()
 
 
-class Prf1a(ETMetrics):
+class Prf1a(COINNMetrics):
     r"""
     A class that has GPU based computation of:
         Precision, Recall, F1 Score, Accuracy, and Overlap(IOU).
@@ -234,7 +234,7 @@ class Prf1a(ETMetrics):
         return round(o, self.num_precision)
 
 
-class ConfusionMatrix(ETMetrics):
+class ConfusionMatrix(COINNMetrics):
     """
     Confusion matrix  is used in multi class classification case.
     x-axis is predicted. y-axis is true label.
