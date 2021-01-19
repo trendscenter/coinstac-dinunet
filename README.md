@@ -31,10 +31,10 @@ torchvision==0.6.1+cu92
 ![DINUNET](assets/dinunet.png)
 
 ### Full working examples
-1. ####[FreeSurfer volumes classification.](https://github.com/trendscenter/dinunet/tree/packaging)
-2. ####[VBM 3D images classification.](https://github.com/trendscenter/dinunet_vbm)
+1. #### [FreeSurfer volumes classification.](https://github.com/trendscenter/dinunet/tree/packaging)
+2. #### [VBM 3D images classification.](https://github.com/trendscenter/dinunet_vbm)
 ### General use case:
-####imports
+#### imports
 ```python
 from coinstac_dinunet import COINNDataset, COINNTrainer, COINNRemote, COINNLocal
 from coinstac_dinunet.metrics import COINNAverages, Prf1a
@@ -84,7 +84,7 @@ class MyTrainer(COINNTrainer):
         return {'out': out, 'loss': loss, 'averages': val,
                 'metrics': score, 'prediction': predicted}
 ```
-#### 3. Supply to local Node
+#### 3. Supply to local Node in local.py
 ```python
 if __name__ == "__main__":
     args = json.loads(sys.stdin.read())
@@ -92,7 +92,7 @@ if __name__ == "__main__":
     local.compute(MyDataset, MyTrainer)
     local.send()
 ```
-#### 4. Define Remote Node
+#### 4. Define Remote Node in remote.py
 
 ```python
 class MyRemote(COINNRemote):
