@@ -31,8 +31,8 @@ torchvision==0.6.1+cu92
 ![DINUNET](assets/dinunet.png)
 
 ### Full working examples
-1. #### [FreeSurfer volumes classification.](https://github.com/trendscenter/dinunet/tree/packaging)
-2. #### [VBM 3D images classification.](https://github.com/trendscenter/dinunet_vbm)
+1. **[FreeSurfer volumes classification.](https://github.com/trendscenter/dinunet/tree/packaging)**
+2. **[VBM 3D images classification.](https://github.com/trendscenter/dinunet_vbm)**
 ### General use case:
 #### imports
 ```python
@@ -84,7 +84,7 @@ class MyTrainer(COINNTrainer):
         return {'out': out, 'loss': loss, 'averages': val,
                 'metrics': score, 'prediction': predicted}
 ```
-#### 3. Supply to local Node in local.py
+#### 3. Supply to local node in local.py
 ```python
 if __name__ == "__main__":
     args = json.loads(sys.stdin.read())
@@ -92,7 +92,7 @@ if __name__ == "__main__":
     local.compute(MyDataset, MyTrainer)
     local.send()
 ```
-#### 4. Define Remote Node in remote.py
+#### 4. Define remote node in remote.py
 
 ```python
 class MyRemote(COINNRemote):
@@ -114,7 +114,7 @@ if __name__ == "__main__":
     remote.send()
 ```
 
-#### 5. Define custom metrics
+#### Define custom metrics
 
 - **Extend [coinstac_dinunet.metrics.COINNMetrics](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py)**
 - **Example: [coinstac_dinunet.metrics.Prf1a](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py) for Precision, Recall, F1, and Accuracy**
