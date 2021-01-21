@@ -330,7 +330,7 @@ class COINNTrainer:
         """
         return {}
 
-    def _on_iteration_end(self, i, ep, it):
+    def _on_iteration_end(self, i, ep, its):
         r"""
         Any logic to run after an iteration ends.
         """
