@@ -100,15 +100,6 @@ class COINNTrainer:
             except:
                 self.nn[mkey].load_state_dict(chk)
 
-    def backward(self, it):
-        out = {}
-        it['loss'].backward()
-        out['grads_file'] = _conf.grads_file
-        first_model = list(self.nn.keys())[0]
-        grads = _tu.extract_grads(self.nn[first_model])
-        _tu.save_grads(self.state['transferDirectory'] + _sep + out['grads_file'], grads)
-        return out
-
     def step(self):
         grads = _tu.load_grads(self.state['baseDirectory'] + _sep + self.input['avg_grads_file'])
 
@@ -187,31 +178,50 @@ class COINNTrainer:
     def save_predictions(self, dataset, its):
         pass
 
+    def _reduce_iteration(self, its):
+        reduced = {}.fromkeys(its[0].keys(), None)
+        for k in reduced:
+            if isinstance(its[0][k], _base_metrics.COINNAverages):
+                reduced[k] = self.new_averages()
+                [reduced[k].accumulate(ik[k]) for ik in its]
+
+            elif isinstance(its[0][k], _base_metrics.COINNMetrics):
+                reduced[k] = self.new_metrics()
+                [reduced[k].accumulate(ik[k]) for ik in its]
+
+            elif isinstance(its[0][k], _torch.Tensor) and not its[0][k].requires_grad and its[0][k].is_leaf:
+                reduced[k] = _torch.cat([ik[k] for ik in its])
+
+            else:
+                reduced[k] = [ik[k] for ik in its]
+        return reduced
+
     def train(self, dataset_cls):
         out = {}
 
-        for k in self.nn:
-            self.nn[k].train()
-        for k in self.optimizer:
-            self.optimizer[k].zero_grad()
+        first_model = list(self.nn.keys())[0]
+        first_optim = list(self.optimizer.keys())[0]
 
-        itr_avgs, itr_metrics = self.new_averages(), self.new_metrics()
-
-        its = []
-        for _ in range(self.cache.get('local_iterations', 1)):
-            it = self.iteration(self.next_batch(dataset_cls, mode='train'))
-            out.update(**self.backward(it))
-            out.update(**self.next_iter())
-            itr_avgs.accumulate(it['averages'])
-            itr_metrics.accumulate(it['metrics'])
-            its.append([it])
-        self.cache['train_log'].append([vars(itr_avgs), vars(itr_metrics)])
+        self.nn[first_model].train()
+        self.optimizer[first_optim].zero_grad()
 
         if self.input.get('avg_grads_file'):
             self.step()
             self.save_checkpoint(file_name=self.cache['current_nn_state'])
 
-        out.update(**self._on_iteration_end(0, self.cache['epoch'], its))
+        its = []
+        for _ in range(self.cache.get('local_iterations', 1)):
+            it = self.iteration(self.next_batch(dataset_cls, mode='train'))
+            it['loss'].backward()
+            its.append(it)
+            out.update(**self.next_iter())
+        it = self._reduce_iteration(its)
+
+        out['grads_file'] = _conf.grads_file
+        grads = _tu.extract_grads(self.nn[first_model])
+        _tu.save_grads(self.state['transferDirectory'] + _sep + out['grads_file'], grads)
+        self.cache['train_log'].append([vars(it['averages']), vars(it['metrics'])])
+        out.update(**self._on_iteration_end(0, self.cache['epoch'], it))
         return out
 
     def validation(self, dataset_cls):
@@ -330,7 +340,7 @@ class COINNTrainer:
         """
         return {}
 
-    def _on_iteration_end(self, i, ep, its):
+    def _on_iteration_end(self, i, ep, it):
         r"""
         Any logic to run after an iteration ends.
         """

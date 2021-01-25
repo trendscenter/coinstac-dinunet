@@ -146,7 +146,7 @@ class COINNRemote:
         else:
             self.out['save_current_as_best'] = False
 
-    def _save_test_scores(self):
+    def _save_scores(self):
         """
         ########################
         Entry: phase "next_run_waiting"
@@ -228,7 +228,7 @@ class COINNRemote:
             We save all the scores and plot the results.
             We transition to new fold if there is any left, else we stop the distributed computation with a success signal.
             """
-            self._save_test_scores()
+            self._save_scores()
             if len(self.cache['folds']) > 0:
                 self.out['nn'] = {}
                 self.out['run'] = self._next_run()
