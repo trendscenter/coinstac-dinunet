@@ -25,6 +25,8 @@ class COINNLocal:
                  computation_id=None,
                  mode: str = None,
                  batch_size: int = 4,
+                 local_iteration: int = 1,
+                 pretrain_epochs: int = 10,
                  epochs: int = 21,
                  learning_rate: float = 0.001,
                  gpus: _List[int] = None,
@@ -46,7 +48,9 @@ class COINNLocal:
         self.args['computation_id'] = computation_id  #
         self.args['mode'] = mode  # test/train
         self.args['batch_size'] = batch_size
+        self.args['local_iteration'] = local_iteration
         self.args['epochs'] = epochs
+        self.args['pretrain_epochs'] = pretrain_epochs
         self.args['learning_rate'] = learning_rate
         self.args['gpus'] = gpus
         self.args['pin_memory'] = pin_memory
@@ -92,8 +96,9 @@ class COINNLocal:
             trainer.init_nn(init_weights=True)
             self.cache['current_nn_state'] = 'current.nn.pt'
             self.cache['best_nn_state'] = 'best.nn.pt'
-            trainer.save_checkpoint(file_name=self.cache['current_nn_state'])
             trainer.load_data_indices(dataset_cls, split_key='train')
+            trainer.save_checkpoint(file_name=self.cache['current_nn_state'])
+            trainer.pre_train()
             nxt_phase = Phase.COMPUTATION
 
         if nxt_phase == Phase.COMPUTATION:
