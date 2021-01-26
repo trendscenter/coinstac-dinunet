@@ -72,9 +72,6 @@ class COINNTrainer:
         for model_key in self.nn:
             self.nn[model_key] = self.nn[model_key].to(self.device['gpu'])
 
-    def load_checkpoint_from_key(self, key='checkpoint'):
-        self.load_checkpoint(self.cache['log_dir'] + _sep + self.cache[key])
-
     def load_checkpoint(self, file_path):
         try:
             chk = _torch.load(file_path)
@@ -209,7 +206,7 @@ class COINNTrainer:
         dataset.indices = self.cache['data_indices']
         loader = _COINNDLoader.new(dataset=dataset, **self.cache)
         out['pretrain_log'] = []
-        out['pretrain_weights'] = _conf.pretrained_weights_file
+        out['pretrained_weights'] = _conf.pretrained_weights_file
         for ep in range(self.cache['pretrain_epochs']):
             ep_averages = self.new_averages()
             ep_metrics = self.new_metrics()
@@ -226,7 +223,7 @@ class COINNTrainer:
                 ep_metrics.accumulate(it['metrics'])
             out['pretrain_log'].append([vars(ep_averages), vars(ep_metrics)])
             self._on_epoch_end(ep, ep_averages, ep_metrics, None, None)
-        self.save_checkpoint(file_path=self.state['transferDirectory'] + _sep + out['pretrain_weights'])
+        self.save_checkpoint(file_path=self.state['transferDirectory'] + _sep + out['pretrained_weights'])
         return out
 
     def train(self, dataset_cls):
@@ -267,7 +264,7 @@ class COINNTrainer:
 
     def test(self, dataset_cls):
         out = {}
-        self.load_checkpoint_from_key(key='best_nn_state')
+        self.load_checkpoint(self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
         avg, scores = self.evaluation(self._get_test_dataset(dataset_cls), save_pred=True)
         out['test_log'] = [vars(avg), vars(scores)]
         return out

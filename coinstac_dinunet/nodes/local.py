@@ -68,37 +68,55 @@ class COINNLocal:
         assert self.cache['computation_id'] is not None, self._PROMPT_TASK_
         assert self.cache['mode'] in [Mode.TRAIN, Mode.TEST], self._PROMPT_MODE_
 
+    def _init_runs(self):
+        out = {}
+        out.update(_du.init_k_folds(self.cache, self.state, self.data_splitter))
+        out['data_size'] = {}
+        for k, sp in self.cache['splits'].items():
+            sp = _json.loads(open(self.cache['split_dir'] + _os.sep + sp).read())
+            out['data_size'][k] = dict((key, len(sp[key])) for key in sp)
+        out['computation_id'] = self.cache['computation_id']
+        out['seed'] = self.cache.get('seed')
+        return out
+
+    def _init_nn(self, trainer, dataset_cls):
+        trainer.init_nn(init_weights=True)
+        self.cache['current_nn_state'] = 'current.nn.pt'
+        self.cache['best_nn_state'] = 'best.nn.pt'
+        trainer.load_data_indices(dataset_cls, split_key='train')
+        trainer.save_checkpoint(file_name=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
+
+        if self.cache['pretrain_epochs'] >= 1 and self.cache.get('pretrain', False):
+            return Phase.PRE_COMPUTATION, trainer.pre_train()
+        return Phase.COMPUTATION, {}
+
     def compute(self, dataset_cls, trainer_cls):
         trainer = trainer_cls(cache=self.cache, input=self.input, state=self.state)
         nxt_phase = self.input.get('phase', Phase.INIT_RUNS)
         if nxt_phase == Phase.INIT_RUNS:
             """ Generate folds as specified.   """
-
             self.cache.update(**self.input)
             for k in self.args:
                 if self.cache.get(k) is None:
                     self.cache[k] = self.args[k]
-
-            self.out.update(_du.init_k_folds(self.cache, self.state, self.data_splitter))
+            self.out.update(**self._init_runs())
             self.cache['args'] = _FrozenDict(self.cache)
             self.out['mode'] = self.cache['mode']
             self._check_args()
 
-        if nxt_phase == Phase.INIT_NN:
+        elif nxt_phase == Phase.INIT_NN:
             """  Initialize neural network/optimizer and GPUs  """
-
             self.cache.update(**self.input['run'][self.state['clientId']], epoch=0, cursor=0, train_log=[])
             self.cache['split_file'] = self.cache['splits'][str(self.cache['split_ix'])]
             self.cache['log_dir'] = self.state['outputDirectory'] + _sep + self.cache[
                 'computation_id'] + _sep + f"fold_{self.cache['split_ix']}"
             _os.makedirs(self.cache['log_dir'], exist_ok=True)
+            nxt_phase, out = self._init_nn(trainer, dataset_cls)
+            self.out.update(**out)
 
-            trainer.init_nn(init_weights=True)
-            self.cache['current_nn_state'] = 'current.nn.pt'
-            self.cache['best_nn_state'] = 'best.nn.pt'
-            trainer.load_data_indices(dataset_cls, split_key='train')
-            trainer.save_checkpoint(file_name=self.cache['current_nn_state'])
-            trainer.pre_train()
+        elif nxt_phase == Phase.PRE_COMPUTATION:
+            trainer.load_checkpoint(file_path=self.state['baseDirectory'] + _sep + self.input['pretrained_weights'])
+            trainer.save_checkpoint(file_name=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
             nxt_phase = Phase.COMPUTATION
 
         if nxt_phase == Phase.COMPUTATION:
@@ -106,7 +124,7 @@ class COINNLocal:
             self.out.update(mode=self.input['global_modes'].get(self.state['clientId'], self.cache['mode']))
 
             trainer.init_nn(init_weights=False)
-            trainer.load_checkpoint_from_key(key='current_nn_state')
+            trainer.load_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
 
             if self.input.get('save_current_as_best'):
                 trainer.save_checkpoint(file_name=self.cache['best_nn_state'])

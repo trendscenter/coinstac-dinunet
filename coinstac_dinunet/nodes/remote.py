@@ -54,6 +54,11 @@ class COINNRemote:
         self.cache.update(num_folds=[v['num_folds'] for _, v in self.input.items()][0])
         self.cache.update(seed=[v.get('seed') for _, v in self.input.items()][0])
         self.cache.update(seed=_random.randint(0, int(1e6)) if self.cache['seed'] is None else self.cache['seed'])
+
+        self.cache['data_size'] = {}
+        for site, site_vars in self.input.items():
+            self.cache['data_size'][site] = site_vars['data_size']
+
         self.cache['folds'] = []
         for fold in range(self.cache['num_folds']):
             self.cache['folds'].append({'split_ix': fold, 'seed': self.cache['seed']})
@@ -77,7 +82,11 @@ class COINNRemote:
         """**** Parameter Lock ******"""
         out = {}
         for site, site_vars in self.input.items():
-            out[site] = self.cache['fold']
+            """Send pretrain signal to site with maximum training data."""
+            fold = {**self.cache['fold']}
+            max_data_site = dict([(st, self.cache['data_size'][st][fold['split_ix']]['train']) for st in self.input])
+            fold['pretrain'] = site == max(max_data_site, key=max_data_site.get)
+            out[site] = fold
         return out
 
     def _get_log_headers(self):
@@ -188,6 +197,19 @@ class COINNRemote:
             out[site] = mode if mode else site_vars['mode']
         return out
 
+    def _pre_compute(self):
+        out = {}
+        pt_path = None
+        for site, site_vars in self.input.items():
+            if site_vars.get('pretrained_weights') is not None:
+                pt_path = self.state['baseDirectory'] + _os.sep + site + _os.sep + site_vars['pretrained_weights']
+                break
+        if pt_path is not None:
+            out['pretrained_weights'] = f'dist_{_conf.pretrained_weights_file}'
+            _shutil.copy(pt_path, self.state['transferDirectory'] + _os.sep + out['pretrained_weights'])
+            self.cache['training_log'] = site_vars['pretrain_log']
+        return out
+
     def compute(self):
 
         nxt_phase = self.input.get('phase', Phase.INIT_RUNS)
@@ -200,6 +222,10 @@ class COINNRemote:
             self.out['run'] = self._next_run()
             self.out['global_modes'] = self._set_mode()
             nxt_phase = Phase.INIT_NN
+
+        if self._check(all, 'phase', Phase.PRE_COMPUTATION, self.input):
+            self.out.update(**self._pre_compute())
+            nxt_phase = Phase.PRE_COMPUTATION
 
         if self._check(all, 'phase', Phase.COMPUTATION, self.input):
             """
