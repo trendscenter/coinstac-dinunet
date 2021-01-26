@@ -59,5 +59,5 @@ def plot_progress(cache, log_dir, plot_keys=[], num_points=11, epoch=None):
             ax.set_xticklabels(list(range(len(xticks))))
 
         _plt.xlabel('Epochs')
-        _plt.savefig(log_dir + _os.sep + f"_{k}.png")
+        _plt.savefig(log_dir + _os.sep + f"{k}.png")
         _plt.close('all')

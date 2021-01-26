@@ -193,37 +193,42 @@ class COINNTrainer:
                 reduced[k] = [ik[k] for ik in its]
         return reduced
 
-    def pre_train(self, dataset_cls, mode=Mode.PRE_TRAIN):
+    def pre_train(self, dataset_cls, num_sites=1):
         out = {}
 
-        first_model = list(self.nn.keys())[0]
-        first_optim = list(self.optimizer.keys())[0]
+        with open(self.cache['log_dir']+_sep+'pretrained.csv', 'w') as writer:
+            first_model = list(self.nn.keys())[0]
+            first_optim = list(self.optimizer.keys())[0]
 
-        self.nn[first_model].train()
-        self.optimizer[first_optim].zero_grad()
+            self.nn[first_model].train()
+            self.optimizer[first_optim].zero_grad()
 
-        dataset = dataset_cls(mode=mode, limit=self.cache.get('load_limit', _conf.data_load_lim))
-        dataset.indices = self.cache['data_indices']
-        loader = _COINNDLoader.new(dataset=dataset, **self.cache)
-        out['pretrain_log'] = []
-        out['pretrained_weights'] = _conf.pretrained_weights_file
-        for ep in range(self.cache['pretrain_epochs']):
-            ep_averages = self.new_averages()
-            ep_metrics = self.new_metrics()
-            for i, batch in enumerate(loader):
-                its = []
-                for _ in range(self.cache.get('local_iterations', 1)):
-                    it = self.iteration(batch)
-                    it['loss'].backward()
-                    its.append(it)
-                self.optimizer[first_optim].step()
-                it = self._reduce_iteration(its)
-                self._on_iteration_end(i, ep, it)
-                ep_averages.accumulate(it['averages'])
-                ep_metrics.accumulate(it['metrics'])
-            out['pretrain_log'].append([vars(ep_averages), vars(ep_metrics)])
-            self._on_epoch_end(ep, ep_averages, ep_metrics, None, None)
-        self.save_checkpoint(file_path=self.state['transferDirectory'] + _sep + out['pretrained_weights'])
+            dataset = dataset_cls(mode=Mode.PRE_TRAIN, limit=self.cache.get('load_limit', _conf.data_load_lim))
+            dataset.indices = self.cache['data_indices']
+            dataset.add(files=[], cache=self.cache, state=self.state)
+            loader = _COINNDLoader.new(dataset=dataset, **self.cache)
+            out['pretrain_scores'] = []
+            out['pretrained_weights'] = _conf.pretrained_weights_file
+            for ep in range(self.cache['pretrain_epochs']):
+                ep_averages = self.new_averages()
+                ep_metrics = self.new_metrics()
+                for i, batch in enumerate(loader):
+                    its = []
+                    for _ in range(self.cache['local_iterations']):
+                        it = self.iteration(batch)
+                        it['loss'].backward()
+                        its.append(it)
+                    self.optimizer[first_optim].step()
+                    it = self._reduce_iteration(its)
+                    self._on_iteration_end(i, ep, it)
+                    ep_averages.accumulate(it['averages'])
+                    ep_metrics.accumulate(it['metrics'])
+
+                writer.write(f'{[*ep_averages.get()]}, {[*ep_metrics.get()]}\n')
+                writer.flush()
+                out['pretrain_scores'].append([*ep_averages.get(), *ep_metrics.get()])
+                self._on_epoch_end(ep, ep_averages, ep_metrics, None, None)
+            self.save_checkpoint(file_path=self.state['transferDirectory'] + _sep + out['pretrained_weights'])
         return out
 
     def train(self, dataset_cls):
@@ -240,7 +245,7 @@ class COINNTrainer:
             self.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
 
         its = []
-        for _ in range(self.cache['pretrain_epochs']):
+        for _ in range(self.cache['local_iterations']):
             it = self.iteration(self.next_batch(dataset_cls, mode='train'))
             it['loss'].backward()
             its.append(it)
@@ -250,14 +255,14 @@ class COINNTrainer:
         out['grads_file'] = _conf.grads_file
         grads = _tu.extract_grads(self.nn[first_model])
         _tu.save_grads(self.state['transferDirectory'] + _sep + out['grads_file'], grads)
-        self.cache['train_log'].append([vars(it['averages']), vars(it['metrics'])])
+        self.cache['train_scores'].append([vars(it['averages']), vars(it['metrics'])])
         out.update(**self._on_iteration_end(0, self.cache['epoch'], it))
         return out
 
     def validation(self, dataset_cls):
         out = {}
         avg, scores = self.evaluation(self._get_validation_dataset(dataset_cls), save_pred=False)
-        out['validation_log'] = [vars(avg), vars(scores)]
+        out['validation_scores'] = [vars(avg), vars(scores)]
         out.update(**self.next_epoch())
         out.update(**self._on_epoch_end(self.cache['epoch'], None, None, avg, scores))
         return out
@@ -266,7 +271,7 @@ class COINNTrainer:
         out = {}
         self.load_checkpoint(self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
         avg, scores = self.evaluation(self._get_test_dataset(dataset_cls), save_pred=True)
-        out['test_log'] = [vars(avg), vars(scores)]
+        out['test_scores'] = [vars(avg), vars(scores)]
         return out
 
     def load_data_indices(self, dataset_cls, split_key='train'):
@@ -360,8 +365,8 @@ class COINNTrainer:
             out['mode'] = Mode.TRAIN_WAITING
             _rd.shuffle(self.cache['data_indices'])
 
-        out['train_log'] = self.cache['train_log']
-        self.cache['train_log'] = []
+        out['train_scores'] = self.cache['train_scores']
+        self.cache['train_scores'] = []
         return out
 
     def _on_epoch_end(self, ep, ep_averages, ep_metrics, val_averages, val_metrics):

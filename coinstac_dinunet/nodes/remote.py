@@ -13,7 +13,6 @@ import sys as _sys
 from typing import Callable as _Callable
 
 import numpy as _np
-import torch as _torch
 
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.metrics as _metric
@@ -55,13 +54,15 @@ class COINNRemote:
         self.cache.update(seed=[v.get('seed') for _, v in self.input.items()][0])
         self.cache.update(seed=_random.randint(0, int(1e6)) if self.cache['seed'] is None else self.cache['seed'])
 
+        self.cache['global_test_scores'] = []
+
         self.cache['data_size'] = {}
         for site, site_vars in self.input.items():
-            self.cache['data_size'][site] = site_vars['data_size']
+            self.cache['data_size'][site] = site_vars.get('data_size')
 
         self.cache['folds'] = []
         for fold in range(self.cache['num_folds']):
-            self.cache['folds'].append({'split_ix': fold, 'seed': self.cache['seed']})
+            self.cache['folds'].append({'split_ix': str(fold), 'seed': self.cache['seed']})
 
         self.cache['folds'] = self.cache['folds'][::-1]
 
@@ -70,27 +71,32 @@ class COINNRemote:
         This function pops a new fold, lock parameters, and forward init_nn signal to all sites
         """
         self.cache['fold'] = self.cache['folds'].pop()
+
+        self._set_log_headers()
+        self._set_monitor_metric()
+
         self.cache.update(
             log_dir=self.state['outputDirectory'] + _os.sep + self.cache[
                 'computation_id'] + _os.sep + f"fold_{self.cache['fold']['split_ix']}")
         _os.makedirs(self.cache['log_dir'], exist_ok=True)
 
-        metric_direction = self._monitor_metric()[1]
+        metric_direction = self.cache['monitor_metric'][1]
         self.cache.update(best_val_score=0 if metric_direction == 'maximize' else 1e11)
-        self.cache.update(train_log=[], validation_log=[], test_log=[])
+        self.cache.update(train_scores=[], validation_scores=[], test_scores=[])
 
         """**** Parameter Lock ******"""
         out = {}
         for site, site_vars in self.input.items():
             """Send pretrain signal to site with maximum training data."""
             fold = {**self.cache['fold']}
-            max_data_site = dict([(st, self.cache['data_size'][st][fold['split_ix']]['train']) for st in self.input])
-            fold['pretrain'] = site == max(max_data_site, key=max_data_site.get)
+            data_sizes = dict([(st, self.cache['data_size'][st][fold['split_ix']]['train']) for st in self.input])
+            max_data_site = max(data_sizes, key=data_sizes.get)
+            fold['pretrain'] = site == max_data_site
             out[site] = fold
         return out
 
-    def _get_log_headers(self):
-        return 'Loss,Precision,Recall,F1,Accuracy'
+    def _set_log_headers(self):
+        self.cache['log_header'] = 'Loss,Precision,Recall,F1,Accuracy'
 
     @staticmethod
     def _check(logic, k, v, kw):
@@ -105,8 +111,8 @@ class COINNRemote:
     def _new_averages(self):
         return _metric.COINNAverages()
 
-    def _monitor_metric(self):
-        return 'f1', 'maximize'
+    def _set_monitor_metric(self):
+        self.cache['monitor_metric'] = 'f1', 'maximize'
 
     def _on_epoch_end(self):
         """
@@ -126,24 +132,24 @@ class COINNRemote:
         val_scores = self._new_metrics()
         val_loss = self._new_averages()
         for site, site_vars in self.input.items():
-            for ta, tm in site_vars['train_log']:
+            for ta, tm in site_vars['train_scores']:
                 train_loss.update(**ta)
                 train_scores.update(**tm)
-            va, vm = site_vars['validation_log']
+            va, vm = site_vars['validation_scores']
             val_loss.update(**va)
             val_scores.update(**vm)
 
-        self.cache['train_log'].append([*train_loss.get(), *train_scores.get()])
-        self.cache['validation_log'].append([*val_loss.get(), *val_scores.get()])
+        self.cache['train_scores'].append([*train_loss.get(), *train_scores.get()])
+        self.cache['validation_scores'].append([*val_loss.get(), *val_scores.get()])
         self._save_if_better(val_scores)
-        _plot.plot_progress(self.cache, self.cache['log_dir'], plot_keys=['train_log', 'validation_log'])
+        _plot.plot_progress(self.cache, self.cache['log_dir'], plot_keys=['train_scores', 'validation_scores'])
         return out
 
     def _save_if_better(self, metrics):
         r"""
         Save the current model as best if it has better validation scores.
         """
-        monitor_metric, direction = self._monitor_metric()
+        monitor_metric, direction = self.cache['monitor_metric']
         sc = getattr(metrics, monitor_metric)
         if callable(sc):
             sc = sc()
@@ -163,28 +169,31 @@ class COINNRemote:
         #######################
         This function saves test score of last fold.
         """
-        test_scores = self._new_metrics()
-        test_loss = self._new_averages()
+        test_averages = self._new_averages()
+        test_metrics = self._new_metrics()
         for site, site_vars in self.input.items():
-            va, vm = site_vars['test_log']
-            test_loss.update(**va)
-            test_scores.update(**vm)
-        self.cache['test_log'].append([*test_loss.get(), *test_scores.get()])
-        self.cache['test_scores'] = _json.dumps(vars(test_scores))
-        self.cache['global_test_score'].append(vars(test_scores))
-        _plot.plot_progress(self.cache, self.cache['log_dir'], plot_keys=['train_log', 'validation_log'])
-        _utils.save_scores(self.cache, self.cache['log_dir'], file_keys=['test_log', 'test_scores'])
-        _utils.save_cache(self.cache, self.state['log_dir'])
+            ta, tm = site_vars['test_scores']
+            test_averages.update(**ta)
+            test_metrics.update(**tm)
+
+        self.cache['test_scores'].append([self.cache['fold']['split_ix'], *test_averages.get(), *test_metrics.get()])
+        self.cache['global_test_scores'].append([vars(test_averages), vars(test_metrics)])
+
+        _plot.plot_progress(self.cache, self.cache['log_dir'], plot_keys=['train_scores', 'validation_scores'])
+        _utils.save_scores(self.cache, self.cache['log_dir'], file_keys=['test_scores'])
+        _utils.save_cache(self.cache, self.cache['log_dir'])
 
     def _send_global_scores(self):
         out = {}
-        score = self._new_metrics()
-        for sc in self.cache['global_test_score']:
-            score.update(**sc)
-        self.cache['global_test_score'] = ['Precision,Recall,F1,Accuracy']
-        self.cache['global_test_score'].append(score.get())
+        averages = self._new_averages()
+        metrics = self._new_metrics()
+        for avg, sc in self.cache['global_test_scores']:
+            averages.update(**avg)
+            metrics.update(**sc)
+
+        self.cache['_global_test_scores'] = [['Global', *averages.get(), *metrics.get()]]
         _utils.save_scores(self.cache, self.state['outputDirectory'] + _os.sep + self.cache['computation_id'],
-                           file_keys=['global_test_score'])
+                           file_keys=['_global_test_scores'])
 
         out['results_zip'] = f"{self.cache['computation_id']}_" + '_'.join(str(_datetime.datetime.now()).split(' '))
         _shutil.make_archive(f"{self.state['transferDirectory']}{_os.sep}{out['results_zip']}",
@@ -194,7 +203,7 @@ class COINNRemote:
     def _set_mode(self, mode=None):
         out = {}
         for site, site_vars in self.input.items():
-            out[site] = mode if mode else site_vars['mode']
+            out[site] = mode if mode else site_vars.get('mode', 'N/A')
         return out
 
     def _pre_compute(self):
@@ -207,34 +216,31 @@ class COINNRemote:
         if pt_path is not None:
             out['pretrained_weights'] = f'dist_{_conf.pretrained_weights_file}'
             _shutil.copy(pt_path, self.state['transferDirectory'] + _os.sep + out['pretrained_weights'])
-            self.cache['training_log'] = site_vars['pretrain_log']
+            self.cache['train_scores'] = site_vars['pretrain_scores']
         return out
 
     def compute(self):
 
-        nxt_phase = self.input.get('phase', Phase.INIT_RUNS)
+        self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
         if self._check(all, 'phase', Phase.INIT_RUNS, self.input):
             """
             Initialize all folds and loggers
             """
-            self.cache['global_test_score'] = []
             self._init_runs()
-            self.out['run'] = self._next_run()
-            self.out['global_modes'] = self._set_mode()
-            nxt_phase = Phase.INIT_NN
+            self.out['global_runs'] = self._next_run()
+            self.out['phase'] = Phase.INIT_NN
 
         if self._check(all, 'phase', Phase.PRE_COMPUTATION, self.input):
             self.out.update(**self._pre_compute())
-            self.out['global_modes'] = self._set_mode()
-            nxt_phase = Phase.PRE_COMPUTATION
+            self.out['phase'] = Phase.PRE_COMPUTATION
 
+        self.out['global_modes'] = self._set_mode()
         if self._check(all, 'phase', Phase.COMPUTATION, self.input):
             """
             Main computation phase where we aggregate sites information
             We also handle train/validation/test stages of local sites by sending corresponding signals from here
             """
-            nxt_phase = Phase.COMPUTATION
-            self.out['global_modes'] = self._set_mode()
+            self.out['phase'] = Phase.COMPUTATION
             if self._check(all, 'grads_file', _conf.grads_file, self.input):
                 self.out.update(**self.sites_reducer(self.cache, self.input, self.state))
 
@@ -249,7 +255,7 @@ class COINNRemote:
                 self.out.update(**self._on_epoch_end())
                 self.out['global_modes'] = self._set_mode(mode=Mode.TEST)
 
-        if self._check(all, 'mode', Phase.NEXT_RUN_WAITING, self.input):
+        if self._check(all, 'phase', Phase.NEXT_RUN_WAITING, self.input):
             """
             This block runs when a fold has completed all train, test, validation phase.
             We save all the scores and plot the results.
@@ -258,14 +264,11 @@ class COINNRemote:
             self._save_scores()
             if len(self.cache['folds']) > 0:
                 self.out['nn'] = {}
-                self.out['run'] = self._next_run()
-                self.out['global_modes'] = self._set_mode()
-                nxt_phase = Phase.INIT_NN
+                self.out['global_runs'] = self._next_run()
+                self.out['phase'] = Phase.INIT_NN
             else:
                 self.out.update(**self._send_global_scores())
-                nxt_phase = Phase.SUCCESS
-
-        self.out['phase'] = nxt_phase
+                self.out['phase'] = Phase.SUCCESS
 
     def send(self):
         output = _json.dumps(
