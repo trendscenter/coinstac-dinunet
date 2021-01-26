@@ -188,7 +188,7 @@ class COINNRemote:
 
         out['results_zip'] = f"{self.cache['computation_id']}_" + '_'.join(str(_datetime.datetime.now()).split(' '))
         _shutil.make_archive(f"{self.state['transferDirectory']}{_os.sep}{out['results_zip']}",
-                             'zip', self.cache['log_dir'])
+                             'zip', self.state['outputDirectory'] + _os.sep + self.cache['computation_id'])
         return out
 
     def _set_mode(self, mode=None):
