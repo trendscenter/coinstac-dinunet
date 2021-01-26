@@ -117,6 +117,7 @@ class COINNLocal:
         elif nxt_phase == Phase.PRE_COMPUTATION:
             trainer.load_checkpoint(file_path=self.state['baseDirectory'] + _sep + self.input['pretrained_weights'])
             trainer.save_checkpoint(file_name=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
+            self.out['mode'] = self.cache['mode']
             nxt_phase = Phase.COMPUTATION
 
         if nxt_phase == Phase.COMPUTATION:

@@ -225,6 +225,7 @@ class COINNRemote:
 
         if self._check(all, 'phase', Phase.PRE_COMPUTATION, self.input):
             self.out.update(**self._pre_compute())
+            self.out['global_modes'] = self._set_mode()
             nxt_phase = Phase.PRE_COMPUTATION
 
         if self._check(all, 'phase', Phase.COMPUTATION, self.input):
