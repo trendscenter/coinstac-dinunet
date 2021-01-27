@@ -88,8 +88,7 @@ def init_k_folds(cache, state, data_splitter=None):
 
     [_shutil.copy(split_dir + _os.sep + f, cache['split_dir'] + _os.sep + f) for f in _os.listdir(split_dir)]
     splits = sorted(_os.listdir(cache['split_dir']))
-    cache['splits'] = dict(zip(range(len(splits)), splits))
-    out['num_folds'] = cache['num_folds']
-    out['computation_id'] = cache['computation_id']
-    out['seed'] = cache.get('seed')
+
+    cache['splits'] = dict(zip([str(i) for i in range(len(splits))], splits))
+    out['num_folds'] = len(splits)
     return out

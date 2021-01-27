@@ -72,14 +72,11 @@ class COINNTrainer:
         for model_key in self.nn:
             self.nn[model_key] = self.nn[model_key].to(self.device['gpu'])
 
-    def load_checkpoint_from_key(self, key='checkpoint'):
-        self.load_checkpoint(self.cache['log_dir'] + _sep + self.cache[key])
-
-    def load_checkpoint(self, full_path):
+    def load_checkpoint(self, file_path):
         try:
-            chk = _torch.load(full_path)
+            chk = _torch.load(file_path)
         except:
-            chk = _torch.load(full_path, map_location='cpu')
+            chk = _torch.load(file_path, map_location='cpu')
 
         if chk.get('source', 'Unknown').lower() == 'coinstac':
             for m in chk['models']:
@@ -100,15 +97,6 @@ class COINNTrainer:
             except:
                 self.nn[mkey].load_state_dict(chk)
 
-    def backward(self, it):
-        out = {}
-        it['loss'].backward()
-        out['grads_file'] = _conf.grads_file
-        first_model = list(self.nn.keys())[0]
-        grads = _tu.extract_grads(self.nn[first_model])
-        _tu.save_grads(self.state['transferDirectory'] + _sep + out['grads_file'], grads)
-        return out
-
     def step(self):
         grads = _tu.load_grads(self.state['baseDirectory'] + _sep + self.input['avg_grads_file'])
 
@@ -119,7 +107,7 @@ class COINNTrainer:
         first_optim = list(self.optimizer.keys())[0]
         self.optimizer[first_optim].step()
 
-    def save_checkpoint(self, file_name, src='coinstac'):
+    def save_checkpoint(self, file_path, src='coinstac'):
         checkpoint = {'source': src}
         for k in self.nn:
             checkpoint['models'] = {}
@@ -133,7 +121,7 @@ class COINNTrainer:
                 checkpoint['optimizers'][k] = self.optimizer[k].module.state_dict()
             except:
                 checkpoint['optimizers'][k] = self.optimizer[k].state_dict()
-        _torch.save(checkpoint, self.cache['log_dir'] + _sep + file_name)
+        _torch.save(checkpoint, file_path)
 
     def evaluation(self, dataset_list=None, save_pred=False):
         for k in self.nn:
@@ -187,46 +175,125 @@ class COINNTrainer:
     def save_predictions(self, dataset, its):
         pass
 
+    def _reduce_iteration(self, its):
+        reduced = {}.fromkeys(its[0].keys(), None)
+        for k in reduced:
+            if isinstance(its[0][k], _base_metrics.COINNAverages):
+                reduced[k] = self.new_averages()
+                [reduced[k].accumulate(ik[k]) for ik in its]
+
+            elif isinstance(its[0][k], _base_metrics.COINNMetrics):
+                reduced[k] = self.new_metrics()
+                [reduced[k].accumulate(ik[k]) for ik in its]
+
+            elif isinstance(its[0][k], _torch.Tensor) and not its[0][k].requires_grad and its[0][k].is_leaf:
+                reduced[k] = _torch.cat([ik[k] for ik in its])
+
+            else:
+                reduced[k] = [ik[k] for ik in its]
+        return reduced
+
+    def _set_monitor_metric(self):
+        self.cache['monitor_metric'] = 'f1', 'maximize'
+
+    def _save_if_better(self, metrics):
+        r"""
+        Save the current model as best if it has better validation scores.
+        """
+        out = {}
+        monitor_metric, direction = self.cache['monitor_metric']
+        sc = getattr(metrics, monitor_metric)
+        if callable(sc):
+            sc = sc()
+
+        if (direction == 'maximize' and sc >= self.cache['best_pretrain_validation_score']) or (
+                direction == 'minimize' and sc <= self.cache['best_pretrain_validation_score']):
+            out['pretrained_weights'] = _conf.pretrained_weights_file
+            self.save_checkpoint(file_path=self.state['transferDirectory'] + _sep + out['pretrained_weights'])
+        return out
+
+    def pre_train(self, dataset_cls, num_sites=1):
+        out = {}
+        self._set_monitor_metric()
+        out['pretrain_scores'] = []
+        metric_direction = self.cache['monitor_metric'][1]
+        self.cache.update(best_pretrain_validation_score=0 if metric_direction == 'maximize' else 1e11)
+        with open(self.cache['log_dir'] + _sep + 'pretrained.csv', 'w') as writer:
+            first_model = list(self.nn.keys())[0]
+            first_optim = list(self.optimizer.keys())[0]
+
+            self.nn[first_model].train()
+            self.optimizer[first_optim].zero_grad()
+
+            dataset = dataset_cls(mode=Mode.PRE_TRAIN, limit=self.cache.get('load_limit', _conf.data_load_lim))
+
+            dataset.indices = self.cache['data_indices']
+            dataset.add(files=[], cache=self.cache, state=self.state)
+            loader = _COINNDLoader.new(dataset=dataset, **self.cache)
+            for ep in range(self.cache['pretrain_epochs']):
+                ep_averages = self.new_averages()
+                ep_metrics = self.new_metrics()
+                for i, batch in enumerate(loader):
+                    its = []
+                    for _ in range(self.cache['local_iterations']):
+                        it = self.iteration(batch)
+                        it['loss'].backward()
+                        its.append(it)
+                    self.optimizer[first_optim].step()
+                    it = self._reduce_iteration(its)
+                    self._on_iteration_end(i, ep, it)
+                    ep_averages.accumulate(it['averages'])
+                    ep_metrics.accumulate(it['metrics'])
+
+                writer.write(f'{[*ep_averages.get()]}, {[*ep_metrics.get()]}\n')
+                writer.flush()
+                out['pretrain_scores'].append([*ep_averages.get(), *ep_metrics.get()])
+                val_avg, val_metrics = self.evaluation(self._get_validation_dataset(dataset_cls), save_pred=False)
+                out.update(**self._save_if_better(val_metrics))
+                self._on_epoch_end(ep, ep_averages, ep_metrics, val_avg, val_metrics)
+        return out
+
     def train(self, dataset_cls):
         out = {}
 
-        for k in self.nn:
-            self.nn[k].train()
-        for k in self.optimizer:
-            self.optimizer[k].zero_grad()
+        first_model = list(self.nn.keys())[0]
+        first_optim = list(self.optimizer.keys())[0]
 
-        itr_avgs, itr_metrics = self.new_averages(), self.new_metrics()
-
-        its = []
-        for _ in range(self.cache.get('local_iterations', 1)):
-            it = self.iteration(self.next_batch(dataset_cls, mode='train'))
-            out.update(**self.backward(it))
-            out.update(**self.next_iter())
-            itr_avgs.accumulate(it['averages'])
-            itr_metrics.accumulate(it['metrics'])
-            its.append([it])
-        self.cache['train_log'].append([vars(itr_avgs), vars(itr_metrics)])
+        self.nn[first_model].train()
+        self.optimizer[first_optim].zero_grad()
 
         if self.input.get('avg_grads_file'):
             self.step()
-            self.save_checkpoint(file_name=self.cache['current_nn_state'])
+            self.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
 
-        out.update(**self._on_iteration_end(0, self.cache['epoch'], its))
+        its = []
+        for _ in range(self.cache['local_iterations']):
+            it = self.iteration(self.next_batch(dataset_cls, mode='train'))
+            it['loss'].backward()
+            its.append(it)
+            out.update(**self.next_iter())
+        it = self._reduce_iteration(its)
+
+        out['grads_file'] = _conf.grads_file
+        grads = _tu.extract_grads(self.nn[first_model])
+        _tu.save_grads(self.state['transferDirectory'] + _sep + out['grads_file'], grads)
+        self.cache['train_scores'].append([vars(it['averages']), vars(it['metrics'])])
+        out.update(**self._on_iteration_end(0, self.cache['epoch'], it))
         return out
 
     def validation(self, dataset_cls):
         out = {}
         avg, scores = self.evaluation(self._get_validation_dataset(dataset_cls), save_pred=False)
-        out['validation_log'] = [vars(avg), vars(scores)]
+        out['validation_scores'] = [vars(avg), vars(scores)]
         out.update(**self.next_epoch())
         out.update(**self._on_epoch_end(self.cache['epoch'], None, None, avg, scores))
         return out
 
     def test(self, dataset_cls):
         out = {}
-        self.load_checkpoint_from_key(key='best_nn_state')
+        self.load_checkpoint(self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
         avg, scores = self.evaluation(self._get_test_dataset(dataset_cls), save_pred=True)
-        out['test_log'] = [vars(avg), vars(scores)]
+        out['test_scores'] = [vars(avg), vars(scores)]
         return out
 
     def load_data_indices(self, dataset_cls, split_key='train'):
@@ -320,11 +387,11 @@ class COINNTrainer:
             out['mode'] = Mode.TRAIN_WAITING
             _rd.shuffle(self.cache['data_indices'])
 
-        out['train_log'] = self.cache['train_log']
-        self.cache['train_log'] = []
+        out['train_scores'] = self.cache['train_scores']
+        self.cache['train_scores'] = []
         return out
 
-    def _on_epoch_end(self, ep, ep_loss, ep_metrics, val_loss, val_metrics):
+    def _on_epoch_end(self, ep, ep_averages, ep_metrics, val_averages, val_metrics):
         r"""
         Any logic to run after an epoch ends.
         """
