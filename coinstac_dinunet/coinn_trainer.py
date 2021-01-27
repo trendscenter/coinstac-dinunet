@@ -193,10 +193,32 @@ class COINNTrainer:
                 reduced[k] = [ik[k] for ik in its]
         return reduced
 
+    def _set_monitor_metric(self):
+        self.cache['monitor_metric'] = 'f1', 'maximize'
+
+    def _save_if_better(self, metrics):
+        r"""
+        Save the current model as best if it has better validation scores.
+        """
+        out = {}
+        monitor_metric, direction = self.cache['monitor_metric']
+        sc = getattr(metrics, monitor_metric)
+        if callable(sc):
+            sc = sc()
+
+        if (direction == 'maximize' and sc >= self.cache['best_pretrain_validation_score']) or (
+                direction == 'minimize' and sc <= self.cache['best_pretrain_validation_score']):
+            out['pretrained_weights'] = _conf.pretrained_weights_file
+            self.save_checkpoint(file_path=self.state['transferDirectory'] + _sep + out['pretrained_weights'])
+        return out
+
     def pre_train(self, dataset_cls, num_sites=1):
         out = {}
-
-        with open(self.cache['log_dir']+_sep+'pretrained.csv', 'w') as writer:
+        self._set_monitor_metric()
+        out['pretrain_scores'] = []
+        metric_direction = self.cache['monitor_metric'][1]
+        self.cache.update(best_pretrain_validation_score=0 if metric_direction == 'maximize' else 1e11)
+        with open(self.cache['log_dir'] + _sep + 'pretrained.csv', 'w') as writer:
             first_model = list(self.nn.keys())[0]
             first_optim = list(self.optimizer.keys())[0]
 
@@ -204,11 +226,10 @@ class COINNTrainer:
             self.optimizer[first_optim].zero_grad()
 
             dataset = dataset_cls(mode=Mode.PRE_TRAIN, limit=self.cache.get('load_limit', _conf.data_load_lim))
+
             dataset.indices = self.cache['data_indices']
             dataset.add(files=[], cache=self.cache, state=self.state)
             loader = _COINNDLoader.new(dataset=dataset, **self.cache)
-            out['pretrain_scores'] = []
-            out['pretrained_weights'] = _conf.pretrained_weights_file
             for ep in range(self.cache['pretrain_epochs']):
                 ep_averages = self.new_averages()
                 ep_metrics = self.new_metrics()
@@ -227,8 +248,9 @@ class COINNTrainer:
                 writer.write(f'{[*ep_averages.get()]}, {[*ep_metrics.get()]}\n')
                 writer.flush()
                 out['pretrain_scores'].append([*ep_averages.get(), *ep_metrics.get()])
-                self._on_epoch_end(ep, ep_averages, ep_metrics, None, None)
-            self.save_checkpoint(file_path=self.state['transferDirectory'] + _sep + out['pretrained_weights'])
+                val_avg, val_metrics = self.evaluation(self._get_validation_dataset(dataset_cls), save_pred=False)
+                out.update(**self._save_if_better(val_metrics))
+                self._on_epoch_end(ep, ep_averages, ep_metrics, val_avg, val_metrics)
         return out
 
     def train(self, dataset_cls):
