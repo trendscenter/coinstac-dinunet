@@ -119,10 +119,10 @@ class COINNLocal:
             self.cache['log_dir'] = self.state['outputDirectory'] + _sep + self.cache[
                 'computation_id'] + _sep + f"fold_{self.cache['split_ix']}"
             _os.makedirs(self.cache['log_dir'], exist_ok=True)
-            trainer.init_nn(init_weights=False)
+            trainer.init_nn(init_weights=True)
             self.out.update(**self._init_nn(trainer, dataset_cls))
 
-        elif self.out['phase'] == Phase.PRE_COMPUTATION:
+        elif self.out['phase'] == Phase.PRE_COMPUTATION and self.input.get('pretrained_weights'):
             trainer.init_nn(init_weights=False)
             trainer.load_checkpoint(file_path=self.state['baseDirectory'] + _sep + self.input['pretrained_weights'])
             trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
