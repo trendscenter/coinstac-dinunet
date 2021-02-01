@@ -85,3 +85,8 @@ class COINNDataset(_Dataset):
         self.state[state['clientId']] = state
         self.dataspecs[state['clientId']] = cache['args']
         self._load_indices(id=state['clientId'], files=files, verbose=False)
+
+    def add_pooled(self, site, inputspec, files, dataset_dir='test'):
+        self.state[site] = {'baseDirectory': f'{dataset_dir}/input/local{site}/simulatorRun'}
+        self.dataspecs[site] = {k: v['value'] for k, v in inputspec.items()}
+        self._load_indices(id=site, files=files, verbose=True)

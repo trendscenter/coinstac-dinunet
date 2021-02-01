@@ -206,18 +206,18 @@ class COINNTrainer:
         if callable(sc):
             sc = sc()
 
-        if (direction == 'maximize' and sc >= self.cache['best_pretrain_validation_score']) or (
-                direction == 'minimize' and sc <= self.cache['best_pretrain_validation_score']):
+        if (direction == 'maximize' and sc >= self.cache['best_local_score']) or (
+                direction == 'minimize' and sc <= self.cache['best_local_score']):
             out['pretrained_weights'] = _conf.pretrained_weights_file
             self.save_checkpoint(file_path=self.state['transferDirectory'] + _sep + out['pretrained_weights'])
         return out
 
-    def pre_train(self, dataset_cls, num_sites=1):
+    def train_local(self, dataset_cls, num_sites=1, **kw):
         out = {}
         self._set_monitor_metric()
         out['pretrain_scores'] = []
         metric_direction = self.cache['monitor_metric'][1]
-        self.cache.update(best_pretrain_validation_score=0 if metric_direction == 'maximize' else 1e11)
+        self.cache.update(best_local_score=0 if metric_direction == 'maximize' else 1e11)
         with open(self.cache['log_dir'] + _sep + 'pretrained.csv', 'w') as writer:
             first_model = list(self.nn.keys())[0]
             first_optim = list(self.optimizer.keys())[0]
@@ -253,7 +253,7 @@ class COINNTrainer:
                 self._on_epoch_end(ep, ep_averages, ep_metrics, val_avg, val_metrics)
         return out
 
-    def train(self, dataset_cls):
+    def train_distributed(self, dataset_cls):
         out = {}
 
         first_model = list(self.nn.keys())[0]
