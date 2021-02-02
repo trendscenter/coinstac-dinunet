@@ -131,7 +131,10 @@ class COINNRemote:
         val_averages = self._new_averages()
         for site, site_vars in self.input.items():
             for ta, tm in site_vars['train_scores']:
-                self.cache['train_scores'].append([*ta.get(), *tm.get()])
+                avg, metric = self._new_averages(), self._new_metrics()
+                avg.update(**ta)
+                metric.update(**tm)
+                self.cache['train_scores'].append([*avg.get(), *metric.get()])
             va, vm = site_vars['validation_scores']
             val_averages.update(**va)
             val_metrics.update(**vm)
