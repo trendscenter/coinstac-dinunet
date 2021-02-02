@@ -5,6 +5,7 @@
 """
 
 import json as _json
+import math as _math
 from collections import OrderedDict as _ODict
 from os import sep as _sep
 
@@ -13,11 +14,10 @@ import torch as _torch
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.data as _data
 import coinstac_dinunet.metrics as _base_metrics
-import coinstac_dinunet.utils.tensorutils as _tu
-from coinstac_dinunet.config.status import *
 import coinstac_dinunet.utils as _utils
+import coinstac_dinunet.utils.tensorutils as _tu
 import coinstac_dinunet.vision.plotter as _plot
-import math as _math
+from coinstac_dinunet.config.status import *
 
 
 class NNTrainer:
@@ -158,7 +158,7 @@ class NNTrainer:
         return it
 
     def train_local(self, dataset_cls, **kw):
-        cache = {}
+        cache = {'seed': self.cache['seed']}
         out = {}
         self._set_monitor_metric()
         self._set_log_headers()

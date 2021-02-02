@@ -18,7 +18,9 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs', **kw)
             self.log_dir = log_dir
             self.inputspecs = self._parse_inputspec(dataset_dir + _os.sep + kw.get('inputspec_file', 'inputspec.json'))
 
-            cache = {**self.inputspecs[0], 'folds': self._init_folds()}
+            cache = {**self.inputspecs[0],
+                     'folds': self._init_folds(),
+                     'seed': _conf.current_seed}
             cache.update(**kw)
             super().__init__(cache=cache, input={}, state={}, **kw)
 

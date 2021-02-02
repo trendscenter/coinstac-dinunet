@@ -6,8 +6,8 @@
 
 import datetime as _datetime
 import json as _json
+import math as _math
 import os as _os
-import random as _random
 import shutil as _shutil
 import sys as _sys
 from typing import Callable as _Callable
@@ -20,7 +20,6 @@ import coinstac_dinunet.utils as _utils
 import coinstac_dinunet.utils.tensorutils as _tu
 from coinstac_dinunet.config.status import *
 from coinstac_dinunet.vision import plotter as _plot
-import math as _math
 
 
 def average_sites_gradients(cache, input, state):
@@ -53,7 +52,7 @@ class COINNRemote:
         self.cache.update(computation_id=[v['computation_id'] for _, v in self.input.items()][0])
         self.cache.update(num_folds=[v['num_folds'] for _, v in self.input.items()][0])
         self.cache.update(seed=[v.get('seed') for _, v in self.input.items()][0])
-        self.cache.update(seed=_random.randint(0, int(1e6)) if self.cache['seed'] is None else self.cache['seed'])
+        self.cache.update(seed=_conf.current_seed)
 
         self.cache['global_test_scores'] = []
 
@@ -143,8 +142,8 @@ class COINNRemote:
         epoch = site_vars['epoch']
         if epoch % int(_math.log(epoch + 1) + 1) == 0:
             _plot.plot_progress(self.cache, self.cache['log_dir'],
-                            plot_keys=['train_scores', 'validation_scores'],
-                            epoch=epoch)
+                                plot_keys=['train_scores', 'validation_scores'],
+                                epoch=epoch)
         return out
 
     def _save_if_better(self, metrics):
