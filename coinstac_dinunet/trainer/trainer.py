@@ -48,8 +48,8 @@ class COINNTrainer(_NNTrainer):
         if callable(sc):
             sc = sc()
 
-        if (direction == 'maximize' and sc >= self.cache['best_local_score']) or (
-                direction == 'minimize' and sc <= self.cache['best_local_score']):
+        if (direction == 'maximize' and sc > self.cache['best_local_score']) or (
+                direction == 'minimize' and sc < self.cache['best_local_score']):
             out['weights_file'] = _conf.weights_file
             self.cache['best_local_epoch'] = epoch
             self.cache['best_local_score'] = sc

@@ -53,8 +53,8 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs', **kw)
             sc = getattr(metrics, monitor_metric)
             if callable(sc):
                 sc = sc()
-            if (direction == 'maximize' and sc >= self.cache['best_local_score']) or (
-                    direction == 'minimize' and sc <= self.cache['best_local_score']):
+            if (direction == 'maximize' and sc > self.cache['best_local_score']) or (
+                    direction == 'minimize' and sc < self.cache['best_local_score']):
                 self.cache['best_local_epoch'] = epoch
                 self.cache['best_local_score'] = sc
                 self.save_checkpoint(file_path=self.cache['log_dir'] + _os.sep + _conf.weights_file)
