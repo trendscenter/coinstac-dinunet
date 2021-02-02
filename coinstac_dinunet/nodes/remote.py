@@ -216,8 +216,6 @@ class COINNRemote:
         if pt_path is not None:
             out['pretrained_weights'] = f'pretrained_{_conf.weights_file}'
             _shutil.copy(pt_path, self.state['transferDirectory'] + _os.sep + out['pretrained_weights'])
-            self.cache['train_scores'] = site_vars.get('train_scores', [])
-            self.cache['validation_scores'] = site_vars.get('validation_scores', [])
         return out
 
     def compute(self):

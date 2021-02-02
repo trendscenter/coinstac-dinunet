@@ -196,9 +196,6 @@ class NNTrainer:
 
         _utils.save_scores(cache, self.cache['log_dir'], file_keys=['train_scores', 'validation_scores'])
         _utils.save_cache(cache, self.cache['log_dir'])
-
-        out['train_scores'] = cache['train_scores']
-        out['validation_scores'] = cache['validation_scores']
         return out
 
     def iteration(self, batch):
