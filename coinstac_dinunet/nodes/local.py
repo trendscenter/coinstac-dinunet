@@ -84,7 +84,7 @@ class COINNLocal:
         out = {}
         self.cache['current_nn_state'] = 'current.nn.pt'
         self.cache['best_nn_state'] = 'best.nn.pt'
-        trainer.load_data_indices(dataset_cls, split_key='train')
+        trainer.cache_data_indices(dataset_cls, split_key='train')
         trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
 
         out['phase'] = Phase.COMPUTATION

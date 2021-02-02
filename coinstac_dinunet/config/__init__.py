@@ -6,7 +6,7 @@ grad_file_ext = '.npy'  # numpy
 
 grads_file = f'grads{grad_file_ext}'
 avg_grads_file = f'avg_grads{grad_file_ext}'
-pretrained_weights_file = 'pretrained.tar'
+weights_file = 'weights.tar'
 metrics_eps = 10e-5
 metrics_num_precision = 5
 et_version = 2.4
