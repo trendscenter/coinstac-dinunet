@@ -1,7 +1,14 @@
-from coinstac_dinunet.nodes.trainer import NNTrainer as _NNTrainer
+"""
+@author: Aashis Khanal
+@email: sraashis@gmail.com
+@ref: https://github.com/sraashis/easytorch
+"""
+
 import json as _json
 import os as _os
+
 import coinstac_dinunet.config as _conf
+from .nn import NNTrainer as _NNTrainer
 
 
 def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs', **kw):
@@ -30,10 +37,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs', **kw)
                 inputspec[site] = spec
             return inputspec
 
-        def _get_train_dataset(self, dataset_cls):
-            return self._load_dataset(dataset_cls, 'train')
-
-        def _load_dataset(self, dataset_cls, key):
+        def _load_dataset(self, dataset_cls, split_key):
             dataset = dataset_cls(mode='pre_train', limit=self.cache.get('load_limit', _conf.data_load_lim))
             for site, fold in self.cache['folds'].items():
                 split = fold[self.cache['fold_ix']]

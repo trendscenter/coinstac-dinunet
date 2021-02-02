@@ -15,7 +15,7 @@ import coinstac_dinunet.utils as _utils
 import coinstac_dinunet.utils.tensorutils as _tu
 from coinstac_dinunet.config.status import *
 from coinstac_dinunet.data import COINNDataLoader as _COINNDLoader
-from coinstac_dinunet.nodes.trainer import NNTrainer as _NNTrainer
+from .nn import NNTrainer as _NNTrainer
 
 
 class COINNTrainer(_NNTrainer):
@@ -71,7 +71,7 @@ class COINNTrainer(_NNTrainer):
 
         its = []
         for _ in range(self.cache['local_iterations']):
-            it = self.iteration(self.next_batch(dataset_cls, mode='train'))
+            it = self.iteration(self.next_batch(dataset_cls))
             it['loss'].backward()
             its.append(it)
             out.update(**self.next_iter())
@@ -84,7 +84,7 @@ class COINNTrainer(_NNTrainer):
         out.update(**self._on_iteration_end(0, self.cache['epoch'], it))
         return out
 
-    def validation(self, dataset_cls):
+    def validation_distributed(self, dataset_cls):
         out = {}
         avg, scores = self.evaluation(self._get_validation_dataset(dataset_cls), save_pred=False)
         out['validation_scores'] = [vars(avg), vars(scores)]
@@ -92,7 +92,7 @@ class COINNTrainer(_NNTrainer):
         out.update(**self._on_epoch_end(self.cache['epoch'], None, None, avg, scores))
         return out
 
-    def test(self, dataset_cls):
+    def test_distributed(self, dataset_cls):
         out = {}
         self.load_checkpoint(self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
         avg, scores = self.evaluation(self._get_test_dataset(dataset_cls), save_pred=True)
@@ -116,10 +116,9 @@ class COINNTrainer(_NNTrainer):
             _rd.shuffle(self.cache['data_indices'])
         return out
 
-    def next_batch(self, dataset_cls, mode='train'):
-        dataset = dataset_cls(mode=mode, limit=self.cache.get('load_limit', _conf.data_load_lim))
-        dataset.indices = self.cache['data_indices'][self.cache['cursor']:]
-        dataset.add(files=[], cache=self.cache, state=self.state)
+    def next_batch(self, dataset_cls):
+        dataset = self._get_train_dataset(dataset_cls)
+        dataset.indices = dataset.indices[self.cache['cursor']:]
         loader = _COINNDLoader.new(dataset=dataset, **self.cache)
         return next(loader.__iter__())
 

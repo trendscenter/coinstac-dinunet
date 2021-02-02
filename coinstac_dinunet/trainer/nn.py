@@ -248,25 +248,27 @@ class NNTrainer:
     def _set_monitor_metric(self):
         self.cache['monitor_metric'] = 'f1', 'maximize'
 
-    def _get_train_dataset(self, dataset_cls):
-        dataset = dataset_cls(mode=Mode.PRE_TRAIN, limit=self.cache.get('load_limit', _conf.data_load_lim))
-        dataset.indices = self.cache['data_indices']
-        dataset.add(files=[], cache=self.cache, state=self.state)
-        return dataset
-
-    def _load_dataset(self, dataset_cls, key):
+    def _load_dataset(self, dataset_cls, split_key):
         dataset = dataset_cls(mode='train', limit=self.cache.get('load_limit', _conf.data_load_lim))
         file = self.cache['split_dir'] + _sep + self.cache['split_file']
         with open(file) as split_file:
             split = _json.loads(split_file.read())
-            dataset.add(files=split[key], cache=self.cache, state=self.state)
+            dataset.add(files=split[split_key], cache=self.cache, state=self.state)
+        return dataset
+
+    def _get_train_dataset(self, dataset_cls):
+        if self.cache.get('data_indices') is None:
+            return self._load_dataset(dataset_cls, split_key='train')
+        dataset = dataset_cls(mode=Mode.PRE_TRAIN, limit=self.cache.get('load_limit', _conf.data_load_lim))
+        dataset.indices = self.cache['data_indices']
+        dataset.add(files=[], cache=self.cache, state=self.state)
         return dataset
 
     def _get_validation_dataset(self, dataset_cls):
         r"""
         Load the validation data from current fold/split.
         """
-        return [self._load_dataset(dataset_cls, key='validation')]
+        return [self._load_dataset(dataset_cls, split_key='validation')]
 
     def _get_test_dataset(self, dataset_cls):
         r"""
