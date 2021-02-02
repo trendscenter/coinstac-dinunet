@@ -64,7 +64,7 @@ def PooledTrainer(base=_BaseTrainer, dataset_dir='test', log_dir='net_logs', **k
         def base_directory(self, site):
             return f"{self.dataset_dir}/input/local{site}/simulatorRun"
 
-        def run_pooled(self, dataset_cls):
+        def run(self, dataset_cls):
             for fold_ix in range(len(self.cache['folds'][0])):
                 self.cache['fold_ix'] = fold_ix
                 self.cache['log_dir'] = self.log_dir + _os.sep + f'fold_{fold_ix}'
