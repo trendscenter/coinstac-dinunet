@@ -1,11 +1,11 @@
-from coinstac_dinunet import COINNTrainer as _BaseTrainer
+from coinstac_dinunet.nodes.trainer import NNTrainer as _NNTrainer
 import json as _json
 import os as _os
 import coinstac_dinunet.config as _conf
 
 
-def PooledTrainer(base=_BaseTrainer, dataset_dir='test', log_dir='net_logs', **kw):
-    class COINNPooledTrainer(base):
+def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs', **kw):
+    class PooledTrainer(base):
         def __init__(self, dataset_dir=dataset_dir, log_dir=log_dir, **kw):
             self.dataset_dir = dataset_dir
             self.log_dir = log_dir
@@ -72,6 +72,6 @@ def PooledTrainer(base=_BaseTrainer, dataset_dir='test', log_dir='net_logs', **k
                 _os.makedirs(self.cache['log_dir'], exist_ok=True)
                 self.train_local(dataset_cls, verbose=True)
 
-    trainer = COINNPooledTrainer(dataset_dir=dataset_dir, log_dir=log_dir, **kw)
+    trainer = PooledTrainer(dataset_dir=dataset_dir, log_dir=log_dir, **kw)
     trainer.init_nn(True)
     return trainer
