@@ -186,7 +186,7 @@ class NNTrainer:
             cache['validation_scores'].append([*val_avg.get(), *val_metrics.get()])
             out.update(**self._save_if_better(ep, val_metrics))
             self._on_epoch_end(ep, ep_averages, ep_metrics, val_avg, val_metrics)
-            self._plot_progress(cache, epoch=ep)
+            self._plot_progress(cache)
             if self._stop_early(epoch=ep, epoch_averages=ep_averages, epoch_metrics=ep_metrics,
                                 validation_averages=val_avg, validation_metric=val_metrics):
                 break
@@ -319,8 +319,7 @@ class NNTrainer:
         return {}
 
     def _plot_progress(self, cache, **kw):
-        _plot.plot_progress(cache, self.cache['log_dir'], plot_keys=['train_scores', 'validation_scores'],
-                            epoch=kw.get('epoch', 1))
+        _plot.plot_progress(cache, self.cache['log_dir'], plot_keys=['train_scores', 'validation_scores'])
 
     def _stop_early(self, **kw):
         r"""
