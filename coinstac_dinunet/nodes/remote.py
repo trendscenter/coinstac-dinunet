@@ -143,7 +143,9 @@ class COINNRemote:
         self._save_if_better(val_metrics)
 
         epoch = site_vars['epoch']
-        if epoch % int(_math.log(epoch + 1) + 1) == 0:
+        test_mode = site_vars['mode'] == Mode.TEST
+        """Plot every now and then, also at the last of training"""
+        if epoch % int(_math.log(epoch + 1) + 1) == 0 or test_mode:
             _plot.plot_progress(self.cache, self.cache['log_dir'],
                                 plot_keys=['train_scores', 'validation_scores'],
                                 epoch=epoch)

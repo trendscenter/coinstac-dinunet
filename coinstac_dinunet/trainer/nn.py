@@ -19,6 +19,8 @@ import coinstac_dinunet.utils.tensorutils as _tu
 import coinstac_dinunet.vision.plotter as _plot
 from coinstac_dinunet.config.status import *
 
+def _now(x):
+    return x % int(_math.log(x + 1) + 1) == 0
 
 class NNTrainer:
     def __init__(self, cache: dict = None, input: dict = None, state: dict = None, **kw):
@@ -175,6 +177,7 @@ class NNTrainer:
         loader = _data.COINNDataLoader.new(dataset=dataset, **_dset_cache)
 
         local_iter = self.cache.get('local_iterations', 1)
+        total_iter = len(loader) // local_iter
         epochs = self.cache.get('pretrain_epochs', self.cache['epochs'])
         for ep in range(1, epochs + 1):
             for k in self.nn:
@@ -196,13 +199,13 @@ class NNTrainer:
                     """Running loss/metrics """
                     _avg.accumulate(it['averages'])
                     _metrics.accumulate(it['metrics'])
-                    _i, _i_tot = i // local_iter, len(loader) // local_iter
-                    if self.cache.get('verbose') and _i % int(_math.log(_i + 1) + 1) == 0:
-                        print(f"Ep:{ep}/{epochs},Itr:{_i}/{_i_tot},{_avg.get()},{_metrics.get()}")
+                    _i, = i // local_iter
+                    if self.cache.get('verbose') and _now(_i) == 0:
+                        print(f"Ep:{ep}/{epochs},Itr:{_i}/{total_iter},{_avg.get()},{_metrics.get()}")
                         cache['train_scores'].append([*_avg.get(), *_metrics.get()])
                         _metrics.reset()
                         _avg.reset()
-                    self._on_iteration_end(i=i, ep=ep, it=it)
+                    self._on_iteration_end(i=_i, ep=ep, it=it)
 
             cache['train_scores'].append([*ep_avg.get(), *ep_metrics.get()])
             val_avg, val_metrics = self.evaluation(self._get_validation_dataset(dataset_cls), save_pred=False)
@@ -210,13 +213,13 @@ class NNTrainer:
             out.update(**self._save_if_better(ep, val_metrics))
             self._on_epoch_end(ep, ep_avg, ep_metrics, val_avg, val_metrics)
 
-            if ep % int(_math.log(ep + 1) + 1) == 0:
+            if _now(ep):
                 self._plot_progress(cache, epoch=ep)
 
             if self._stop_early(epoch=ep, epoch_averages=ep_avg, epoch_metrics=ep_metrics,
                                 validation_averages=val_avg, validation_metric=val_metrics):
                 break
-
+        self._plot_progress(cache, epoch=ep)
         cache['best_local_epoch'] = self.cache['best_local_epoch']
         cache['best_local_score'] = self.cache['best_local_score']
         _utils.save_cache(cache, self.cache['log_dir'])
