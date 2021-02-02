@@ -77,7 +77,6 @@ class COINNLocal:
             sp = _json.loads(open(self.cache['split_dir'] + _os.sep + sp).read())
             out['data_size'][k] = dict((key, len(sp[key])) for key in sp)
         out['computation_id'] = self.cache['computation_id']
-        out['seed'] = self.cache.get('seed')
         return out
 
     def _init_nn(self, trainer, dataset_cls):
