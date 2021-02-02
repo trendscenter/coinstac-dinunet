@@ -216,7 +216,6 @@ class NNTrainer:
 
         cache['best_local_epoch'] = self.cache['best_local_epoch']
         cache['best_local_score'] = self.cache['best_local_score']
-        _utils.save_scores(cache, self.cache['log_dir'], file_keys=['train_scores', 'validation_scores'])
         _utils.save_cache(cache, self.cache['log_dir'])
         return out
 

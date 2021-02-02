@@ -16,19 +16,19 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs', **kw)
         def __init__(self, dataset_dir=dataset_dir, log_dir=log_dir, **kw):
             self.dataset_dir = dataset_dir
             self.log_dir = log_dir
-            self.inputspecs = self.parse_inputspec(dataset_dir + _os.sep + kw.get('inputspec_file', 'inputspec.json'))
+            self.inputspecs = self._parse_inputspec(dataset_dir + _os.sep + kw.get('inputspec_file', 'inputspec.json'))
 
-            cache = {**self.inputspecs[0], 'folds': self.init_folds()}
+            cache = {**self.inputspecs[0], 'folds': self._init_folds()}
             cache.update(**kw)
             super().__init__(cache=cache, input={}, state={}, **kw)
 
-        def init_folds(self):
+        def _init_folds(self):
             folds = {}
             for site, inputspec in self.inputspecs.items():
                 folds[site] = sorted(_os.listdir(self.base_directory(site) + _os.sep + inputspec['split_dir']))
             return folds
 
-        def parse_inputspec(self, inputspec_path):
+        def _parse_inputspec(self, inputspec_path):
             inputspec = {}
             for site, isp in enumerate(_json.loads(open(inputspec_path).read())):
                 spec = {}
@@ -69,12 +69,17 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs', **kw)
             return f"{self.dataset_dir}/input/local{site}/simulatorRun"
 
         def run(self, dataset_cls):
-            for fold_ix in range(len(self.cache['folds'][0])):
+            first_site = list(self.cache['folds'].keys())[0]
+            for fold_ix in range(len(self.cache['folds'][first_site])):
                 self.cache['fold_ix'] = fold_ix
                 self.cache['log_dir'] = self.log_dir + _os.sep + f'fold_{fold_ix}'
                 self.cache['args'] = {**self.cache}
                 _os.makedirs(self.cache['log_dir'], exist_ok=True)
                 self.train_local(dataset_cls, verbose=True)
+
+        def enable_sites(self, sites=[]):
+            self.inputspecs = {site: self.inputspecs[site] for site in sites}
+            self.cache['folds'] = {site: self.cache['folds'][site] for site in sites}
 
     trainer = PooledTrainer(dataset_dir=dataset_dir, log_dir=log_dir, **kw)
     trainer.init_nn(True)

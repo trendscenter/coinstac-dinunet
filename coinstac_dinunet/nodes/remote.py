@@ -127,22 +127,20 @@ class COINNRemote:
         We also send a save current model as best signal to all sites if the global validation score is better than the previously saved one.
         """
         out = {}
-        train_scores = self._new_metrics()
-        train_loss = self._new_averages()
-        val_scores = self._new_metrics()
-        val_loss = self._new_averages()
+        val_metrics = self._new_metrics()
+        val_averages = self._new_averages()
         for site, site_vars in self.input.items():
             for ta, tm in site_vars['train_scores']:
-                train_loss.update(**ta)
-                train_scores.update(**tm)
+                self.cache['train_scores'].append([*ta.get(), *tm.get()])
             va, vm = site_vars['validation_scores']
-            val_loss.update(**va)
-            val_scores.update(**vm)
+            val_averages.update(**va)
+            val_metrics.update(**vm)
 
-        self.cache['train_scores'].append([*train_loss.get(), *train_scores.get()])
-        self.cache['validation_scores'].append([*val_loss.get(), *val_scores.get()])
-        self._save_if_better(val_scores)
-        _plot.plot_progress(self.cache, self.cache['log_dir'], plot_keys=['train_scores', 'validation_scores'])
+        self.cache['validation_scores'].append([*val_averages.get(), *val_metrics.get()])
+        self._save_if_better(val_metrics)
+        _plot.plot_progress(self.cache, self.cache['log_dir'],
+                            plot_keys=['train_scores', 'validation_scores'],
+                            epoch=site_vars['epoch'])
         return out
 
     def _save_if_better(self, metrics):
@@ -179,7 +177,8 @@ class COINNRemote:
         self.cache['test_scores'].append([self.cache['fold']['split_ix'], *test_averages.get(), *test_metrics.get()])
         self.cache['global_test_scores'].append([vars(test_averages), vars(test_metrics)])
 
-        _plot.plot_progress(self.cache, self.cache['log_dir'], plot_keys=['train_scores', 'validation_scores'])
+        _plot.plot_progress(self.cache, self.cache['log_dir'],
+                            plot_keys=['train_scores', 'validation_scores'], epoch=site_vars['epoch'])
         _utils.save_scores(self.cache, self.cache['log_dir'], file_keys=['test_scores'])
         _utils.save_cache(self.cache, self.cache['log_dir'])
 

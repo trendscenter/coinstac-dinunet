@@ -140,4 +140,5 @@ class COINNTrainer(_NNTrainer):
 
         out['train_scores'] = self.cache['train_scores']
         self.cache['train_scores'] = []
+        out['epoch'] = self.cache['epoch']
         return out
