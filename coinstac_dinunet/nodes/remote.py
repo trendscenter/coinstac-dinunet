@@ -20,6 +20,7 @@ import coinstac_dinunet.utils as _utils
 import coinstac_dinunet.utils.tensorutils as _tu
 from coinstac_dinunet.config.status import *
 from coinstac_dinunet.vision import plotter as _plot
+import math as _math
 
 
 def average_sites_gradients(cache, input, state):
@@ -138,9 +139,12 @@ class COINNRemote:
 
         self.cache['validation_scores'].append([*val_averages.get(), *val_metrics.get()])
         self._save_if_better(val_metrics)
-        _plot.plot_progress(self.cache, self.cache['log_dir'],
+
+        epoch = site_vars['epoch']
+        if epoch % int(_math.log(epoch + 1) + 1) == 0:
+            _plot.plot_progress(self.cache, self.cache['log_dir'],
                             plot_keys=['train_scores', 'validation_scores'],
-                            epoch=site_vars['epoch'])
+                            epoch=epoch)
         return out
 
     def _save_if_better(self, metrics):

@@ -176,7 +176,7 @@ class NNTrainer:
 
         local_iter = self.cache.get('local_iterations', 1)
         epochs = self.cache.get('pretrain_epochs', self.cache['epochs'])
-        for ep in range(epochs):
+        for ep in range(1, epochs + 1):
             for k in self.nn:
                 self.nn[k].train()
 
@@ -209,7 +209,10 @@ class NNTrainer:
             cache['validation_scores'].append([*val_avg.get(), *val_metrics.get()])
             out.update(**self._save_if_better(ep, val_metrics))
             self._on_epoch_end(ep, ep_avg, ep_metrics, val_avg, val_metrics)
-            self._plot_progress(cache, epoch=ep)
+
+            if ep % int(_math.log(ep + 1) + 1) == 0:
+                self._plot_progress(cache, epoch=ep)
+
             if self._stop_early(epoch=ep, epoch_averages=ep_avg, epoch_metrics=ep_metrics,
                                 validation_averages=val_avg, validation_metric=val_metrics):
                 break

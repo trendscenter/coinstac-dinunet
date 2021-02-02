@@ -4,6 +4,7 @@
 @ref: https://github.com/sraashis/easytorch
 """
 
+import math as _math
 import os as _os
 
 import matplotlib.pyplot as _plt
@@ -55,8 +56,11 @@ def plot_progress(cache, log_dir, plot_keys=[], num_points=11, epoch=None):
             Set correct epoch as x-tick-labels.
             """
             xticks = list(range(0, df.shape[0], df.shape[0] // epoch)) + [df.shape[0] - 1]
+            step = int(_math.log(len(xticks) + 1) + 1)
+            xticks_range = list(range(len(xticks)))[::step]
+            xticks = xticks[::step]
             ax.set_xticks(xticks)
-            ax.set_xticklabels(list(range(len(xticks))))
+            ax.set_xticklabels(xticks_range)
 
         _plt.xlabel('Epochs')
         _plt.savefig(log_dir + _os.sep + f"{k}.png")
