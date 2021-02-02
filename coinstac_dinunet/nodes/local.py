@@ -84,13 +84,13 @@ class COINNLocal:
         out = {}
         self.cache['current_nn_state'] = 'current.nn.pt'
         self.cache['best_nn_state'] = 'best.nn.pt'
-        trainer.load_data_indices(dataset_cls, split_key='train')
+        trainer.cache_data_indices(dataset_cls, split_key='train')
         trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
 
         out['phase'] = Phase.COMPUTATION
         if self.cache['pretrain_epochs'] >= 1 and self.cache['pretrain']:
             out['phase'] = Phase.PRE_COMPUTATION
-            out.update(**trainer.pre_train(dataset_cls, num_sites=len(self._GLOBAL['runs'])))
+            out.update(**trainer.train_local(dataset_cls, num_sites=len(self._GLOBAL['runs'])))
 
         if self.cache['pretrain_epochs'] >= 1 and any([r['pretrain'] for r in self._GLOBAL['runs'].values()]):
             out['phase'] = Phase.PRE_COMPUTATION
@@ -148,7 +148,7 @@ class COINNLocal:
                    and reshuffle the data,
                 take part in the training with everybody until all sites go to 'val_waiting' status.
                 """
-                self.out.update(**trainer.train(dataset_cls))
+                self.out.update(**trainer.train_distributed(dataset_cls))
 
             elif all(m == Mode.VALIDATION for m in self._GLOBAL['modes'].values()):
                 """

@@ -54,3 +54,12 @@ def save_grads(file_path, grads):
 
 def load_grads(file_path):
     return _np.load(file_path, allow_pickle=True)
+
+
+def get_safe_batch_size(batch_size, dataset_len):
+    if dataset_len % batch_size == 0:
+        return batch_size
+    for i in range(batch_size, 0, -1):
+        if dataset_len % i > 1:
+            return i
+    return dataset_len

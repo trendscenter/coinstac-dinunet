@@ -81,7 +81,7 @@ class COINNRemote:
         _os.makedirs(self.cache['log_dir'], exist_ok=True)
 
         metric_direction = self.cache['monitor_metric'][1]
-        self.cache.update(best_val_score=0 if metric_direction == 'maximize' else 1e11)
+        self.cache.update(best_val_score=0 if metric_direction == 'maximize' else _conf.data_load_lim)
         self.cache.update(train_scores=[], validation_scores=[], test_scores=[])
 
         """**** Parameter Lock ******"""
@@ -95,9 +95,6 @@ class COINNRemote:
             out[site] = fold
         return out
 
-    def _set_log_headers(self):
-        self.cache['log_header'] = 'Loss,Precision,Recall,F1,Accuracy'
-
     @staticmethod
     def _check(logic, k, v, kw):
         phases = []
@@ -110,6 +107,9 @@ class COINNRemote:
 
     def _new_averages(self):
         return _metric.COINNAverages()
+
+    def _set_log_headers(self):
+        self.cache['log_header'] = 'Loss,Precision,Recall,F1,Accuracy'
 
     def _set_monitor_metric(self):
         self.cache['monitor_metric'] = 'f1', 'maximize'
@@ -210,13 +210,14 @@ class COINNRemote:
         out = {}
         pt_path = None
         for site, site_vars in self.input.items():
-            if site_vars.get('pretrained_weights') is not None:
-                pt_path = self.state['baseDirectory'] + _os.sep + site + _os.sep + site_vars['pretrained_weights']
+            if site_vars.get('weights_file') is not None:
+                pt_path = self.state['baseDirectory'] + _os.sep + site + _os.sep + site_vars['weights_file']
                 break
         if pt_path is not None:
-            out['pretrained_weights'] = f'dist_{_conf.pretrained_weights_file}'
+            out['pretrained_weights'] = f'pretrained_{_conf.weights_file}'
             _shutil.copy(pt_path, self.state['transferDirectory'] + _os.sep + out['pretrained_weights'])
-            self.cache['train_scores'] = site_vars['pretrain_scores']
+            self.cache['train_scores'] = site_vars.get('train_scores', [])
+            self.cache['validation_scores'] = site_vars.get('validation_scores', [])
         return out
 
     def compute(self):

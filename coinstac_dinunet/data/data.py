@@ -45,14 +45,14 @@ class COINNDataset(_Dataset):
         self.dataspecs = {}
         self.indices = []
 
-    def load_index(self, id, file):
+    def load_index(self, site, file):
         r"""
         Logic to load indices of a single file.
         -Sometimes one image can have multiple indices like U-net where we have to get multiple patches of images.
         """
-        self.indices.append([id, file])
+        self.indices.append([site, file])
 
-    def _load_indices(self, id, files, **kw):
+    def _load_indices(self, site, files, **kw):
         r"""
         We load the proper indices/names(whatever is called) of the files in order to prepare minibatches.
         Only load lim numbr of files so that it is easer to debug(Default is infinite, -lim/--load-lim argument).
@@ -60,10 +60,10 @@ class COINNDataset(_Dataset):
         for file in files:
             if len(self) >= self.limit:
                 break
-            self.load_index(id, file)
+            self.load_index(site, file)
 
         if kw.get('verbose', True):
-            print(f'{id}, {self.mode}, {len(self)} Indices Loaded')
+            print(f'{site}, {self.mode}, {len(self)} Indices Loaded')
 
     def __getitem__(self, index):
         r"""
@@ -78,10 +78,10 @@ class COINNDataset(_Dataset):
     def transforms(self, **kw):
         return None
 
-    def path(self, id, dspec_key, root_dir='baseDirectory'):
-        return self.state[id][root_dir] + _os.sep + self.dataspecs[id][dspec_key]
+    def path(self, site, dspec_key, root_dir='baseDirectory'):
+        return self.state[site][root_dir] + _os.sep + self.dataspecs[site][dspec_key]
 
     def add(self, files, cache: dict = None, state: dict = None):
         self.state[state['clientId']] = state
         self.dataspecs[state['clientId']] = cache['args']
-        self._load_indices(id=state['clientId'], files=files, verbose=False)
+        self._load_indices(site=state['clientId'], files=files, verbose=False)
