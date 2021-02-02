@@ -144,6 +144,19 @@ class NNTrainer:
                     self.save_predictions(loader.dataset, its)
         return eval_avg, eval_metrics
 
+    def training_iteration_local(self, i, batch):
+        r"""
+        Learning step for one batch.
+        We decoupled it so that user could implement any complex/multi/alternate training strategies.
+        """
+        it = self.iteration(batch)
+        it['loss'].backward()
+        if i % self.cache.get('local_iterations', 1) == 0:
+            first_optim = list(self.optimizer.keys())[0]
+            self.optimizer[first_optim].step()
+            self.optimizer[first_optim].zero_grad()
+        return it
+
     def train_local(self, dataset_cls, **kw):
         cache = {}
         out = {}
@@ -160,40 +173,49 @@ class NNTrainer:
         dataset = self._get_train_dataset(dataset_cls)
         _dset_cache['batch_size'] = _tu.get_safe_batch_size(_dset_cache['batch_size'], len(dataset))
         loader = _data.COINNDataLoader.new(dataset=dataset, **_dset_cache)
+
+        local_iter = self.cache.get('local_iterations', 1)
         epochs = self.cache.get('pretrain_epochs', self.cache['epochs'])
         for ep in range(epochs):
             for k in self.nn:
                 self.nn[k].train()
 
-            ep_averages, ep_metrics = self.new_averages(), self.new_metrics()
             _metrics, _avg = self.new_metrics(), self.new_averages()
-            for i, batch in enumerate(loader):
-                it = self.train_iteration_local(batch)
-                if not it.get('metrics'): it['metrics'] = _base_metrics.COINNMetrics()
-                ep_averages.accumulate(it['averages'])
-                ep_metrics.accumulate(it['metrics'])
+            ep_avg, ep_metrics = self.new_averages(), self.new_metrics()
+            its = []
+            it = {'averages': _base_metrics.COINNAverages(), 'metrics': _base_metrics.COINNMetrics()}
+            for i, batch in enumerate(loader, 1):
+                its.append(self.training_iteration_local(i, batch))
+                if i % local_iter == 0:
+                    it = self._reduce_iteration(its)
+                    its = []
 
-                _avg.accumulate(it['averages'])
-                _metrics.accumulate(it['metrics'])
-                if self.cache.get('verbose') and i % int(_math.log(i + 1) + 1) == 0:
-                    print(f"Ep:{ep}/{epochs},Itr:{i}/{len(loader)},{_avg.get()},{_metrics.get()}")
-                    _metrics.reset()
-                    _avg.reset()
-                self._on_iteration_end(i, ep, it)
+                    ep_avg.accumulate(it['averages'])
+                    ep_metrics.accumulate(it['metrics'])
 
-            cache['train_scores'].append([*ep_averages.get(), *ep_metrics.get()])
+                    """Running loss/metrics """
+                    _avg.accumulate(it['averages'])
+                    _metrics.accumulate(it['metrics'])
+                    _i, _i_tot = i // local_iter, len(loader) // local_iter
+                    if self.cache.get('verbose') and _i % int(_math.log(_i + 1) + 1) == 0:
+                        print(f"Ep:{ep}/{epochs},Itr:{_i}/{_i_tot},{_avg.get()},{_metrics.get()}")
+                        cache['train_scores'].append([*_avg.get(), *_metrics.get()])
+                        _metrics.reset()
+                        _avg.reset()
+                    self._on_iteration_end(i=i, ep=ep, it=it)
+
+            cache['train_scores'].append([*ep_avg.get(), *ep_metrics.get()])
             val_avg, val_metrics = self.evaluation(self._get_validation_dataset(dataset_cls), save_pred=False)
             cache['validation_scores'].append([*val_avg.get(), *val_metrics.get()])
             out.update(**self._save_if_better(ep, val_metrics))
-            self._on_epoch_end(ep, ep_averages, ep_metrics, val_avg, val_metrics)
-            self._plot_progress(cache)
-            if self._stop_early(epoch=ep, epoch_averages=ep_averages, epoch_metrics=ep_metrics,
+            self._on_epoch_end(ep, ep_avg, ep_metrics, val_avg, val_metrics)
+            self._plot_progress(cache, epoch=ep)
+            if self._stop_early(epoch=ep, epoch_averages=ep_avg, epoch_metrics=ep_metrics,
                                 validation_averages=val_avg, validation_metric=val_metrics):
                 break
 
         cache['best_local_epoch'] = self.cache['best_local_epoch']
         cache['best_local_score'] = self.cache['best_local_score']
-
         _utils.save_scores(cache, self.cache['log_dir'], file_keys=['train_scores', 'validation_scores'])
         _utils.save_cache(cache, self.cache['log_dir'])
         return out
@@ -289,17 +311,6 @@ class NNTrainer:
     def _save_if_better(self, epoch, metrics):
         return {}
 
-    def train_iteration_local(self, batch):
-        first_optim = list(self.optimizer.keys())[0]
-        self.optimizer[first_optim].zero_grad()
-        its = []
-        for _ in range(self.cache.get('local_iterations', 1)):
-            it = self.iteration(batch)
-            it['loss'].backward()
-            its.append(it)
-        self.optimizer[first_optim].step()
-        return self._reduce_iteration(its)
-
     def new_metrics(self):
         return _base_metrics.Prf1a()
 
@@ -318,8 +329,8 @@ class NNTrainer:
         """
         return {}
 
-    def _plot_progress(self, cache, **kw):
-        _plot.plot_progress(cache, self.cache['log_dir'], plot_keys=['train_scores', 'validation_scores'])
+    def _plot_progress(self, cache, epoch, **kw):
+        _plot.plot_progress(cache, self.cache['log_dir'], plot_keys=['train_scores', 'validation_scores'], epoch=epoch)
 
     def _stop_early(self, **kw):
         r"""
