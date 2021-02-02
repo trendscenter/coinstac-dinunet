@@ -5,7 +5,6 @@
 """
 
 import json as _json
-import random as _rd
 from collections import OrderedDict as _ODict
 from os import sep as _sep
 
@@ -16,13 +15,12 @@ import coinstac_dinunet.data as _data
 import coinstac_dinunet.metrics as _base_metrics
 import coinstac_dinunet.utils.tensorutils as _tu
 from coinstac_dinunet.config.status import *
-from coinstac_dinunet.data import COINNDataLoader as _COINNDLoader
 import coinstac_dinunet.utils as _utils
 import coinstac_dinunet.vision.plotter as _plot
 import math as _math
 
 
-class COINNTrainer:
+class NNTrainer:
     def __init__(self, cache: dict = None, input: dict = None, state: dict = None, **kw):
         self.cache = cache
         self.input = _utils.FrozenDict(input)
@@ -99,16 +97,6 @@ class COINNTrainer:
             except:
                 self.nn[mkey].load_state_dict(chk)
 
-    def step(self):
-        grads = _tu.load_grads(self.state['baseDirectory'] + _sep + self.input['avg_grads_file'])
-
-        first_model = list(self.nn.keys())[0]
-        for i, param in enumerate(self.nn[first_model].parameters()):
-            param.grad = _torch.tensor(grads[i], dtype=_torch.float32).to(self.device['gpu'])
-
-        first_optim = list(self.optimizer.keys())[0]
-        self.optimizer[first_optim].step()
-
     def save_checkpoint(self, file_path, src='coinstac'):
         checkpoint = {'source': src}
         for k in self.nn:
@@ -155,6 +143,63 @@ class COINNTrainer:
                 if save_pred:
                     self.save_predictions(loader.dataset, its)
         return eval_avg, eval_metrics
+
+    def train_local(self, dataset_cls, **kw):
+        cache = {}
+        out = {}
+        self._set_monitor_metric()
+        self._set_log_headers()
+        cache['log_header'] = self.cache['log_header']
+        cache['train_scores'] = []
+        cache['validation_scores'] = []
+        metric_direction = self.cache['monitor_metric'][1]
+        self.cache['best_local_epoch'] = 0
+        self.cache.update(best_local_score=0.0 if metric_direction == 'maximize' else _conf.data_load_lim)
+
+        _dset_cache = {**self.cache}
+        dataset = self._get_train_dataset(dataset_cls)
+        _dset_cache['batch_size'] = _tu.get_safe_batch_size(_dset_cache['batch_size'], len(dataset))
+        loader = _data.COINNDataLoader.new(dataset=dataset, **_dset_cache)
+        epochs = self.cache.get('pretrain_epochs', self.cache['epochs'])
+        for ep in range(epochs):
+            for k in self.nn:
+                self.nn[k].train()
+
+            ep_averages, ep_metrics = self.new_averages(), self.new_metrics()
+            _metrics, _avg = self.new_metrics(), self.new_averages()
+            for i, batch in enumerate(loader):
+                it = self.train_iteration_local(batch)
+                if not it.get('metrics'): it['metrics'] = _base_metrics.COINNMetrics()
+                ep_averages.accumulate(it['averages'])
+                ep_metrics.accumulate(it['metrics'])
+
+                _avg.accumulate(it['averages'])
+                _metrics.accumulate(it['metrics'])
+                if self.cache.get('verbose') and i % int(_math.log(i + 1) + 1) == 0:
+                    print(f"Ep:{ep}/{epochs},Itr:{i}/{len(loader)},{_avg.get()},{_metrics.get()}")
+                    _metrics.reset()
+                    _avg.reset()
+                self._on_iteration_end(i, ep, it)
+
+            cache['train_scores'].append([*ep_averages.get(), *ep_metrics.get()])
+            val_avg, val_metrics = self.evaluation(self._get_validation_dataset(dataset_cls), save_pred=False)
+            cache['validation_scores'].append([*val_avg.get(), *val_metrics.get()])
+            out.update(**self._save_if_better(ep, val_metrics))
+            self._on_epoch_end(ep, ep_averages, ep_metrics, val_avg, val_metrics)
+            self._plot_progress(cache, epoch=ep)
+            if self._stop_early(epoch=ep, epoch_averages=ep_averages, epoch_metrics=ep_metrics,
+                                validation_averages=val_avg, validation_metric=val_metrics):
+                break
+
+        cache['best_local_epoch'] = self.cache['best_local_epoch']
+        cache['best_local_score'] = self.cache['best_local_score']
+
+        _utils.save_scores(cache, self.cache['log_dir'], file_keys=['train_scores', 'validation_scores'])
+        _utils.save_cache(cache, self.cache['log_dir'])
+
+        out['train_scores'] = cache['train_scores']
+        out['validation_scores'] = cache['validation_scores']
+        return out
 
     def iteration(self, batch):
         r"""
@@ -203,25 +248,27 @@ class COINNTrainer:
     def _set_monitor_metric(self):
         self.cache['monitor_metric'] = 'f1', 'maximize'
 
-    def _get_train_dataset(self, dataset_cls):
-        dataset = dataset_cls(mode=Mode.PRE_TRAIN, limit=self.cache.get('load_limit', _conf.data_load_lim))
-        dataset.indices = self.cache['data_indices']
-        dataset.add(files=[], cache=self.cache, state=self.state)
-        return dataset
-
-    def _load_dataset(self, dataset_cls, key):
+    def _load_dataset(self, dataset_cls, split_key):
         dataset = dataset_cls(mode='train', limit=self.cache.get('load_limit', _conf.data_load_lim))
         file = self.cache['split_dir'] + _sep + self.cache['split_file']
         with open(file) as split_file:
             split = _json.loads(split_file.read())
-            dataset.add(files=split[key], cache=self.cache, state=self.state)
+            dataset.add(files=split[split_key], cache=self.cache, state=self.state)
+        return dataset
+
+    def _get_train_dataset(self, dataset_cls):
+        if self.cache.get('data_indices') is None:
+            return self._load_dataset(dataset_cls, split_key='train')
+        dataset = dataset_cls(mode=Mode.PRE_TRAIN, limit=self.cache.get('load_limit', _conf.data_load_lim))
+        dataset.indices = self.cache['data_indices']
+        dataset.add(files=[], cache=self.cache, state=self.state)
         return dataset
 
     def _get_validation_dataset(self, dataset_cls):
         r"""
         Load the validation data from current fold/split.
         """
-        return [self._load_dataset(dataset_cls, key='validation')]
+        return [self._load_dataset(dataset_cls, split_key='validation')]
 
     def _get_test_dataset(self, dataset_cls):
         r"""
@@ -243,22 +290,7 @@ class COINNTrainer:
         return test_dataset_list
 
     def _save_if_better(self, epoch, metrics):
-        r"""
-        Save the current model as best if it has better validation scores.
-        """
-        out = {}
-        monitor_metric, direction = self.cache['monitor_metric']
-        sc = getattr(metrics, monitor_metric)
-        if callable(sc):
-            sc = sc()
-
-        if (direction == 'maximize' and sc >= self.cache['best_local_score']) or (
-                direction == 'minimize' and sc <= self.cache['best_local_score']):
-            out['weights_file'] = _conf.weights_file
-            self.cache['best_local_epoch'] = epoch
-            self.cache['best_local_score'] = sc
-            self.save_checkpoint(file_path=self.state['transferDirectory'] + _sep + out['weights_file'])
-        return out
+        return {}
 
     def train_iteration_local(self, batch):
         first_optim = list(self.optimizer.keys())[0]
@@ -271,155 +303,11 @@ class COINNTrainer:
         self.optimizer[first_optim].step()
         return self._reduce_iteration(its)
 
-    def train_local(self, dataset_cls, **kw):
-        cache = {}
-        out = {}
-        self._set_monitor_metric()
-        self._set_log_headers()
-        cache['log_header'] = self.cache['log_header']
-        cache['train_scores'] = []
-        cache['validation_scores'] = []
-        metric_direction = self.cache['monitor_metric'][1]
-        self.cache['best_local_epoch'] = 0
-        self.cache.update(best_local_score=0.0 if metric_direction == 'maximize' else _conf.data_load_lim)
-
-        _dset_cache = {**self.cache}
-        dataset = self._get_train_dataset(dataset_cls)
-        _dset_cache['batch_size'] = _tu.get_safe_batch_size(_dset_cache['batch_size'], len(dataset))
-        loader = _COINNDLoader.new(dataset=dataset, **_dset_cache)
-        epochs = self.cache.get('pretrain_epochs', self.cache['epochs'])
-        for ep in range(epochs):
-            for k in self.nn:
-                self.nn[k].train()
-
-            ep_averages, ep_metrics = self.new_averages(), self.new_metrics()
-            _metrics, _avg = self.new_metrics(), self.new_averages()
-            for i, batch in enumerate(loader):
-                it = self.train_iteration_local(batch)
-                if not it.get('metrics'): it['metrics'] = _base_metrics.COINNMetrics()
-                ep_averages.accumulate(it['averages'])
-                ep_metrics.accumulate(it['metrics'])
-
-                _avg.accumulate(it['averages'])
-                _metrics.accumulate(it['metrics'])
-                if self.cache.get('verbose') and i % int(_math.log(i + 1) + 1) == 0:
-                    print(f"Ep:{ep}/{epochs},Itr:{i}/{len(loader)},{_avg.get()},{_metrics.get()}")
-                    _metrics.reset()
-                    _avg.reset()
-                self._on_iteration_end(i, ep, it)
-
-            cache['train_scores'].append([*ep_averages.get(), *ep_metrics.get()])
-            val_avg, val_metrics = self.evaluation(self._get_validation_dataset(dataset_cls), save_pred=False)
-            cache['validation_scores'].append([*val_avg.get(), *val_metrics.get()])
-            out.update(**self._save_if_better(ep, val_metrics))
-            self._on_epoch_end(ep, ep_averages, ep_metrics, val_avg, val_metrics)
-            self._plot_progress(cache, epoch=ep)
-            if self._stop_early(epoch=ep, epoch_averages=ep_averages, epoch_metrics=ep_metrics,
-                                validation_averages=val_avg, validation_metric=val_metrics):
-                break
-
-        cache['best_local_epoch'] = self.cache['best_local_epoch']
-        cache['best_local_score'] = self.cache['best_local_score']
-
-        _utils.save_scores(cache, self.cache['log_dir'], file_keys=['train_scores', 'validation_scores'])
-        _utils.save_cache(cache, self.cache['log_dir'])
-
-        out['train_scores'] = cache['train_scores']
-        out['validation_scores'] = cache['validation_scores']
-        return out
-
-    def train_distributed(self, dataset_cls):
-        out = {}
-
-        first_model = list(self.nn.keys())[0]
-        first_optim = list(self.optimizer.keys())[0]
-
-        self.nn[first_model].train()
-        self.optimizer[first_optim].zero_grad()
-
-        if self.input.get('avg_grads_file'):
-            self.step()
-            self.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
-
-        its = []
-        for _ in range(self.cache['local_iterations']):
-            it = self.iteration(self.next_batch(dataset_cls, mode='train'))
-            it['loss'].backward()
-            its.append(it)
-            out.update(**self.next_iter())
-        it = self._reduce_iteration(its)
-
-        out['grads_file'] = _conf.grads_file
-        grads = _tu.extract_grads(self.nn[first_model])
-        _tu.save_grads(self.state['transferDirectory'] + _sep + out['grads_file'], grads)
-        self.cache['train_scores'].append([vars(it['averages']), vars(it['metrics'])])
-        out.update(**self._on_iteration_end(0, self.cache['epoch'], it))
-        return out
-
-    def validation(self, dataset_cls):
-        out = {}
-        avg, scores = self.evaluation(self._get_validation_dataset(dataset_cls), save_pred=False)
-        out['validation_scores'] = [vars(avg), vars(scores)]
-        out.update(**self.next_epoch())
-        out.update(**self._on_epoch_end(self.cache['epoch'], None, None, avg, scores))
-        return out
-
-    def test(self, dataset_cls):
-        out = {}
-        self.load_checkpoint(self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
-        avg, scores = self.evaluation(self._get_test_dataset(dataset_cls), save_pred=True)
-        out['test_scores'] = [vars(avg), vars(scores)]
-        return out
-
-    def cache_data_indices(self, dataset_cls, split_key='train'):
-        dataset = self._load_dataset(dataset_cls, split_key)
-        self.cache['data_indices'] = dataset.indices
-        if len(dataset) % self.cache['batch_size'] >= self.cache.get('min_batch_size', 4):
-            self.cache['data_len'] = len(dataset)
-        else:
-            self.cache['data_len'] = (len(dataset) // self.cache['batch_size']) * self.cache['batch_size']
-
     def new_metrics(self):
         return _base_metrics.Prf1a()
 
     def new_averages(self):
         return _base_metrics.COINNAverages(num_averages=1)
-
-    def next_iter(self):
-        out = {}
-        self.cache['cursor'] += self.cache['batch_size']
-        if self.cache['cursor'] >= self.cache['data_len']:
-            out['mode'] = Mode.VALIDATION_WAITING
-            self.cache['cursor'] = 0
-            _rd.shuffle(self.cache['data_indices'])
-        return out
-
-    def next_batch(self, dataset_cls, mode='train'):
-        dataset = dataset_cls(mode=mode, limit=self.cache.get('load_limit', _conf.data_load_lim))
-        dataset.indices = self.cache['data_indices'][self.cache['cursor']:]
-        dataset.add(files=[], cache=self.cache, state=self.state)
-        loader = _COINNDLoader.new(dataset=dataset, **self.cache)
-        return next(loader.__iter__())
-
-    def next_epoch(self):
-        """
-        Transition to next epoch after validation.
-        It will set 'train_waiting' status if we need more training
-        Else it will set 'test' status
-        """
-        out = {}
-        self.cache['epoch'] += 1
-        if self.cache['epoch'] - self.cache.get('best_epoch', self.cache['epoch']) \
-                >= self.cache['patience'] or self.cache['epoch'] >= self.cache['epochs']:
-            out['mode'] = Mode.TEST
-        else:
-            self.cache['cursor'] = 0
-            out['mode'] = Mode.TRAIN_WAITING
-            _rd.shuffle(self.cache['data_indices'])
-
-        out['train_scores'] = self.cache['train_scores']
-        self.cache['train_scores'] = []
-        return out
 
     def _on_epoch_end(self, ep, ep_averages, ep_metrics, val_averages, val_metrics):
         r"""

@@ -1,11 +1,18 @@
-from coinstac_dinunet import COINNTrainer as _BaseTrainer
+"""
+@author: Aashis Khanal
+@email: sraashis@gmail.com
+@ref: https://github.com/sraashis/easytorch
+"""
+
 import json as _json
 import os as _os
+
 import coinstac_dinunet.config as _conf
+from .nn import NNTrainer as _NNTrainer
 
 
-def PooledTrainer(base=_BaseTrainer, dataset_dir='test', log_dir='net_logs', **kw):
-    class COINNPooledTrainer(base):
+def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs', **kw):
+    class PooledTrainer(base):
         def __init__(self, dataset_dir=dataset_dir, log_dir=log_dir, **kw):
             self.dataset_dir = dataset_dir
             self.log_dir = log_dir
@@ -30,10 +37,7 @@ def PooledTrainer(base=_BaseTrainer, dataset_dir='test', log_dir='net_logs', **k
                 inputspec[site] = spec
             return inputspec
 
-        def _get_train_dataset(self, dataset_cls):
-            return self._load_dataset(dataset_cls, 'train')
-
-        def _load_dataset(self, dataset_cls, key):
+        def _load_dataset(self, dataset_cls, split_key):
             dataset = dataset_cls(mode='pre_train', limit=self.cache.get('load_limit', _conf.data_load_lim))
             for site, fold in self.cache['folds'].items():
                 split = fold[self.cache['fold_ix']]
@@ -72,6 +76,6 @@ def PooledTrainer(base=_BaseTrainer, dataset_dir='test', log_dir='net_logs', **k
                 _os.makedirs(self.cache['log_dir'], exist_ok=True)
                 self.train_local(dataset_cls, verbose=True)
 
-    trainer = COINNPooledTrainer(dataset_dir=dataset_dir, log_dir=log_dir, **kw)
+    trainer = PooledTrainer(dataset_dir=dataset_dir, log_dir=log_dir, **kw)
     trainer.init_nn(True)
     return trainer

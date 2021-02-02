@@ -158,10 +158,10 @@ class COINNLocal:
                  and all sites reshuffle the indices and resume training.
                 We send the confusion matrix to the remote to accumulate global score for model selection.
                 """
-                self.out.update(**trainer.validation(dataset_cls))
+                self.out.update(**trainer.validation_distributed(dataset_cls))
 
             elif all(m == Mode.TEST for m in self._GLOBAL['modes'].values()):
-                self.out.update(**trainer.test(dataset_cls))
+                self.out.update(**trainer.test_distributed(dataset_cls))
                 self.out['mode'] = self.cache['args']['mode']
                 self.out['phase'] = Phase.NEXT_RUN_WAITING
 
