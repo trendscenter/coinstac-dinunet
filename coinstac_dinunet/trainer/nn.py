@@ -5,7 +5,6 @@
 """
 
 import json as _json
-import math as _math
 from collections import OrderedDict as _ODict
 from os import sep as _sep
 
@@ -19,8 +18,6 @@ import coinstac_dinunet.utils.tensorutils as _tu
 import coinstac_dinunet.vision.plotter as _plot
 from coinstac_dinunet.config.status import *
 
-def _now(x):
-    return x % int(_math.log(x + 1) + 1) == 0
 
 class NNTrainer:
     def __init__(self, cache: dict = None, input: dict = None, state: dict = None, **kw):
@@ -172,6 +169,7 @@ class NNTrainer:
         self.cache.update(best_local_score=0.0 if metric_direction == 'maximize' else _conf.data_load_lim)
 
         _dset_cache = {**self.cache}
+        _dset_cache['shuffle'] = True
         dataset = self._get_train_dataset(dataset_cls)
         _dset_cache['batch_size'] = _tu.get_safe_batch_size(_dset_cache['batch_size'], len(dataset))
         loader = _data.COINNDataLoader.new(dataset=dataset, **_dset_cache)
@@ -191,34 +189,31 @@ class NNTrainer:
                 its.append(self.training_iteration_local(i, batch))
                 if i % local_iter == 0:
                     it = self._reduce_iteration(its)
-                    its = []
+                    _i, its = i // local_iter, []
 
-                    ep_avg.accumulate(it['averages'])
-                    ep_metrics.accumulate(it['metrics'])
-
-                    """Running loss/metrics """
-                    _avg.accumulate(it['averages'])
-                    _metrics.accumulate(it['metrics'])
-                    _i, = i // local_iter
-                    if self.cache.get('verbose') and _now(_i) == 0:
+                    ep_avg.accumulate(it['averages']), ep_metrics.accumulate(it['metrics'])
+                    _avg.accumulate(it['averages']), _metrics.accumulate(it['metrics'])
+                    if self.cache.get('verbose') and (_utils.lazy_debug(_i) or _i == total_iter):
                         print(f"Ep:{ep}/{epochs},Itr:{_i}/{total_iter},{_avg.get()},{_metrics.get()}")
                         cache['train_scores'].append([*_avg.get(), *_metrics.get()])
-                        _metrics.reset()
-                        _avg.reset()
+                        _metrics.reset(), _avg.reset()
                     self._on_iteration_end(i=_i, ep=ep, it=it)
 
             cache['train_scores'].append([*ep_avg.get(), *ep_metrics.get()])
-            val_avg, val_metrics = self.evaluation(self._get_validation_dataset(dataset_cls), save_pred=False)
+            val_dataset = self._get_validation_dataset(dataset_cls)
+            val_avg, val_metrics = self.evaluation([val_dataset], save_pred=False)
             cache['validation_scores'].append([*val_avg.get(), *val_metrics.get()])
             out.update(**self._save_if_better(ep, val_metrics))
+
             self._on_epoch_end(ep, ep_avg, ep_metrics, val_avg, val_metrics)
 
-            if _now(ep):
+            if _utils.lazy_debug(ep):
                 self._plot_progress(cache, epoch=ep)
 
             if self._stop_early(epoch=ep, epoch_averages=ep_avg, epoch_metrics=ep_metrics,
                                 validation_averages=val_avg, validation_metric=val_metrics):
                 break
+
         self._plot_progress(cache, epoch=ep)
         cache['best_local_epoch'] = self.cache['best_local_epoch']
         cache['best_local_score'] = self.cache['best_local_score']
@@ -273,7 +268,7 @@ class NNTrainer:
         self.cache['monitor_metric'] = 'f1', 'maximize'
 
     def _load_dataset(self, dataset_cls, split_key):
-        dataset = dataset_cls(mode='train', limit=self.cache.get('load_limit', _conf.data_load_lim))
+        dataset = dataset_cls(mode=split_key, limit=self.cache.get('load_limit', _conf.data_load_lim))
         file = self.cache['split_dir'] + _sep + self.cache['split_file']
         with open(file) as split_file:
             split = _json.loads(split_file.read())
@@ -289,29 +284,10 @@ class NNTrainer:
         return dataset
 
     def _get_validation_dataset(self, dataset_cls):
-        r"""
-        Load the validation data from current fold/split.
-        """
-        return [self._load_dataset(dataset_cls, split_key='validation')]
+        return self._load_dataset(dataset_cls, split_key='validation')
 
     def _get_test_dataset(self, dataset_cls):
-        r"""
-        Load the test data from current fold/split.
-        """
-        test_dataset_list = []
-        file = self.cache['split_dir'] + _sep + self.cache['split_file']
-        with open(file) as split_file:
-            split = _json.loads(split_file.read())
-            if self.cache.get('load_sparse'):
-                for f in split.get('test', []):
-                    test_dataset = dataset_cls(mode='eval', limit=self.cache.get('load_limit', _conf.data_load_lim))
-                    test_dataset.add(files=[f], cache=self.cache, state=self.state)
-                    test_dataset_list.append(test_dataset)
-            else:
-                test_dataset = dataset_cls(mode='eval', limit=self.cache.get('load_limit', _conf.data_load_lim))
-                test_dataset.add(files=split['test'], cache=self.cache, state=self.state)
-                test_dataset_list.append(test_dataset)
-        return test_dataset_list
+        return self._load_dataset(dataset_cls, split_key='test')
 
     def _save_if_better(self, epoch, metrics):
         return {}

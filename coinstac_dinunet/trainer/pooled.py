@@ -8,6 +8,8 @@ import json as _json
 import os as _os
 
 import coinstac_dinunet.config as _conf
+from coinstac_dinunet import utils as _utils
+from coinstac_dinunet.config.status import *
 from .nn import NNTrainer as _NNTrainer
 
 
@@ -45,7 +47,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs', **kw)
                 split = fold[self.cache['fold_ix']]
                 path = self.base_directory(site) + _os.sep + self.inputspecs[site]['split_dir']
                 split = _json.loads(open(path + _os.sep + split).read())
-                dataset.add(files=split['train'],
+                dataset.add(files=split[split_key],
                             cache={'args': self.inputspecs[site]},
                             state={'clientId': site, "baseDirectory": self.base_directory(site)})
             return dataset
@@ -60,8 +62,8 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs', **kw)
                 self.cache['best_local_epoch'] = epoch
                 self.cache['best_local_score'] = sc
                 self.save_checkpoint(file_path=self.cache['log_dir'] + _os.sep + _conf.weights_file)
-            if self.cache.get('verbose'):
-                print(f"--- ### Best Model Saved!!! --- : {self.cache['best_local_score']}")
+                if self.cache.get('verbose'):
+                    print(f"--- ### Best Model Saved!!! --- : {self.cache['best_local_score']}")
             else:
                 if self.cache.get('verbose'):
                     print(f"Not best!  {sc}, {self.cache['best_local_score']} in ep: {self.cache['best_local_epoch']}")
@@ -71,18 +73,38 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs', **kw)
             return f"{self.dataset_dir}/input/local{site}/simulatorRun"
 
         def run(self, dataset_cls):
+            self.init_nn(True)
             first_site = list(self.cache['folds'].keys())[0]
+            global_avg, global_metrics = self.new_averages(), self.new_metrics()
+
             for fold_ix in range(len(self.cache['folds'][first_site])):
                 self.cache['fold_ix'] = fold_ix
                 self.cache['log_dir'] = self.log_dir + _os.sep + f'fold_{fold_ix}'
                 self.cache['args'] = {**self.cache}
                 _os.makedirs(self.cache['log_dir'], exist_ok=True)
-                self.train_local(dataset_cls, verbose=True)
+
+                if self.cache['mode'] == Mode.TRAIN:
+                    self.train_local(dataset_cls, verbose=True)
+
+                if self.cache['mode'] == 'train' or self.cache['pretrained_path'] is None:
+                    self.load_checkpoint(self.cache['log_dir'] + _os.sep + _conf.weights_file)
+                test_datasets = self._load_dataset(dataset_cls, 'test')
+                test_averages, test_metrics = self.evaluation([test_datasets], save_pred=True)
+
+                global_avg.accumulate(test_averages), global_metrics.accumulate(test_metrics)
+                self.cache['test_score'] = [[*test_averages.get(), *test_metrics.get()]]
+                if self.cache.get('verbose'):
+                    print(fold_ix, self.cache['test_score'])
+                _utils.save_scores(self.cache, log_dir=self.cache['log_dir'], file_keys=['test_score'])
+                _utils.save_cache(self.cache, log_dir=self.cache['log_dir'])
+
+            self.cache['global_test_score'] = [[*global_avg.get(), *global_metrics.get()]]
+            if self.cache.get('verbose'):
+                print('Global: ', self.cache['global_test_score'])
+            _utils.save_scores(self.cache, log_dir=self.log_dir, file_keys=['global_test_score'])
 
         def enable_sites(self, sites=[]):
             self.inputspecs = {site: self.inputspecs[site] for site in sites}
             self.cache['folds'] = {site: self.cache['folds'][site] for site in sites}
 
-    trainer = PooledTrainer(dataset_dir=dataset_dir, log_dir=log_dir, **kw)
-    trainer.init_nn(True)
-    return trainer
+    return PooledTrainer(dataset_dir=dataset_dir, log_dir=log_dir, **kw)

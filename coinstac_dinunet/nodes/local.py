@@ -35,7 +35,6 @@ class COINNLocal:
                  load_limit: int = _conf.data_load_lim,
                  pretrained_path: str = None,
                  patience: int = 5,
-                 load_sparse: bool = False,
                  num_folds: int = None,
                  split_ratio: _List[float] = (0.6, 0.2, 0.2),
                  data_splitter: _Callable = None, **kw):
