@@ -17,6 +17,7 @@ import coinstac_dinunet.utils as _utils
 import coinstac_dinunet.utils.tensorutils as _tu
 import coinstac_dinunet.vision.plotter as _plot
 from coinstac_dinunet.config.status import *
+from coinstac_dinunet.utils.logger import *
 
 
 class NNTrainer:
@@ -168,8 +169,7 @@ class NNTrainer:
         self.cache['best_local_epoch'] = 0
         self.cache.update(best_local_score=0.0 if metric_direction == 'maximize' else _conf.data_load_lim)
 
-        _dset_cache = {**self.cache}
-        _dset_cache['shuffle'] = True
+        _dset_cache = {**self.cache, 'shuffle': True}
         dataset = self._get_train_dataset(dataset_cls)
         _dset_cache['batch_size'] = _tu.get_safe_batch_size(_dset_cache['batch_size'], len(dataset))
         loader = _data.COINNDataLoader.new(dataset=dataset, **_dset_cache)
@@ -178,41 +178,40 @@ class NNTrainer:
         total_iter = len(loader) // local_iter
         epochs = self.cache.get('pretrain_epochs', self.cache['epochs'])
         for ep in range(1, epochs + 1):
-            for k in self.nn:
-                self.nn[k].train()
-
+            its = []
+            for k in self.nn: self.nn[k].train()
             _metrics, _avg = self.new_metrics(), self.new_averages()
             ep_avg, ep_metrics = self.new_averages(), self.new_metrics()
-            its = []
-            it = {'averages': _base_metrics.COINNAverages(), 'metrics': _base_metrics.COINNMetrics()}
+
             for i, batch in enumerate(loader, 1):
                 its.append(self.training_iteration_local(i, batch))
                 if i % local_iter == 0:
                     it = self._reduce_iteration(its)
-                    _i, its = i // local_iter, []
+                    if not it.get('metrics'): it['metrics'] = _base_metrics.COINNMetrics()
+                    if not it.get('averages'): it['averages'] = _base_metrics.COINNAverages()
 
                     ep_avg.accumulate(it['averages']), ep_metrics.accumulate(it['metrics'])
                     _avg.accumulate(it['averages']), _metrics.accumulate(it['metrics'])
-                    if self.cache.get('verbose') and (_utils.lazy_debug(_i) or _i == total_iter):
-                        print(f"Ep:{ep}/{epochs},Itr:{_i}/{total_iter},{_avg.get()},{_metrics.get()}")
-                        cache['train_scores'].append([*_avg.get(), *_metrics.get()])
+
+                    _i, its = i // local_iter, []
+                    if lazy_debug(_i) or _i == total_iter:
+                        info(f"Ep:{ep}/{epochs},Itr:{_i}/{total_iter},{_avg.get()},{_metrics.get()}",
+                             self.cache['verbose'])
+                        self.cache['training_log'].append([*_avg.get(), *_metrics.get()])
                         _metrics.reset(), _avg.reset()
                     self._on_iteration_end(i=_i, ep=ep, it=it)
 
-            cache['train_scores'].append([*ep_avg.get(), *ep_metrics.get()])
-            val_dataset = self._get_validation_dataset(dataset_cls)
-            val_avg, val_metrics = self.evaluation([val_dataset], save_pred=False)
-            cache['validation_scores'].append([*val_avg.get(), *val_metrics.get()])
-            out.update(**self._save_if_better(ep, val_metrics))
+            self.cache['training_log'].append([*ep_avg.get(), *ep_metrics.get()])
+            val_averages, val_metric = self.evaluation(self._get_validation_dataset(dataset_cls))
+            self.cache['validation_log'].append([*val_averages.get(), *val_metric.get()])
+            self._save_if_better(ep, val_metric)
 
-            self._on_epoch_end(ep, ep_avg, ep_metrics, val_avg, val_metrics)
+            self._on_epoch_end(ep=ep, ep_averages=ep_avg, ep_metrics=ep_metrics,
+                               val_averages=val_averages, val_metrics=val_metric)
 
-            if _utils.lazy_debug(ep):
-                self._plot_progress(cache, epoch=ep)
-
+            if lazy_debug(ep): self._plot_progress(cache, epoch=ep)
             if self._stop_early(epoch=ep, epoch_averages=ep_avg, epoch_metrics=ep_metrics,
-                                validation_averages=val_avg, validation_metric=val_metrics):
-                break
+                                validation_averages=val_averages, validation_metric=val_metric): break
 
         self._plot_progress(cache, epoch=ep)
         cache['best_local_epoch'] = self.cache['best_local_epoch']
@@ -241,7 +240,7 @@ class NNTrainer:
             -we need to keep track of loss
             -we need to keep track of metrics
         """
-        return {'metrics': _base_metrics.COINNMetrics(), 'averages': _base_metrics.COINNAverages(num_averages=1)}
+        pass
 
     def save_predictions(self, dataset, its):
         pass

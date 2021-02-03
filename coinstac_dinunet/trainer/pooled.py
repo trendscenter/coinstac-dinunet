@@ -7,8 +7,10 @@
 import json as _json
 import os as _os
 
+
 import coinstac_dinunet.config as _conf
 from coinstac_dinunet import utils as _utils
+from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.config.status import *
 from .nn import NNTrainer as _NNTrainer
 
@@ -62,11 +64,11 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs', **kw)
                 self.cache['best_local_epoch'] = epoch
                 self.cache['best_local_score'] = sc
                 self.save_checkpoint(file_path=self.cache['log_dir'] + _os.sep + _conf.weights_file)
-                if self.cache.get('verbose'):
-                    print(f"--- ### Best Model Saved!!! --- : {self.cache['best_local_score']}")
+                success(f"--- ### Best Model Saved!!! --- : {self.cache['best_local_score']}",
+                        self.cache.get('verbose'))
             else:
-                if self.cache.get('verbose'):
-                    print(f"Not best!  {sc}, {self.cache['best_local_score']} in ep: {self.cache['best_local_epoch']}")
+                warn(f"Not best!  {sc}, {self.cache['best_local_score']} in ep: {self.cache['best_local_epoch']}",
+                     self.cache.get('verbose'))
             return {}
 
         def base_directory(self, site):
@@ -93,18 +95,17 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs', **kw)
 
                 global_avg.accumulate(test_averages), global_metrics.accumulate(test_metrics)
                 self.cache['test_score'] = [[*test_averages.get(), *test_metrics.get()]]
-                if self.cache.get('verbose'):
-                    print(fold_ix, self.cache['test_score'])
+                info(f"{fold_ix}, {self.cache['test_score']}", self.cache.get('verbose'))
                 _utils.save_scores(self.cache, log_dir=self.cache['log_dir'], file_keys=['test_score'])
                 _utils.save_cache(self.cache, log_dir=self.cache['log_dir'])
 
             self.cache['global_test_score'] = [[*global_avg.get(), *global_metrics.get()]]
-            if self.cache.get('verbose'):
-                print('Global: ', self.cache['global_test_score'])
+            success(f"Global: {self.cache['global_test_score']}", self.cache.get('verbose'))
             _utils.save_scores(self.cache, log_dir=self.log_dir, file_keys=['global_test_score'])
 
-        def enable_sites(self, sites=[]):
-            self.inputspecs = {site: self.inputspecs[site] for site in sites}
-            self.cache['folds'] = {site: self.cache['folds'][site] for site in sites}
+        def enable_sites(self, sites: list = None):
+            if sites is not None:
+                self.inputspecs = {site: self.inputspecs[site] for site in sites}
+                self.cache['folds'] = {site: self.cache['folds'][site] for site in sites}
 
     return PooledTrainer(dataset_dir=dataset_dir, log_dir=log_dir, **kw)
