@@ -15,6 +15,6 @@ et_version = 2.4
 gpu_available = _torch.cuda.is_available()
 num_gpus = _torch.cuda.device_count()
 
-data_load_lim = _sys.maxsize
+max_size = _sys.maxsize
 
 current_seed = _random.randint(0, 2**24)

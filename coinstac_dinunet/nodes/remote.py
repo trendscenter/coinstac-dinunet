@@ -6,11 +6,9 @@
 
 import datetime as _datetime
 import json as _json
-import math as _math
 import os as _os
 import shutil as _shutil
 import sys as _sys
-from typing import Callable as _Callable
 
 import numpy as _np
 
@@ -20,33 +18,15 @@ import coinstac_dinunet.utils as _utils
 import coinstac_dinunet.utils.tensorutils as _tu
 from coinstac_dinunet.config.status import *
 from coinstac_dinunet.vision import plotter as _plot
-
-
-def average_sites_gradients(cache, input, state):
-    """
-    Average each sites gradients and pass it to all sites.
-    """
-    out = {'avg_grads_file': _conf.avg_grads_file}
-    grads = []
-    for site, site_vars in input.items():
-        grads_file = state['baseDirectory'] + _os.sep + site + _os.sep + site_vars['grads_file']
-        grads.append(_tu.load_grads(grads_file))
-
-    avg_grads = []
-    for layer_grad in zip(*grads):
-        avg_grads.append(_np.array(layer_grad).mean(0))
-    _tu.save_grads(state['transferDirectory'] + _os.sep + out['avg_grads_file'], avg_grads)
-    return out
+from coinstac_dinunet.utils.logger import *
 
 
 class COINNRemote:
-    def __init__(self, cache: dict = None, input: dict = None, state: dict = None,
-                 sites_reducer: _Callable = average_sites_gradients, **kw):
+    def __init__(self, cache: dict = None, input: dict = None, state: dict = None):
         self.out = {}
         self.cache = cache
         self.input = _utils.FrozenDict(input)
         self.state = _utils.FrozenDict(state)
-        self.sites_reducer = sites_reducer
 
     def _init_runs(self):
         self.cache.update(computation_id=[v['computation_id'] for _, v in self.input.items()][0])
@@ -54,7 +34,7 @@ class COINNRemote:
         self.cache.update(seed=[v.get('seed') for _, v in self.input.items()][0])
         self.cache.update(seed=_conf.current_seed)
 
-        self.cache['global_test_scores'] = []
+        self.cache[Key.GLOBAL_TEST_SERIALIZABLE] = []
 
         self.cache['data_size'] = {}
         for site, site_vars in self.input.items():
@@ -81,8 +61,10 @@ class COINNRemote:
         _os.makedirs(self.cache['log_dir'], exist_ok=True)
 
         metric_direction = self.cache['monitor_metric'][1]
-        self.cache.update(best_val_score=0 if metric_direction == 'maximize' else _conf.data_load_lim)
-        self.cache.update(train_scores=[], validation_scores=[], test_scores=[])
+        self.cache.update(best_val_score=0 if metric_direction == 'maximize' else _conf.max_size)
+        self.cache[Key.TRAIN_LOG] = []
+        self.cache[Key.VALIDATION_LOG] = []
+        self.cache[Key.TEST_METRICS] = []
 
         """**** Parameter Lock ******"""
         out = {}
@@ -127,27 +109,23 @@ class COINNRemote:
         We also send a save current model as best signal to all sites if the global validation score is better than the previously saved one.
         """
         out = {}
-        val_metrics = self._new_metrics()
-        val_averages = self._new_averages()
+        val_averages, val_metrics = self._new_averages(), self._new_metrics()
+        train_averages, train_metrics = self._new_averages(), self._new_metrics()
         for site, site_vars in self.input.items():
-            for ta, tm in site_vars['train_scores']:
-                avg, metric = self._new_averages(), self._new_metrics()
-                avg.update(**ta)
-                metric.update(**tm)
-                self.cache['train_scores'].append([*avg.get(), *metric.get()])
-            va, vm = site_vars['validation_scores']
-            val_averages.update(**va)
-            val_metrics.update(**vm)
+            for ta, tm in site_vars[Key.TRAIN_SERIALIZABLE]:
+                train_averages.update(**ta), train_metrics.update(**tm)
+            va, vm = site_vars[Key.VALIDATION_SERIALIZABLE]
+            val_averages.update(**va), val_metrics.update(**vm)
 
-        self.cache['validation_scores'].append([*val_averages.get(), *val_metrics.get()])
+        self.cache[Key.TRAIN_LOG].append([*train_averages.get(), *train_metrics.get()])
+        self.cache[Key.VALIDATION_LOG].append([*val_averages.get(), *val_metrics.get()])
         self._save_if_better(val_metrics)
 
         epoch = site_vars['epoch']
-        test_mode = site_vars['mode'] == Mode.TEST
         """Plot every now and then, also at the last of training"""
-        if epoch % int(_math.log(epoch + 1) + 1) == 0 or test_mode:
+        if lazy_debug(epoch):
             _plot.plot_progress(self.cache, self.cache['log_dir'],
-                                plot_keys=['train_scores', 'validation_scores'],
+                                plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG],
                                 epoch=epoch)
         return out
 
@@ -175,26 +153,24 @@ class COINNRemote:
         #######################
         This function saves test score of last fold.
         """
-        test_averages = self._new_averages()
-        test_metrics = self._new_metrics()
+        test_averages, test_metrics = self._new_averages(), self._new_metrics()
         for site, site_vars in self.input.items():
-            ta, tm = site_vars['test_scores']
-            test_averages.update(**ta)
-            test_metrics.update(**tm)
+            ta, tm = site_vars[Key.TEST_SERIALIZABLE]
+            test_averages.update(**ta), test_metrics.update(**tm)
 
-        self.cache['test_scores'].append([self.cache['fold']['split_ix'], *test_averages.get(), *test_metrics.get()])
-        self.cache['global_test_scores'].append([vars(test_averages), vars(test_metrics)])
+        self.cache[Key.TEST_METRICS].append([self.cache['fold']['split_ix'], *test_averages.get(), *test_metrics.get()])
+        self.cache[Key.GLOBAL_TEST_SERIALIZABLE].append([vars(test_averages), vars(test_metrics)])
 
         _plot.plot_progress(self.cache, self.cache['log_dir'],
-                            plot_keys=['train_scores', 'validation_scores'], epoch=site_vars['epoch'])
-        _utils.save_scores(self.cache, self.cache['log_dir'], file_keys=['test_scores'])
+                            plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG], epoch=site_vars['epoch'])
+        _utils.save_scores(self.cache, self.cache['log_dir'], file_keys=[Key.TEST_METRICS])
         _utils.save_cache(self.cache, self.cache['log_dir'])
 
     def _send_global_scores(self):
         out = {}
         averages = self._new_averages()
         metrics = self._new_metrics()
-        for avg, sc in self.cache['global_test_scores']:
+        for avg, sc in self.cache[Key.GLOBAL_TEST_SERIALIZABLE]:
             averages.update(**avg)
             metrics.update(**sc)
 
@@ -234,6 +210,7 @@ class COINNRemote:
             """
             self._init_runs()
             self.out['global_runs'] = self._next_run()
+            self.cache['verbose'] = False
             self.out['phase'] = Phase.INIT_NN
 
         if self._check(all, 'phase', Phase.PRE_COMPUTATION, self.input):
@@ -248,7 +225,7 @@ class COINNRemote:
             """
             self.out['phase'] = Phase.COMPUTATION
             if self._check(all, 'grads_file', _conf.grads_file, self.input):
-                self.out.update(**self.sites_reducer(self.cache, self.input, self.state))
+                self.out.update(**self._reduce_sites())
 
             if self._check(all, 'mode', Mode.VALIDATION_WAITING, self.input):
                 self.out['global_modes'] = self._set_mode(mode=Mode.VALIDATION)
@@ -281,3 +258,19 @@ class COINNRemote:
             {'output': self.out, 'cache': self.cache,
              'success': self._check(all, 'phase', Phase.SUCCESS, self.input)})
         _sys.stdout.write(output)
+
+    def _reduce_sites(self):
+        """
+      Average each sites gradients and pass it to all sites.
+      """
+        out = {'avg_grads_file': _conf.avg_grads_file}
+        grads = []
+        for site, site_vars in self.input.items():
+            grads_file = self.state['baseDirectory'] + _os.sep + site + _os.sep + site_vars['grads_file']
+            grads.append(_tu.load_grads(grads_file))
+
+        avg_grads = []
+        for layer_grad in zip(*grads):
+            avg_grads.append(_np.array(layer_grad).mean(0))
+        _tu.save_grads(self.state['transferDirectory'] + _os.sep + out['avg_grads_file'], avg_grads)
+        return out
