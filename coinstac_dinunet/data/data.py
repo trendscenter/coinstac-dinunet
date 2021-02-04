@@ -38,7 +38,7 @@ class COINNDataLoader(_DataLoader):
 
 
 class COINNDataset(_Dataset):
-    def __init__(self, mode='init', limit=_conf.data_load_lim):
+    def __init__(self, mode='init', limit=_conf.max_size):
         self.mode = mode
         self.limit = limit
         self.state = {}

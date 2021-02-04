@@ -1,6 +1,7 @@
 import os as _os
 import json as _json
 import copy as _copy
+import math as _math
 
 
 class FrozenDict(dict):
@@ -27,8 +28,11 @@ class FrozenDict(dict):
 def save_scores(cache, log_dir, file_keys=[]):
     for fk in file_keys:
         with open(log_dir + _os.sep + f'{fk}.csv', 'w') as file:
-            header = 'Fold,' + cache['log_header']
-            for line in [header] + cache[fk] if any(isinstance(ln, list) for ln in cache[fk]) else [cache[fk]]:
+            header = cache.get('log_header', '')
+            if isinstance(header, list):
+                header = ','.join(header)
+            file.write(header + '\n')
+            for line in cache[fk]:
                 if isinstance(line, list):
                     file.write(','.join([str(s) for s in line]) + '\n')
                 else:
@@ -65,3 +69,6 @@ def save_cache(cache, log_dir):
         clean_recursive(log)
         _json.dump(log, fp)
 
+
+def lazy_debug(x, add=1):
+    return x % int(_math.log(x + 1) + add) == 0

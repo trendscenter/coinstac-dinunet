@@ -80,14 +80,15 @@ class COINNTrainer(_NNTrainer):
         out['grads_file'] = _conf.grads_file
         grads = _tu.extract_grads(self.nn[first_model])
         _tu.save_grads(self.state['transferDirectory'] + _sep + out['grads_file'], grads)
-        self.cache['train_scores'].append([vars(it['averages']), vars(it['metrics'])])
+        self.cache[Key.TRAIN_SERIALIZABLE].append([vars(it['averages']), vars(it['metrics'])])
         out.update(**self._on_iteration_end(0, self.cache['epoch'], it))
         return out
 
     def validation_distributed(self, dataset_cls):
         out = {}
-        avg, scores = self.evaluation(self._get_validation_dataset(dataset_cls), save_pred=False)
-        out['validation_scores'] = [vars(avg), vars(scores)]
+        avg, scores = self.evaluation(mode='validation_dist', save_pred=False,
+                                      dataset_list=[self._get_validation_dataset(dataset_cls)])
+        out[Key.VALIDATION_SERIALIZABLE] = [vars(avg), vars(scores)]
         out.update(**self.next_epoch())
         out.update(**self._on_epoch_end(self.cache['epoch'], None, None, avg, scores))
         return out
@@ -95,8 +96,9 @@ class COINNTrainer(_NNTrainer):
     def test_distributed(self, dataset_cls):
         out = {}
         self.load_checkpoint(self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
-        avg, scores = self.evaluation(self._get_test_dataset(dataset_cls), save_pred=True)
-        out['test_scores'] = [vars(avg), vars(scores)]
+        avg, scores = self.evaluation(mode='dist_test', save_pred=True,
+                                      dataset_list=[self._get_test_dataset(dataset_cls)])
+        out[Key.TEST_SERIALIZABLE] = [vars(avg), vars(scores)]
         return out
 
     def cache_data_indices(self, dataset_cls, split_key='train'):
@@ -123,6 +125,7 @@ class COINNTrainer(_NNTrainer):
         return next(loader.__iter__())
 
     def next_epoch(self):
+
         """
         Transition to next epoch after validation.
         It will set 'train_waiting' status if we need more training
@@ -138,7 +141,6 @@ class COINNTrainer(_NNTrainer):
             out['mode'] = Mode.TRAIN_WAITING
             _rd.shuffle(self.cache['data_indices'])
 
-        out['train_scores'] = self.cache['train_scores']
-        self.cache['train_scores'] = []
-        out['epoch'] = self.cache['epoch']
+        out[Key.TRAIN_SERIALIZABLE] = self.cache[Key.TRAIN_SERIALIZABLE]
+        self.cache[Key.TRAIN_SERIALIZABLE] = []
         return out

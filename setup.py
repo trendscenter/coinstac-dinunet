@@ -11,7 +11,7 @@ README = (HERE / "README.md").read_text()
 # This call to setup() does all the work
 setup(
     name="coinstac-dinunet",
-    version="0.7.5",
+    version="0.7.8",
     description="Distributed Neural Network implementation on COINSTAC.",
     long_description=README,
     long_description_content_type="text/markdown",
@@ -30,5 +30,5 @@ setup(
     include_package_data=True,
     install_requires=['numpy', 'scipy', 'scikit-learn', 'scikit-image',
                       'pillow', 'matplotlib', 'opencv-python-headless',
-                      'pandas', 'seaborn', 'coinstac-pyprofiler']
+                      'pandas', 'seaborn']
 )

@@ -32,10 +32,9 @@ class COINNLocal:
                  gpus: _List[int] = None,
                  pin_memory: bool = _conf.gpu_available,
                  num_workers: int = 0,
-                 load_limit: int = _conf.data_load_lim,
+                 load_limit: int = _conf.max_size,
                  pretrained_path: str = None,
                  patience: int = 5,
-                 load_sparse: bool = False,
                  num_folds: int = None,
                  split_ratio: _List[float] = (0.6, 0.2, 0.2),
                  data_splitter: _Callable = None, **kw):
@@ -58,7 +57,6 @@ class COINNLocal:
         self.args['load_limit'] = load_limit
         self.args['pretrained_path'] = pretrained_path
         self.args['patience'] = patience
-        self.args['load_sparse'] = load_sparse
         self.args['num_folds'] = num_folds
         self.args['split_ratio'] = split_ratio
         self.args.update(**kw)
@@ -89,7 +87,7 @@ class COINNLocal:
         out['phase'] = Phase.COMPUTATION
         if self.cache['pretrain_epochs'] >= 1 and self.cache['pretrain']:
             out['phase'] = Phase.PRE_COMPUTATION
-            out.update(**trainer.train_local(dataset_cls, num_sites=len(self._GLOBAL['runs'])))
+            out.update(**trainer.train_local(dataset_cls))
 
         if self.cache['pretrain_epochs'] >= 1 and any([r['pretrain'] for r in self._GLOBAL['runs'].values()]):
             out['phase'] = Phase.PRE_COMPUTATION
@@ -107,12 +105,15 @@ class COINNLocal:
                     self.cache[k] = self.args[k]
             self.out.update(**self._init_runs())
             self.cache['args'] = _FrozenDict(self.cache)
+            self.cache['verbose'] = False
             self._check_args()
 
         elif self.out['phase'] == Phase.INIT_NN:
             """  Initialize neural network/optimizer and GPUs  """
             self._GLOBAL['runs'] = self.input['global_runs']
-            self.cache.update(**self._GLOBAL['runs'][self.state['clientId']], epoch=0, cursor=0, train_scores=[])
+            self.cache.update(**self._GLOBAL['runs'][self.state['clientId']])
+            self.cache.update(epoch=1, cursor=0)
+            self.cache[Key.TRAIN_SERIALIZABLE] = []
 
             self.cache['split_file'] = self.cache['splits'][self.cache['split_ix']]
             self.cache['log_dir'] = self.state['outputDirectory'] + _sep + self.cache[
@@ -135,6 +136,7 @@ class COINNLocal:
             """ Train/validation and test phases """
             trainer.init_nn(init_weights=False)
             trainer.load_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
+            self.out['epoch'] = self.cache['epoch']
 
             if self.input.get('save_current_as_best'):
                 trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
@@ -154,7 +156,7 @@ class COINNLocal:
                 Once all sites are in 'val_waiting' status, remote issues 'validation' signal.
                 Once all sites run validation phase, they go to 'train_waiting' status.
                 Once all sites are in this status, remote issues 'train' signal
-                 and all sites reshuffle the indices and resume training.
+                 and all sites reshuffle the indices and r esume training.
                 We send the confusion matrix to the remote to accumulate global score for model selection.
                 """
                 self.out.update(**trainer.validation_distributed(dataset_cls))
