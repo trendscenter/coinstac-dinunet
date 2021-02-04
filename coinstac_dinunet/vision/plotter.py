@@ -15,8 +15,8 @@ from sklearn.preprocessing import MinMaxScaler as _MinMaxScaler
 _plt.switch_backend('agg')
 _plt.rcParams["figure.figsize"] = [16, 9]
 
-_COLORS = ['black', 'darkslateblue', 'maroon', 'magenta', 'teal', 'red', 'blue', 'blueviolet', 'brown', 'cadetblue',
-           'chartreuse', 'coral', 'cornflowerblue', 'indigo', 'cyan', 'navy']
+_COLORS = ['black', 'blue', 'maroon', 'magenta', 'teal', 'red', 'blueviolet', 'brown', 'cadetblue',
+           'chartreuse', 'coral', 'darkslateblue', 'cornflowerblue', 'indigo', 'cyan', 'navy']
 
 
 def plot_progress(cache, log_dir, plot_keys=[], num_points=11, epoch=None):
