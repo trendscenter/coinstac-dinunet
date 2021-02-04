@@ -158,7 +158,7 @@ class COINNRemote:
             ta, tm = site_vars[Key.TEST_SERIALIZABLE]
             test_averages.update(**ta), test_metrics.update(**tm)
 
-        self.cache[Key.TEST_METRICS].append([self.cache['fold']['split_ix'], *test_averages.get(), *test_metrics.get()])
+        self.cache[Key.TEST_METRICS].append([*test_averages.get(), *test_metrics.get()])
         self.cache[Key.GLOBAL_TEST_SERIALIZABLE].append([vars(test_averages), vars(test_metrics)])
 
         _plot.plot_progress(self.cache, self.cache['log_dir'],
