@@ -142,6 +142,7 @@ class COINNRemote:
                 direction == 'minimize' and sc <= self.cache['best_val_score']):
             self.out['save_current_as_best'] = True
             self.cache['best_val_score'] = sc
+            self.cache['best_val_epoch'] = epoch
         else:
             self.out['save_current_as_best'] = False
 
