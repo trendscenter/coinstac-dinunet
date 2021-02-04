@@ -24,17 +24,17 @@ class COINNLocal:
     def __init__(self, cache: dict = None, input: dict = None, state: dict = None,
                  computation_id=None,
                  mode: str = None,
-                 batch_size: int = 4,
+                 batch_size: int = 16,
                  local_iterations: int = 1,
                  pretrain_epochs: int = 0,
-                 epochs: int = 21,
+                 epochs: int = 31,
                  learning_rate: float = 0.001,
                  gpus: _List[int] = None,
                  pin_memory: bool = _conf.gpu_available,
                  num_workers: int = 0,
                  load_limit: int = _conf.max_size,
                  pretrained_path: str = None,
-                 patience: int = 5,
+                 patience: int = 11,
                  num_folds: int = None,
                  split_ratio: _List[float] = (0.6, 0.2, 0.2),
                  data_splitter: _Callable = None, **kw):
@@ -112,7 +112,7 @@ class COINNLocal:
             """  Initialize neural network/optimizer and GPUs  """
             self._GLOBAL['runs'] = self.input['global_runs']
             self.cache.update(**self._GLOBAL['runs'][self.state['clientId']])
-            self.cache.update(epoch=1, cursor=0)
+            self.cache.update(epoch=0, cursor=0)
             self.cache[Key.TRAIN_SERIALIZABLE] = []
 
             self.cache['split_file'] = self.cache['splits'][self.cache['split_ix']]
