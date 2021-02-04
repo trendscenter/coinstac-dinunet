@@ -136,7 +136,6 @@ class COINNLocal:
             """ Train/validation and test phases """
             trainer.init_nn(init_weights=False)
             trainer.load_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
-            self.out['epoch'] = self.cache['epoch']
 
             if self.input.get('save_current_as_best'):
                 trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['best_nn_state'])

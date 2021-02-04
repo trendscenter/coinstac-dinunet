@@ -91,6 +91,7 @@ class COINNTrainer(_NNTrainer):
         out[Key.VALIDATION_SERIALIZABLE] = [vars(avg), vars(scores)]
         out.update(**self.next_epoch())
         out.update(**self._on_epoch_end(self.cache['epoch'], None, None, avg, scores))
+        out['epoch'] = self.cache['epoch']
         return out
 
     def test_distributed(self, dataset_cls):
@@ -99,6 +100,7 @@ class COINNTrainer(_NNTrainer):
         avg, scores = self.evaluation(mode='dist_test', save_pred=True,
                                       dataset_list=[self._get_test_dataset(dataset_cls)])
         out[Key.TEST_SERIALIZABLE] = [vars(avg), vars(scores)]
+        out['epoch'] = self.cache['epoch']
         return out
 
     def cache_data_indices(self, dataset_cls, split_key='train'):
