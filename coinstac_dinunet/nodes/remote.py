@@ -119,9 +119,9 @@ class COINNRemote:
 
         self.cache[Key.TRAIN_LOG].append([*train_averages.get(), *train_metrics.get()])
         self.cache[Key.VALIDATION_LOG].append([*val_averages.get(), *val_metrics.get()])
-        self._save_if_better(val_metrics)
 
         epoch = site_vars['epoch']
+        self._save_if_better(epoch, val_metrics)
         """Plot every now and then, also at the last of training"""
         if lazy_debug(epoch):
             _plot.plot_progress(self.cache, self.cache['log_dir'],
@@ -129,7 +129,7 @@ class COINNRemote:
                                 epoch=epoch)
         return out
 
-    def _save_if_better(self, metrics):
+    def _save_if_better(self, epoch, metrics):
         r"""
         Save the current model as best if it has better validation scores.
         """
