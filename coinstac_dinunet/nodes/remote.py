@@ -91,7 +91,7 @@ class COINNRemote:
         return _metric.COINNAverages()
 
     def _set_log_headers(self):
-        self.cache['log_header'] = 'Loss,Precision,Recall,F1,Accuracy'
+        self.cache['log_header'] = 'Loss,Accuracy,F1,Precision,Recall'
 
     def _set_monitor_metric(self):
         self.cache['monitor_metric'] = 'f1', 'maximize'
