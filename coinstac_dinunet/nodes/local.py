@@ -34,7 +34,7 @@ class COINNLocal:
                  num_workers: int = 0,
                  load_limit: int = _conf.max_size,
                  pretrained_path: str = None,
-                 patience: int = 11,
+                 patience: int = None,
                  num_folds: int = None,
                  split_ratio: _List[float] = (0.6, 0.2, 0.2),
                  data_splitter: _Callable = None, **kw):
@@ -56,7 +56,7 @@ class COINNLocal:
         self.args['num_workers'] = num_workers
         self.args['load_limit'] = load_limit
         self.args['pretrained_path'] = pretrained_path
-        self.args['patience'] = patience
+        self.args['patience'] = patience if patience else epochs
         self.args['num_folds'] = num_folds
         self.args['split_ratio'] = split_ratio
         self.args.update(**kw)
