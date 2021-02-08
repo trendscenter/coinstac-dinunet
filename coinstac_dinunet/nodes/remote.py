@@ -165,7 +165,11 @@ class COINNRemote:
         _plot.plot_progress(self.cache, self.cache['log_dir'],
                             plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG], epoch=site_vars['epoch'])
         _utils.save_scores(self.cache, self.cache['log_dir'], file_keys=[Key.TEST_METRICS])
-        _utils.save_cache(self.cache, self.cache['log_dir'])
+
+        _cache = {**self.cache}
+        _cache['data_size'] = []
+        _cache[Key.GLOBAL_TEST_SERIALIZABLE] = _cache[Key.GLOBAL_TEST_SERIALIZABLE][-1]
+        _utils.save_cache(_cache, self.cache['log_dir'])
 
     def _send_global_scores(self):
         out = {}
@@ -175,7 +179,7 @@ class COINNRemote:
             averages.update(**avg)
             metrics.update(**sc)
 
-        self.cache['_global_test_scores'] = [['Global', *averages.get(), *metrics.get()]]
+        self.cache['_global_test_scores'] = [[*averages.get(), *metrics.get()]]
         _utils.save_scores(self.cache, self.state['outputDirectory'] + _os.sep + self.cache['computation_id'],
                            file_keys=['_global_test_scores'])
 

@@ -65,10 +65,6 @@ class COINNTrainer(_NNTrainer):
         self.nn[first_model].train()
         self.optimizer[first_optim].zero_grad()
 
-        if self.input.get('avg_grads_file'):
-            self.step()
-            self.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
-
         its = []
         for _ in range(self.cache['local_iterations']):
             it = self.iteration(self.next_batch(dataset_cls))

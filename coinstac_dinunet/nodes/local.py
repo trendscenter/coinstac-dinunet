@@ -150,7 +150,11 @@ class COINNLocal:
                 """
                 self.out.update(**trainer.train_distributed(dataset_cls))
 
-            elif all(m == Mode.VALIDATION for m in self._GLOBAL['modes'].values()):
+            if self.input.get('avg_grads_file'):
+                trainer.step()
+                trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
+
+            if all(m == Mode.VALIDATION for m in self._GLOBAL['modes'].values()):
                 """
                 Once all sites are in 'val_waiting' status, remote issues 'validation' signal.
                 Once all sites run validation phase, they go to 'train_waiting' status.
