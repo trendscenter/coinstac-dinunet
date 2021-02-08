@@ -353,4 +353,4 @@ class NNTrainer:
         return kw.get('epoch') - self.cache['best_local_epoch'] >= self.cache['args'].get('patience', 'epochs')
 
     def _set_log_headers(self):
-        self.cache['log_header'] = 'Loss,Precision,Recall,F1,Accuracy'
+        self.cache['log_header'] = 'Loss,Accuracy,F1,Precision,Recall'

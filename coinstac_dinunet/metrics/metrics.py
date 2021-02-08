@@ -222,79 +222,10 @@ class Prf1a(COINNMetrics):
                  max(((beta ** 2) * self.precision) + self.recall, self.eps)
         return round(f_beta, self.num_precision)
 
-    def prfa(self, beta=1):
-        return [self.precision, self.recall, self.f_beta(beta=beta), self.accuracy]
-
-    def get(self, beta=1):
-        return self.prfa(beta)
+    def get(self):
+        return [self.accuracy, self.f1, self.precision, self.recall]
 
     @property
     def overlap(self):
         o = self.tp / max(self.tp + self.fp + self.fn, self.eps)
         return round(o, self.num_precision)
-
-
-class ConfusionMatrix(COINNMetrics):
-    """
-    Confusion matrix  is used in multi class classification case.
-    x-axis is predicted. y-axis is true label.
-    F1 score from average precision and recall is calculated
-    """
-
-    def __init__(self, num_classes=None, device='cpu', **kw):
-        super().__init__(**kw)
-        self.num_classes = num_classes
-        self.matrix = _torch.zeros(num_classes, num_classes).float()
-        self.device = device
-
-    def reset(self):
-        self.matrix = _torch.zeros(self.num_classes, self.num_classes).float()
-        return self
-
-    def update(self, matrix=0, **kw):
-        self.matrix += _np.array(matrix)
-
-    def accumulate(self, other):
-        self.matrix += other.matrix
-        return self
-
-    def add(self, pred, true):
-        pred = pred.clone().long().reshape(1, -1).squeeze()
-        true = true.clone().long().reshape(1, -1).squeeze()
-        self.matrix += _torch.sparse.LongTensor(
-            _torch.stack([pred, true]).to(self.device),
-            _torch.ones_like(pred).long().to(self.device),
-            _torch.Size([self.num_classes, self.num_classes])).to_dense().to(self.device)
-
-    def precision(self, average=True):
-        precision = [0] * self.num_classes
-        for i in range(self.num_classes):
-            precision[i] = self.matrix[i, i] / max(_torch.sum(self.matrix[:, i]).item(), self.eps)
-        precision = _np.array(precision)
-        return sum(precision) / self.num_classes if average else precision
-
-    def recall(self, average=True):
-        recall = [0] * self.num_classes
-        for i in range(self.num_classes):
-            recall[i] = self.matrix[i, i] / max(_torch.sum(self.matrix[i, :]).item(), self.eps)
-        recall = _np.array(recall)
-        return sum(recall) / self.num_classes if average else recall
-
-    def f1(self, average=True):
-        f_1 = []
-        precision = [self.precision(average)] if average else self.precision(average)
-        recall = [self.recall(average)] if average else self.recall(average)
-        for p, r in zip(precision, recall):
-            f_1.append(2 * p * r / max(p + r, self.eps))
-        f_1 = _np.array(f_1)
-        return f_1[0] if average else f_1
-
-    def accuracy(self):
-        return self.matrix.trace().item() / max(self.matrix.sum().item(), self.eps)
-
-    def prfa(self):
-        return [round(self.precision(), self.num_precision), round(self.recall(), self.num_precision),
-                round(self.f1(), self.num_precision), round(self.accuracy(), self.num_precision)]
-
-    def get(self):
-        return self.prfa()

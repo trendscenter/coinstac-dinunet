@@ -6,7 +6,6 @@
 
 import math as _math
 import os as _os
-import random as _rd
 
 import matplotlib.pyplot as _plt
 import numpy as _np
@@ -16,8 +15,8 @@ from sklearn.preprocessing import MinMaxScaler as _MinMaxScaler
 _plt.switch_backend('agg')
 _plt.rcParams["figure.figsize"] = [16, 9]
 
-_COLORS = ['black', 'darkslateblue', 'maroon', 'magenta', 'teal', 'red', 'blue', 'blueviolet', 'brown', 'cadetblue',
-           'chartreuse', 'coral', 'cornflowerblue', 'indigo', 'cyan', 'navy']
+_COLORS = ['black', 'blue', 'maroon', 'magenta', 'teal', 'red', 'blueviolet', 'brown', 'cadetblue',
+           'chartreuse', 'coral', 'darkslateblue', 'cornflowerblue', 'indigo', 'cyan', 'navy']
 
 
 def plot_progress(cache, log_dir, plot_keys=[], num_points=11, epoch=None):
@@ -36,7 +35,7 @@ def plot_progress(cache, log_dir, plot_keys=[], num_points=11, epoch=None):
         header = cache['log_header'].split(',')
         data = _np.array(data)
 
-        n_cols = len(header)
+        n_cols = min(len(header), data.shape[1])
         data = data[:, :n_cols]
         if _np.sum(data) <= 0:
             continue
@@ -50,8 +49,7 @@ def plot_progress(cache, log_dir, plot_keys=[], num_points=11, epoch=None):
             if max(df[col]) > 1:
                 df[col] = scaler.fit_transform(df[[col]])
 
-        _rd.seed(cache['seed'])
-        color = _rd.sample(_COLORS, n_cols)
+        color = _COLORS[:n_cols]
 
         rollin_window = max(df.shape[0] // num_points, 3)
         ax = df.plot(x_compat=True, alpha=0.11, legend=0, color=color)
@@ -64,7 +62,7 @@ def plot_progress(cache, log_dir, plot_keys=[], num_points=11, epoch=None):
             Set correct epoch as x-tick-labels.
             """
             xticks = list(range(0, df.shape[0], df.shape[0] // epoch)) + [df.shape[0] - 1]
-            step = int(_math.log(len(xticks) + 1) + len(xticks)//num_points + 1)
+            step = int(_math.log(len(xticks) + 1) + len(xticks) // num_points + 1)
             xticks_range = list(range(len(xticks)))[::step]
             xticks = xticks[::step]
             ax.set_xticks(xticks)

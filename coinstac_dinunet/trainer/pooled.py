@@ -6,25 +6,37 @@
 
 import json as _json
 import os as _os
+from typing import List
 
 import coinstac_dinunet.config as _conf
 from coinstac_dinunet import utils as _utils
 from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.config.status import *
 from .nn import NNTrainer as _NNTrainer
+from coinstac_dinunet import COINNLocal
 
 
-def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs', **kw):
-    class PooledTrainer(base):
-        def __init__(self, dataset_dir=dataset_dir, log_dir=log_dir, **kw):
+def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
+                  mode: str = None,
+                  batch_size: int = 16,
+                  local_iterations: int = 1,
+                  epochs: int = 31,
+                  learning_rate: float = 0.001,
+                  gpus: List[int] = None,
+                  pin_memory: bool = _conf.gpu_available,
+                  num_workers: int = 2,
+                  load_limit: int = _conf.max_size,
+                  pretrained_path: str = None,
+                  patience: int = None, **kw):
+    class PooledTrainer(base, COINNLocal):
+        def __init__(self, dataset_dir=None, log_dir=None, **kwargs):
             self.dataset_dir = dataset_dir
             self.log_dir = log_dir
             self.inputspecs = self._parse_inputspec(dataset_dir + _os.sep + kw.get('inputspec_file', 'inputspec.json'))
 
-            cache = {**self.inputspecs[0],
-                     'folds': self._init_folds(),
-                     'seed': _conf.current_seed}
-            cache.update(**kw)
+            cache = {**self.inputspecs[0], 'folds': self._init_folds()}
+            cache['seed'] = _conf.current_seed
+            cache.update(**kwargs)
             super().__init__(cache=cache, input={}, state={}, **kw)
 
         def _init_folds(self):
@@ -95,7 +107,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs', **kw)
                 if self.cache['mode'] == Mode.TRAIN:
                     self.train_local(dataset_cls)
 
-                if self.cache['mode'] == 'train' or self.cache['pretrained_path'] is None:
+                if self.cache['mode'] == 'train' or self.cache.get('pretrained_path') is None:
                     self.load_checkpoint(self.cache['log_dir'] + _os.sep + _conf.weights_file)
                 test_datasets = self._load_dataset(dataset_cls, 'test')
                 test_averages, test_metrics = self.evaluation(mode='test', dataset_list=[test_datasets], save_pred=True)
@@ -114,4 +126,16 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs', **kw)
             self.inputspecs = {site: self.inputspecs[site] for site in sites}
             self.cache['folds'] = {site: self.cache['folds'][site] for site in sites}
 
-    return PooledTrainer(dataset_dir=dataset_dir, log_dir=log_dir, verbose=True, **kw)
+    return PooledTrainer(dataset_dir=dataset_dir, log_dir=log_dir, verbose=True,
+                         mode=mode,
+                         batch_size=batch_size,
+                         local_iterations=local_iterations,
+                         epochs=epochs,
+                         learning_rate=learning_rate,
+                         gous=gpus,
+                         pin_memory=pin_memory,
+                         load_limit=load_limit,
+                         pretrained_path=pretrained_path,
+                         patience=patience if patience else epochs,
+                         num_workers=num_workers
+                         , **kw)

@@ -91,7 +91,7 @@ class COINNRemote:
         return _metric.COINNAverages()
 
     def _set_log_headers(self):
-        self.cache['log_header'] = 'Loss,Precision,Recall,F1,Accuracy'
+        self.cache['log_header'] = 'Loss,Accuracy,F1,Precision,Recall'
 
     def _set_monitor_metric(self):
         self.cache['monitor_metric'] = 'f1', 'maximize'
@@ -119,9 +119,9 @@ class COINNRemote:
 
         self.cache[Key.TRAIN_LOG].append([*train_averages.get(), *train_metrics.get()])
         self.cache[Key.VALIDATION_LOG].append([*val_averages.get(), *val_metrics.get()])
-        self._save_if_better(val_metrics)
 
         epoch = site_vars['epoch']
+        self._save_if_better(epoch, val_metrics)
         """Plot every now and then, also at the last of training"""
         if lazy_debug(epoch):
             _plot.plot_progress(self.cache, self.cache['log_dir'],
@@ -129,7 +129,7 @@ class COINNRemote:
                                 epoch=epoch)
         return out
 
-    def _save_if_better(self, metrics):
+    def _save_if_better(self, epoch, metrics):
         r"""
         Save the current model as best if it has better validation scores.
         """
@@ -142,6 +142,7 @@ class COINNRemote:
                 direction == 'minimize' and sc <= self.cache['best_val_score']):
             self.out['save_current_as_best'] = True
             self.cache['best_val_score'] = sc
+            self.cache['best_val_epoch'] = epoch
         else:
             self.out['save_current_as_best'] = False
 
@@ -158,13 +159,17 @@ class COINNRemote:
             ta, tm = site_vars[Key.TEST_SERIALIZABLE]
             test_averages.update(**ta), test_metrics.update(**tm)
 
-        self.cache[Key.TEST_METRICS].append([self.cache['fold']['split_ix'], *test_averages.get(), *test_metrics.get()])
+        self.cache[Key.TEST_METRICS].append([*test_averages.get(), *test_metrics.get()])
         self.cache[Key.GLOBAL_TEST_SERIALIZABLE].append([vars(test_averages), vars(test_metrics)])
 
         _plot.plot_progress(self.cache, self.cache['log_dir'],
                             plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG], epoch=site_vars['epoch'])
         _utils.save_scores(self.cache, self.cache['log_dir'], file_keys=[Key.TEST_METRICS])
-        _utils.save_cache(self.cache, self.cache['log_dir'])
+
+        _cache = {**self.cache}
+        _cache['data_size'] = []
+        _cache[Key.GLOBAL_TEST_SERIALIZABLE] = _cache[Key.GLOBAL_TEST_SERIALIZABLE][-1]
+        _utils.save_cache(_cache, self.cache['log_dir'])
 
     def _send_global_scores(self):
         out = {}
@@ -174,7 +179,7 @@ class COINNRemote:
             averages.update(**avg)
             metrics.update(**sc)
 
-        self.cache['_global_test_scores'] = [['Global', *averages.get(), *metrics.get()]]
+        self.cache['_global_test_scores'] = [[*averages.get(), *metrics.get()]]
         _utils.save_scores(self.cache, self.state['outputDirectory'] + _os.sep + self.cache['computation_id'],
                            file_keys=['_global_test_scores'])
 

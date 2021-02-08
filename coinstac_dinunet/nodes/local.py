@@ -24,17 +24,17 @@ class COINNLocal:
     def __init__(self, cache: dict = None, input: dict = None, state: dict = None,
                  computation_id=None,
                  mode: str = None,
-                 batch_size: int = 4,
+                 batch_size: int = 16,
                  local_iterations: int = 1,
                  pretrain_epochs: int = 0,
-                 epochs: int = 21,
+                 epochs: int = 31,
                  learning_rate: float = 0.001,
                  gpus: _List[int] = None,
                  pin_memory: bool = _conf.gpu_available,
                  num_workers: int = 0,
                  load_limit: int = _conf.max_size,
                  pretrained_path: str = None,
-                 patience: int = 5,
+                 patience: int = None,
                  num_folds: int = None,
                  split_ratio: _List[float] = (0.6, 0.2, 0.2),
                  data_splitter: _Callable = None, **kw):
@@ -56,7 +56,7 @@ class COINNLocal:
         self.args['num_workers'] = num_workers
         self.args['load_limit'] = load_limit
         self.args['pretrained_path'] = pretrained_path
-        self.args['patience'] = patience
+        self.args['patience'] = patience if patience else epochs
         self.args['num_folds'] = num_folds
         self.args['split_ratio'] = split_ratio
         self.args.update(**kw)
@@ -112,7 +112,7 @@ class COINNLocal:
             """  Initialize neural network/optimizer and GPUs  """
             self._GLOBAL['runs'] = self.input['global_runs']
             self.cache.update(**self._GLOBAL['runs'][self.state['clientId']])
-            self.cache.update(epoch=1, cursor=0)
+            self.cache.update(epoch=0, cursor=0)
             self.cache[Key.TRAIN_SERIALIZABLE] = []
 
             self.cache['split_file'] = self.cache['splits'][self.cache['split_ix']]
@@ -136,11 +136,14 @@ class COINNLocal:
             """ Train/validation and test phases """
             trainer.init_nn(init_weights=False)
             trainer.load_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
-            self.out['epoch'] = self.cache['epoch']
 
             if self.input.get('save_current_as_best'):
                 trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
                 self.cache['best_epoch'] = self.cache['epoch']
+
+            if self.input.get('avg_grads_file'):
+                trainer.step()
+                trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
 
             if any(m == Mode.TRAIN for m in self._GLOBAL['modes'].values()):
                 """
@@ -151,7 +154,7 @@ class COINNLocal:
                 """
                 self.out.update(**trainer.train_distributed(dataset_cls))
 
-            elif all(m == Mode.VALIDATION for m in self._GLOBAL['modes'].values()):
+            if all(m == Mode.VALIDATION for m in self._GLOBAL['modes'].values()):
                 """
                 Once all sites are in 'val_waiting' status, remote issues 'validation' signal.
                 Once all sites run validation phase, they go to 'train_waiting' status.
