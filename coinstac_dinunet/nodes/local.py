@@ -141,6 +141,10 @@ class COINNLocal:
                 trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
                 self.cache['best_epoch'] = self.cache['epoch']
 
+            if self.input.get('avg_grads_file'):
+                trainer.step()
+                trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
+
             if any(m == Mode.TRAIN for m in self._GLOBAL['modes'].values()):
                 """
                 All sites must begin/resume the training the same time.
@@ -149,10 +153,6 @@ class COINNLocal:
                 take part in the training with everybody until all sites go to 'val_waiting' status.
                 """
                 self.out.update(**trainer.train_distributed(dataset_cls))
-
-            if self.input.get('avg_grads_file'):
-                trainer.step()
-                trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
 
             if all(m == Mode.VALIDATION for m in self._GLOBAL['modes'].values()):
                 """
