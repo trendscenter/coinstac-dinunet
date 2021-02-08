@@ -22,16 +22,16 @@ class Mode(str, _Enum):
 class Key(str, _Enum):
     TRAIN_LOG = 'train_log'
     TRAIN_METRICS = 'train_metrics'
-    TRAIN_SERIALIZABLE = 'serializable_training_log'
+    TRAIN_SERIALIZABLE = 'serializable_train_scores'
 
     VALIDATION_LOG = 'validation_log'
     VALIDATION_METRICS = "validation_metrics"
-    VALIDATION_SERIALIZABLE = 'serializable_validation_log'
+    VALIDATION_SERIALIZABLE = 'serializable_validation_scores'
 
     TEST_LOG = 'test_log'
     TEST_METRICS = 'test_metrics'
-    TEST_SERIALIZABLE = 'serializable_test_log'
+    TEST_SERIALIZABLE = 'serializable_test_scores'
 
     GLOBAL_TEST_LOG = 'global_test_log'
     GLOBAL_TEST_METRICS = 'global_test_metrics'
-    GLOBAL_TEST_SERIALIZABLE = 'serializable_global_test_log'
+    GLOBAL_TEST_SERIALIZABLE = 'serializable_global_test_scores'
