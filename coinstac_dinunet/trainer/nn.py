@@ -55,18 +55,20 @@ class NNTrainer:
         self.optimizer['adam'] = _torch.optim.Adam(self.nn[first_model].parameters(),
                                                    lr=self.cache['learning_rate'])
 
-    def init_nn(self, init_weights=False):
-        self._init_nn_model()
-        self._init_optimizer()
-        if init_weights:
-            self._init_nn_weights(init_weights=init_weights)
-        self._set_gpus()
+    def init_nn(self, init_model=True, init_optim=True, set_devices=True, init_weights=True):
+        if init_model: self._init_nn_model()
+        if init_optim: self._init_optimizer()
+        if init_weights: self._init_nn_weights(init_weights=init_weights)
+        if set_devices: self._set_gpus()
 
     def _set_gpus(self):
         self.device['gpu'] = _torch.device("cpu")
-        if len(self.cache.get('gpus', [])) > 0:
+        if self.cache.get('gpus') is not None and len(self.cache['gpus']) > 0:
             if _conf.gpu_available:
                 self.device['gpu'] = _torch.device(f"cuda:{self.cache['gpus'][0]}")
+                if len(self.cache['gpus']) >= 2:
+                    for mkey in self.nn:
+                        self.nn[mkey] = _torch.nn.DataParallel(self.nn[mkey], self.cache['gpus'])
             else:
                 raise Exception(f'*** GPU not detected in {self.state["clientId"]}. ***')
         for model_key in self.nn:
@@ -191,8 +193,8 @@ class NNTrainer:
 
         local_iter = self.cache.get('local_iterations', 1)
         tot_iter = len(loader) // local_iter
-        epochs = self.cache.get('pretrain_epochs', self.cache['epochs'])
-        for ep in range(1, epochs + 1):
+        cache['epochs'] = self.cache.get('pretrain_epochs', self.cache['epochs'])
+        for ep in range(1, cache['epochs'] + 1):
             for k in self.nn:
                 self.nn[k].train()
 
@@ -213,13 +215,14 @@ class NNTrainer:
 
                     _i, its = i // local_iter, []
                     if lazy_debug(_i) or _i == tot_iter:
-                        info(f"Ep:{ep}/{epochs},Itr:{_i}/{tot_iter},{_avg.get()},{_metrics.get()}",
+                        info(f"Ep:{ep}/{cache['epochs']},Itr:{_i}/{tot_iter},{_avg.get()},{_metrics.get()}",
                              self.cache.get('verbose'))
                         cache[Key.TRAIN_LOG].append([*_avg.get(), *_metrics.get()])
                         _metrics.reset(), _avg.reset()
                     self._on_iteration_end(i=_i, ep=ep, it=it)
 
-            val_averages, val_metric = self.evaluation(mode='validation', dataset_list=[self._get_validation_dataset(dataset_cls)])
+            val_averages, val_metric = self.evaluation(mode='validation',
+                                                       dataset_list=[self._get_validation_dataset(dataset_cls)])
             cache[Key.VALIDATION_LOG].append([*val_averages.get(), *val_metric.get()])
             out.update(**self._save_if_better(ep, val_metric))
 

@@ -82,20 +82,20 @@ class COINNTrainer(_NNTrainer):
 
     def validation_distributed(self, dataset_cls):
         out = {}
-        avg, scores = self.evaluation(mode='validation_dist', save_pred=False,
-                                      dataset_list=[self._get_validation_dataset(dataset_cls)])
-        out[Key.VALIDATION_SERIALIZABLE] = [vars(avg), vars(scores)]
+        avg, metrics = self.evaluation(mode='validation_dist', save_pred=False,
+                                       dataset_list=[self._get_validation_dataset(dataset_cls)])
+        out[Key.VALIDATION_SERIALIZABLE] = [vars(avg), vars(metrics)]
         out.update(**self.next_epoch())
-        out.update(**self._on_epoch_end(self.cache['epoch'], None, None, avg, scores))
+        out.update(**self._on_epoch_end(self.cache['epoch'], None, None, avg, metrics))
         out['epoch'] = self.cache['epoch']
         return out
 
     def test_distributed(self, dataset_cls):
         out = {}
         self.load_checkpoint(self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
-        avg, scores = self.evaluation(mode='dist_test', save_pred=True,
-                                      dataset_list=[self._get_test_dataset(dataset_cls)])
-        out[Key.TEST_SERIALIZABLE] = [vars(avg), vars(scores)]
+        avg, metrics = self.evaluation(mode='dist_test', save_pred=True,
+                                       dataset_list=[self._get_test_dataset(dataset_cls)])
+        out[Key.TEST_SERIALIZABLE] = [vars(avg), vars(metrics)]
         out['epoch'] = self.cache['epoch']
         return out
 

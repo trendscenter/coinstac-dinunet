@@ -37,7 +37,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
             cache = {**self.inputspecs[0], 'folds': self._init_folds()}
             cache['seed'] = _conf.current_seed
             cache.update(**kwargs)
-            super().__init__(cache=cache, input={}, state={}, **kw)
+            super().__init__(cache=cache, input={}, state={'clientId': 'LocalMachine'}, **kw)
 
         def _init_folds(self):
             folds = {}
@@ -86,7 +86,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
             return f"{self.dataset_dir}/input/local{site}/simulatorRun"
 
         def run(self, dataset_cls, only_sites: list = None, only_folds: list = None):
-            self.init_nn(True)
+            self.init_nn()
             global_avg, global_metrics = self.new_averages(), self.new_metrics()
 
             if only_sites is not None:

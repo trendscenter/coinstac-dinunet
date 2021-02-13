@@ -82,15 +82,22 @@ class COINNLocal:
         self.cache['current_nn_state'] = 'current.nn.pt'
         self.cache['best_nn_state'] = 'best.nn.pt'
         trainer.cache_data_indices(dataset_cls, split_key='train')
-        trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
 
         out['phase'] = Phase.COMPUTATION
         if self.cache['pretrain_epochs'] >= 1 and self.cache['pretrain']:
-            out['phase'] = Phase.PRE_COMPUTATION
+            if self.args.get('gpus') is not None:
+                trainer.cache['gpus'] = self.args.get('gpus')
+            trainer.init_nn(init_weights=True)
             out.update(**trainer.train_local(dataset_cls))
+            trainer.cache['gpus'] = self.cache['args'].get('gpus')
+            out['phase'] = Phase.PRE_COMPUTATION
 
         if self.cache['pretrain_epochs'] >= 1 and any([r['pretrain'] for r in self._GLOBAL['runs'].values()]):
             out['phase'] = Phase.PRE_COMPUTATION
+
+        if out['phase'] == Phase.COMPUTATION:
+            trainer.init_nn(init_weights=True)
+            trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
         return out
 
     def compute(self, dataset_cls, trainer_cls):
@@ -119,7 +126,6 @@ class COINNLocal:
             self.cache['log_dir'] = self.state['outputDirectory'] + _sep + self.cache[
                 'computation_id'] + _sep + f"fold_{self.cache['split_ix']}"
             _os.makedirs(self.cache['log_dir'], exist_ok=True)
-            trainer.init_nn(init_weights=True)
             self.out.update(**self._init_nn(trainer, dataset_cls))
 
         elif self.out['phase'] == Phase.PRE_COMPUTATION and self.input.get('pretrained_weights'):
