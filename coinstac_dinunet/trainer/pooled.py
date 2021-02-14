@@ -113,9 +113,9 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
                 test_averages, test_metrics = self.evaluation(mode='test', dataset_list=[test_datasets], save_pred=True)
 
                 global_avg.accumulate(test_averages), global_metrics.accumulate(test_metrics)
-                self.cache['test_score'] = [[*test_averages.get(), *test_metrics.get()]]
+                self.cache[Key.TEST_METRICS] = [[*test_averages.get(), *test_metrics.get()]]
                 info(f"Fold {fold_ix}, {self.cache['test_score'][0]}", self.cache.get('verbose'))
-                _utils.save_scores(self.cache, log_dir=self.cache['log_dir'], file_keys=['test_score'])
+                _utils.save_scores(self.cache, log_dir=self.cache['log_dir'], file_keys=[Key.TEST_METRICS])
                 _utils.save_cache(self.cache, log_dir=self.cache['log_dir'])
 
             self.cache[Key.GLOBAL_TEST_METRICS] = [[*global_avg.get(), *global_metrics.get()]]
