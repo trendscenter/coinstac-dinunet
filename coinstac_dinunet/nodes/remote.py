@@ -179,9 +179,9 @@ class COINNRemote:
             averages.update(**avg)
             metrics.update(**sc)
 
-        self.cache['_global_test_scores'] = [[*averages.get(), *metrics.get()]]
+        self.cache[Key.GLOBAL_TEST_METRICS] = [[*averages.get(), *metrics.get()]]
         _utils.save_scores(self.cache, self.state['outputDirectory'] + _os.sep + self.cache['computation_id'],
-                           file_keys=['_global_test_scores'])
+                           file_keys=[Key.GLOBAL_TEST_METRICS])
 
         out['results_zip'] = f"{self.cache['computation_id']}_" + '_'.join(str(_datetime.datetime.now()).split(' '))
         _shutil.make_archive(f"{self.state['transferDirectory']}{_os.sep}{out['results_zip']}",
