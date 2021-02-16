@@ -43,24 +43,24 @@ class COINNLocal:
         self.input = _FrozenDict(input)
         self.state = _FrozenDict(state)
         self.data_splitter = data_splitter
-        self.args = {}
-        self.args['computation_id'] = computation_id  #
-        self.args['mode'] = mode  # test/train
-        self.args['batch_size'] = batch_size
-        self.args['local_iterations'] = local_iterations
-        self.args['epochs'] = epochs
-        self.args['pretrain_epochs'] = pretrain_epochs
-        self.args['learning_rate'] = learning_rate
-        self.args['gpus'] = gpus
-        self.args['pin_memory'] = pin_memory
-        self.args['num_workers'] = num_workers
-        self.args['load_limit'] = load_limit
-        self.args['pretrained_path'] = pretrained_path
-        self.args['patience'] = patience if patience else epochs
-        self.args['num_folds'] = num_folds
-        self.args['split_ratio'] = split_ratio
-        self.args.update(**kw)
-        self.args = _FrozenDict(self.args)
+        self._args = {}
+        self._args['computation_id'] = computation_id  #
+        self._args['mode'] = mode  # test/train
+        self._args['batch_size'] = batch_size
+        self._args['local_iterations'] = local_iterations
+        self._args['epochs'] = epochs
+        self._args['pretrain_epochs'] = pretrain_epochs
+        self._args['learning_rate'] = learning_rate
+        self._args['gpus'] = gpus
+        self._args['pin_memory'] = pin_memory
+        self._args['num_workers'] = num_workers
+        self._args['load_limit'] = load_limit
+        self._args['pretrained_path'] = pretrained_path
+        self._args['patience'] = patience if patience else epochs
+        self._args['num_folds'] = num_folds
+        self._args['split_ratio'] = split_ratio
+        self._args.update(**kw)
+        self._args = _FrozenDict(self._args)
         self._GLOBAL = {}
 
     def _check_args(self):
@@ -85,11 +85,11 @@ class COINNLocal:
 
         out['phase'] = Phase.COMPUTATION
         if self.cache['pretrain_epochs'] >= 1 and self.cache['pretrain']:
-            if self.args.get('gpus') is not None:
-                trainer.cache['gpus'] = self.args.get('gpus')
+            if self._args.get('gpus') is not None:
+                trainer.cache['gpus'] = self._args.get('gpus')
             trainer.init_nn(init_weights=True)
             out.update(**trainer.train_local(dataset_cls))
-            trainer.cache['gpus'] = self.cache['args'].get('gpus')
+            trainer.cache['gpus'] = self.cache['inputspec'].get('gpus')
             out['phase'] = Phase.PRE_COMPUTATION
 
         if self.cache['pretrain_epochs'] >= 1 and any([r['pretrain'] for r in self._GLOBAL['runs'].values()]):
@@ -107,11 +107,11 @@ class COINNLocal:
         if self.out['phase'] == Phase.INIT_RUNS:
             """ Generate folds as specified.   """
             self.cache.update(**self.input)
-            for k in self.args:
+            for k in self._args:
                 if self.cache.get(k) is None:
-                    self.cache[k] = self.args[k]
+                    self.cache[k] = self._args[k]
             self.out.update(**self._init_runs())
-            self.cache['args'] = _FrozenDict(self.cache)
+            self.cache['inputspec'] = _FrozenDict({**self.cache})
             self.cache['verbose'] = False
             self._check_args()
 
@@ -172,7 +172,7 @@ class COINNLocal:
 
             elif all(m == Mode.TEST for m in self._GLOBAL['modes'].values()):
                 self.out.update(**trainer.test_distributed(dataset_cls))
-                self.out['mode'] = self.cache['args']['mode']
+                self.out['mode'] = self.cache['inputspec']['mode']
                 self.out['phase'] = Phase.NEXT_RUN_WAITING
 
         elif self.out['phase'] == Phase.SUCCESS:

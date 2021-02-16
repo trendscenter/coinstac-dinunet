@@ -61,7 +61,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
                 path = self.base_directory(site) + _os.sep + self.inputspecs[site]['split_dir']
                 split = _json.loads(open(path + _os.sep + split).read())
                 dataset.add(files=split[split_key],
-                            cache={'args': self.inputspecs[site]},
+                            cache={'inputspec': self.inputspecs[site]},
                             state={'clientId': site, "baseDirectory": self.base_directory(site)})
             return dataset
 
@@ -101,7 +101,6 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
             for fold_ix in folds:
                 self.cache['fold_ix'] = fold_ix
                 self.cache['log_dir'] = self.log_dir + _os.sep + f'fold_{fold_ix}'
-                self.cache['args'] = {**self.cache}
                 _os.makedirs(self.cache['log_dir'], exist_ok=True)
 
                 if self.cache['mode'] == Mode.TRAIN:
@@ -116,7 +115,6 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
                 self.cache[Key.TEST_METRICS] = [[*test_averages.get(), *test_metrics.get()]]
                 info(f"Fold {fold_ix}, {self.cache[Key.TEST_METRICS][0]}", self.cache.get('verbose'))
                 _utils.save_scores(self.cache, log_dir=self.cache['log_dir'], file_keys=[Key.TEST_METRICS])
-                _utils.save_cache(self.cache, log_dir=self.cache['log_dir'])
 
             self.cache[Key.GLOBAL_TEST_METRICS] = [[*global_avg.get(), *global_metrics.get()]]
             success(f"Global: {self.cache[Key.GLOBAL_TEST_METRICS]}", self.cache.get('verbose'))

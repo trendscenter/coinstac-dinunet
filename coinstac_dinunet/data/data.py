@@ -42,7 +42,7 @@ class COINNDataset(_Dataset):
         self.mode = mode
         self.limit = limit
         self.state = {}
-        self.dataspecs = {}
+        self.inputspecs = {}
         self.indices = []
 
     def load_index(self, site, file):
@@ -78,10 +78,10 @@ class COINNDataset(_Dataset):
     def transforms(self, **kw):
         return None
 
-    def path(self, site, dspec_key, root_dir='baseDirectory'):
-        return self.state[site][root_dir] + _os.sep + self.dataspecs[site][dspec_key]
+    def path(self, site, inputspec_key, root_dir='baseDirectory'):
+        return self.state[site][root_dir] + _os.sep + self.inputspecs[site][inputspec_key]
 
     def add(self, files, cache: dict = None, state: dict = None):
         self.state[state['clientId']] = state
-        self.dataspecs[state['clientId']] = cache['args']
+        self.inputspecs[state['clientId']] = cache['inputspec']
         self._load_indices(site=state['clientId'], files=files, verbose=False)
