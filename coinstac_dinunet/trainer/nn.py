@@ -239,6 +239,7 @@ class NNTrainer:
         self._save_progress(cache, epoch=ep)
         cache['best_local_epoch'] = self.cache['best_local_epoch']
         cache['best_local_score'] = self.cache['best_local_score']
+        cache.update(**self.cache)
         _utils.save_cache(cache, self.cache['log_dir'])
         return out
 
@@ -351,7 +352,7 @@ class NNTrainer:
          For example: the implementation below will stop training if the validation
          scores does not improve within a 'patience' number of epochs.
         """
-        return kw.get('epoch') - self.cache['best_local_epoch'] >= self.cache['args'].get('patience', 'epochs')
+        return kw.get('epoch') - self.cache['best_local_epoch'] >= self.cache.get('patience', 'epochs')
 
     def _set_log_headers(self):
         self.cache['log_header'] = 'Loss,Accuracy,F1,Precision,Recall'
