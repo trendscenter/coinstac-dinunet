@@ -120,11 +120,11 @@ class NNTrainer:
             self.nn[k].eval()
 
         _cache = {**self.cache}
-        _cache['shuffle'] = False
+        _cache.update(shuffle=False)
         _cache['mode'] = mode
         eval_avg, eval_metrics = self.new_averages(), self.new_metrics()
         eval_loaders = []
-        for dataset in dataset_list:
+        for dataset in [d for d in dataset_list if d is not None]:
             _cache['batch_size'] = _tu.get_safe_batch_size(self.cache['batch_size'], len(dataset))
             eval_loaders.append(_data.COINNDataLoader.new(dataset=dataset, **_cache))
 
@@ -134,15 +134,9 @@ class NNTrainer:
                 metrics = self.new_metrics()
                 avg = self.new_averages()
                 for i, batch in enumerate(loader, 1):
-
                     it = self.iteration(batch)
-                    if not it.get('metrics'):
-                        it['metrics'] = _base_metrics.COINNMetrics()
-
-                    if not it.get('averages'):
-                        it['averages'] = _base_metrics.COINNAverages()
-
                     metrics.accumulate(it['metrics']), avg.accumulate(it['averages'])
+
                     if save_pred:
                         its.append(it)
 
@@ -185,8 +179,8 @@ class NNTrainer:
         self.cache.update(best_local_score=0.0 if metric_direction == 'maximize' else _conf.max_size)
 
         _dset_cache = {**self.cache}
-        _dset_cache['mode'] = 'train'
-        _dset_cache['shuffle'] = True
+        _dset_cache.update(mode=Mode.TRAIN)
+        _dset_cache.update(shuffle=True)
         dataset = self._get_train_dataset(dataset_cls)
         _dset_cache['batch_size'] = _tu.get_safe_batch_size(self.cache['batch_size'], len(dataset))
         loader = _data.COINNDataLoader.new(dataset=dataset, **_dset_cache)
@@ -205,10 +199,6 @@ class NNTrainer:
                 its.append(self.training_iteration_local(i, batch))
                 if i % local_iter == 0:
                     it = self._reduce_iteration(its)
-                    if not it.get('metrics'):
-                        it['metrics'] = _base_metrics.COINNMetrics()
-                    if not it.get('averages'):
-                        it['averages'] = _base_metrics.COINNAverages()
 
                     ep_avg.accumulate(it['averages']), ep_metrics.accumulate(it['metrics'])
                     _avg.accumulate(it['averages']), _metrics.accumulate(it['metrics'])
@@ -298,7 +288,7 @@ class NNTrainer:
         return reduced
 
     def _set_monitor_metric(self):
-        self.cache['monitor_metric'] = 'f1', 'maximize'
+        self.cache['monitor_metric'] = 'time', 'maximize'
 
     def _load_dataset(self, dataset_cls, split_key):
         dataset = dataset_cls(mode=split_key, limit=self.cache.get('load_limit', _conf.max_size))
@@ -326,12 +316,12 @@ class NNTrainer:
         return {}
 
     def new_metrics(self):
-        return _base_metrics.Prf1a()
+        return _base_metrics.COINNMetrics()
 
     def new_averages(self):
         return _base_metrics.COINNAverages(num_averages=1)
 
-    def _on_epoch_end(self, ep, ep_averages, ep_metrics, val_averages, val_metrics):
+    def _on_epoch_end(self, ep, **kw):
         r"""
         Any logic to run after an epoch ends.
         """
@@ -355,4 +345,4 @@ class NNTrainer:
         return kw.get('epoch') - self.cache['best_local_epoch'] >= self.cache.get('patience', 'epochs')
 
     def _set_log_headers(self):
-        self.cache['log_header'] = 'Loss,Accuracy,F1,Precision,Recall'
+        self.cache['log_header'] = 'Loss,Accuracy'

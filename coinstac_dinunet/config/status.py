@@ -1,5 +1,7 @@
 from enum import Enum as _Enum
 
+SHARED_ARGS = ['computation_id', 'mode', 'epochs', 'num_folds', 'patience', 'score_delta']
+
 
 class Phase(str, _Enum):
     INIT_RUNS = 'init_runs'

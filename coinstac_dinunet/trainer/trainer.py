@@ -82,18 +82,19 @@ class COINNTrainer(_NNTrainer):
 
     def validation_distributed(self, dataset_cls):
         out = {}
-        avg, metrics = self.evaluation(mode='validation_dist', save_pred=False,
+        avg, metrics = self.evaluation(mode='validation', save_pred=False,
                                        dataset_list=[self._get_validation_dataset(dataset_cls)])
         out[Key.VALIDATION_SERIALIZABLE] = [vars(avg), vars(metrics)]
-        out.update(**self.next_epoch())
-        out.update(**self._on_epoch_end(self.cache['epoch'], None, None, avg, metrics))
-        out['epoch'] = self.cache['epoch']
+        out[Key.TRAIN_SERIALIZABLE] = self.cache[Key.TRAIN_SERIALIZABLE]
+        self.cache[Key.TRAIN_SERIALIZABLE] = []
+        self.cache['cursor'] = 0
+        _rd.shuffle(self.cache.get('data_indices', []))
         return out
 
     def test_distributed(self, dataset_cls):
         out = {}
         self.load_checkpoint(self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
-        avg, metrics = self.evaluation(mode='dist_test', save_pred=True,
+        avg, metrics = self.evaluation(mode='test', save_pred=True,
                                        dataset_list=[self._get_test_dataset(dataset_cls)])
         out[Key.TEST_SERIALIZABLE] = [vars(avg), vars(metrics)]
         out['epoch'] = self.cache['epoch']
@@ -107,38 +108,17 @@ class COINNTrainer(_NNTrainer):
         else:
             self.cache['data_len'] = (len(dataset) // self.cache['batch_size']) * self.cache['batch_size']
 
-    def next_iter(self):
-        out = {}
-        self.cache['cursor'] += self.cache['batch_size']
-        if self.cache['cursor'] >= self.cache['data_len']:
-            out['mode'] = Mode.VALIDATION_WAITING
-            self.cache['cursor'] = 0
-            _rd.shuffle(self.cache['data_indices'])
-        return out
-
     def next_batch(self, dataset_cls):
         dataset = self._get_train_dataset(dataset_cls)
         dataset.indices = dataset.indices[self.cache['cursor']:]
         loader = _COINNDLoader.new(dataset=dataset, **self.cache)
         return next(loader.__iter__())
 
-    def next_epoch(self):
-
-        """
-        Transition to next epoch after validation.
-        It will set 'train_waiting' status if we need more training
-        Else it will set 'test' status
-        """
+    def next_iter(self):
         out = {}
-        self.cache['epoch'] += 1
-        if self.cache['epoch'] - self.cache.get('best_epoch', self.cache['epoch']) \
-                >= self.cache['patience'] or self.cache['epoch'] >= self.cache['epochs']:
-            out['mode'] = Mode.TEST
-        else:
-            self.cache['cursor'] = 0
-            out['mode'] = Mode.TRAIN_WAITING
+        self.cache['cursor'] += self.cache['batch_size']
+        if self.cache['cursor'] >= self.cache['data_len']:
+            out['mode'] = Mode.VALIDATION_WAITING
             _rd.shuffle(self.cache['data_indices'])
-
-        out[Key.TRAIN_SERIALIZABLE] = self.cache[Key.TRAIN_SERIALIZABLE]
-        self.cache[Key.TRAIN_SERIALIZABLE] = []
+            self.cache['cursor'] = 0
         return out
