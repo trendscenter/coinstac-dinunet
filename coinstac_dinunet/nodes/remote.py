@@ -267,8 +267,8 @@ class COINNRemote:
             self.out['save_current_as_best'] = False
 
     def stop_early(self, **kw):
-        patience_exceeds = self.cache['epoch'] - self.cache['best_epoch'] > self.cache.get('patience',
-                                                                                           self.cache['epochs'])
+        patience_exceeds = self.cache['epoch'] - self.cache['best_val_epoch'] > self.cache.get('patience',
+                                                                                               self.cache['epochs'])
 
         delta = self.cache.get('score_delta', 0.0001)
         monitor_metric, direction = self.cache['monitor_metric']
