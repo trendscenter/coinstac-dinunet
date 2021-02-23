@@ -81,8 +81,10 @@ class COINNLocal:
             out[k] = self.cache.get(k)
         return out
 
-    def _init_nn(self, trainer, dataset_cls):
+    def _init_nn(self, trainer_cls, dataset_cls):
+        import torch
         out = {}
+        trainer = trainer_cls(cache=self.cache, input=self.input, state=self.state)
         self.cache['current_nn_state'] = 'current.nn.pt'
         self.cache['best_nn_state'] = 'best.nn.pt'
         trainer.cache_data_indices(dataset_cls, split_key='train')
@@ -103,6 +105,7 @@ class COINNLocal:
         if out['phase'] == Phase.COMPUTATION:
             trainer.init_nn(init_weights=True)
             trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
+        torch.cuda.empty_cache()
         return out
 
     def compute(self, dataset_cls, trainer_cls):
@@ -131,7 +134,7 @@ class COINNLocal:
             self.cache['log_dir'] = self.state['outputDirectory'] + _sep + self.cache[
                 'computation_id'] + _sep + f"fold_{self.cache['split_ix']}"
             _os.makedirs(self.cache['log_dir'], exist_ok=True)
-            self.out.update(**self._init_nn(trainer, dataset_cls))
+            self.out.update(**self._init_nn(trainer_cls, dataset_cls))
 
         elif self.out['phase'] == Phase.PRE_COMPUTATION and self.input.get('pretrained_weights'):
             trainer.init_nn(init_weights=False)
