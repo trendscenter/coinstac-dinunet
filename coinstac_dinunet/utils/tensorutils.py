@@ -62,4 +62,4 @@ def get_safe_batch_size(batch_size, dataset_len):
     for i in range(batch_size, 0, -1):
         if dataset_len % i > 1:
             return i
-    return dataset_len
+    return min(_conf.min_batch_size, dataset_len, batch_size)
