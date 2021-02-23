@@ -96,7 +96,7 @@ class COINNTrainer(_NNTrainer):
     def cache_data_indices(self, dataset_cls, split_key='train'):
         dataset = self._load_dataset(dataset_cls, split_key)
         self.cache['data_indices'] = dataset.indices
-        if len(dataset) % self.cache['batch_size'] >= self.cache.get('min_batch_size', 4):
+        if len(dataset) % self.cache['batch_size'] >= self.cache.get('min_batch_size', _conf.min_batch_size):
             self.cache['data_len'] = len(dataset)
         else:
             self.cache['data_len'] = (len(dataset) // self.cache['batch_size']) * self.cache['batch_size']
