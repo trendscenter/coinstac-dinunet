@@ -177,7 +177,6 @@ class NNTrainer:
         cache[Key.VALIDATION_LOG] = []
         metric_direction = self.cache['monitor_metric'][1]
         self.cache['best_val_epoch'] = 0
-        self.cache['score_window'] = []
         self.cache.update(best_val_score=0.0 if metric_direction == 'maximize' else _conf.max_size)
 
         _dset_cache = {**self.cache}
@@ -213,20 +212,21 @@ class NNTrainer:
                         _metrics.reset(), _avg.reset()
                     self._on_iteration_end(i=_i, ep=ep, it=it)
 
-            val_averages, val_metric = self.evaluation(mode='validation',
-                                                       dataset_list=[self._get_validation_dataset(dataset_cls)])
-            cache[Key.VALIDATION_LOG].append([*val_averages.get(), *val_metric.get()])
-            out.update(**self._save_if_better(ep, val_metric))
+            if ep % self.cache.get('validation_epochs', 1) == 0:
+                val_averages, val_metric = self.evaluation(mode='validation',
+                                                           dataset_list=[self._get_validation_dataset(dataset_cls)])
+                cache[Key.VALIDATION_LOG].append([*val_averages.get(), *val_metric.get()])
+                out.update(**self._save_if_better(ep, val_metric))
 
-            self._on_epoch_end(ep=ep, ep_averages=ep_avg, ep_metrics=ep_metrics,
-                               val_averages=val_averages, val_metrics=val_metric)
+                self._on_epoch_end(ep=ep, ep_averages=ep_avg, ep_metrics=ep_metrics,
+                                   val_averages=val_averages, val_metrics=val_metric)
 
-            if lazy_debug(ep):
-                self._save_progress(cache, epoch=ep)
+                if lazy_debug(ep):
+                    self._save_progress(cache, epoch=ep)
 
-            if self._stop_early(ep, val_metric, val_averages=val_averages,
-                                epoch_averages=ep_avg, epoch_metrics=ep_metrics):
-                break
+                if self._stop_early(ep, val_metric, val_averages=val_averages,
+                                    epoch_averages=ep_avg, epoch_metrics=ep_metrics):
+                    break
 
         self._save_progress(cache, epoch=ep)
         cache['best_val_epoch'] = self.cache['best_val_epoch']
@@ -336,7 +336,9 @@ class NNTrainer:
         return {}
 
     def _save_progress(self, cache, epoch):
-        _plot.plot_progress(cache, self.cache['log_dir'], plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG], epoch=epoch)
+        _plot.plot_progress(cache, self.cache['log_dir'], plot_keys=[Key.TRAIN_LOG], epoch=epoch)
+        _plot.plot_progress(cache, self.cache['log_dir'], plot_keys=[Key.VALIDATION_LOG],
+                            epoch=epoch // self.cache['validation_epochs'])
 
     def _stop_early(self, epoch, val_metrics=None, **kw):
         return stop_training_(epoch, self.cache)

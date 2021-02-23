@@ -63,7 +63,7 @@ class COINNRemote:
         _os.makedirs(self.cache['log_dir'], exist_ok=True)
 
         metric_direction = self.cache['monitor_metric'][1]
-        self.cache.update(epoch=1, best_val_epoch=0, score_window=[])
+        self.cache.update(epoch=0, best_val_epoch=0)
         self.cache.update(best_val_score=0 if metric_direction == 'maximize' else _conf.max_size)
         self.cache[Key.TRAIN_LOG] = []
         self.cache[Key.VALIDATION_LOG] = []
@@ -135,8 +135,7 @@ class COINNRemote:
         self.cache[Key.TEST_METRICS].append([*test_averages.get(), *test_metrics.get()])
         self.cache[Key.GLOBAL_TEST_SERIALIZABLE].append([vars(test_averages), vars(test_metrics)])
 
-        _plot.plot_progress(self.cache, self.cache['log_dir'],
-                            plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG], epoch=self.cache['epoch'])
+        _plot.plot_progress(self.cache, self.cache['log_dir'], plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG])
         _utils.save_scores(self.cache, self.cache['log_dir'], file_keys=[Key.TEST_METRICS])
 
         _cache = {**self.cache}
@@ -206,6 +205,7 @@ class COINNRemote:
                 self.out.update(**self._reduce_sites())
 
             if self._check(all, 'mode', Mode.VALIDATION_WAITING, self.input):
+                self.cache['epoch'] += 1
                 if self.cache['epoch'] % self.cache['validation_epochs'] == 0:
                     self.out['global_modes'] = self._set_mode(mode=Mode.VALIDATION)
                 else:
@@ -243,7 +243,6 @@ class COINNRemote:
         if epochs_done or self._stop_early(**kw):
             out['mode'] = Mode.TEST
         else:
-            self.cache['epoch'] += 1
             out['mode'] = Mode.TRAIN
         return out
 
@@ -253,9 +252,7 @@ class COINNRemote:
         self.cache[Key.TRAIN_LOG].append([*epoch_info['train_averages'].get(), *epoch_info['train_metrics'].get()])
         self.cache[Key.VALIDATION_LOG].append([*epoch_info['val_averages'].get(), *epoch_info['val_metrics'].get()])
         if lazy_debug(self.cache['epoch']):
-            _plot.plot_progress(self.cache, self.cache['log_dir'],
-                                plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG],
-                                epoch=self.cache['epoch'])
+            _plot.plot_progress(self.cache, self.cache['log_dir'], plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG])
         return epoch_info
 
     def _save_if_better(self, **kw):

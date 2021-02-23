@@ -11,7 +11,6 @@ weights_file = 'weights.tar'
 metrics_eps = 1e-5
 metrics_num_precision = 5
 score_delta = 0.0001
-score_window_len = 3
 score_high = 1.0
 score_low = 0.0
 

@@ -22,6 +22,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
                   batch_size: int = 16,
                   local_iterations: int = 1,
                   epochs: int = 31,
+                  validation_epochs: int = 1,
                   learning_rate: float = 0.001,
                   gpus: List[int] = None,
                   pin_memory: bool = _conf.gpu_available,
@@ -62,7 +63,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
                 path = self.base_directory(site) + _os.sep + self.inputspecs[site]['split_dir']
                 split = _json.loads(open(path + _os.sep + split).read())
                 dataset.add(files=split[split_key],
-                            cache={'inputspec': self.inputspecs[site]},
+                            cache={'args': self.inputspecs[site]},
                             state={'clientId': site, "baseDirectory": self.base_directory(site)})
             return dataset
 
@@ -124,6 +125,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
                          batch_size=batch_size,
                          local_iterations=local_iterations,
                          epochs=epochs,
+                         validation_epochs=validation_epochs,
                          learning_rate=learning_rate,
                          gpus=gpus,
                          pin_memory=pin_memory,

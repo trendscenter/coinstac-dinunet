@@ -1,6 +1,6 @@
 from enum import Enum as _Enum
 
-SHARED_CACHE = ['computation_id', 'mode', 'epochs', 'num_folds', 'patience', 'score_delta', 'score_window_len',
+SHARED_CACHE = ['computation_id', 'mode', 'epochs', 'num_folds', 'patience', 'score_delta',
                 'validation_epochs']
 
 
