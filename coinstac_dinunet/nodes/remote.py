@@ -19,6 +19,7 @@ import coinstac_dinunet.utils.tensorutils as _tu
 from coinstac_dinunet.config.status import *
 from coinstac_dinunet.vision import plotter as _plot
 from coinstac_dinunet.utils.logger import *
+from coinstac_dinunet.utils.utils import performance_improved_, stop_training_
 
 
 class COINNRemote:
@@ -29,11 +30,12 @@ class COINNRemote:
         self.state = _utils.FrozenDict(state)
 
     def _init_runs(self):
-        self.cache.update(computation_id=[v['computation_id'] for _, v in self.input.items()][0])
-        self.cache.update(num_folds=[v['num_folds'] for _, v in self.input.items()][0])
-        self.cache.update(seed=[v.get('seed') for _, v in self.input.items()][0])
-        self.cache.update(seed=_conf.current_seed)
+        site = list(self.input.values())[0]
+        for k in SHARED_CACHE:
+            if site.get(k) is not None:
+                self.cache[k] = site[k]
 
+        self.cache.update(seed=_conf.current_seed)
         self.cache[Key.GLOBAL_TEST_SERIALIZABLE] = []
 
         self.cache['data_size'] = {}
@@ -61,6 +63,7 @@ class COINNRemote:
         _os.makedirs(self.cache['log_dir'], exist_ok=True)
 
         metric_direction = self.cache['monitor_metric'][1]
+        self.cache.update(epoch=0, best_val_epoch=0)
         self.cache.update(best_val_score=0 if metric_direction == 'maximize' else _conf.max_size)
         self.cache[Key.TRAIN_LOG] = []
         self.cache[Key.VALIDATION_LOG] = []
@@ -85,29 +88,18 @@ class COINNRemote:
         return logic(phases)
 
     def _new_metrics(self):
-        return _metric.Prf1a()
+        return _metric.COINNMetrics()
 
     def _new_averages(self):
         return _metric.COINNAverages()
 
     def _set_log_headers(self):
-        self.cache['log_header'] = 'Loss,Accuracy,F1,Precision,Recall'
+        self.cache['log_header'] = 'Loss,Accuracy'
 
     def _set_monitor_metric(self):
-        self.cache['monitor_metric'] = 'f1', 'maximize'
+        self.cache['monitor_metric'] = 'time', 'maximize'
 
-    def _on_epoch_end(self):
-        """
-        #############################
-        Entry status: "train_waiting"
-        Exit status: "train"
-        ############################
-
-        This function runs once an epoch of training is done and all sites
-            run the validation step i.e. all sites in "train_waiting" status.
-        We accumulate training/validation loss and scores of the last epoch.
-        We also send a save current model as best signal to all sites if the global validation score is better than the previously saved one.
-        """
+    def _accumulate_epoch_info(self):
         out = {}
         val_averages, val_metrics = self._new_averages(), self._new_metrics()
         train_averages, train_metrics = self._new_averages(), self._new_metrics()
@@ -116,37 +108,18 @@ class COINNRemote:
                 train_averages.update(**ta), train_metrics.update(**tm)
             va, vm = site_vars[Key.VALIDATION_SERIALIZABLE]
             val_averages.update(**va), val_metrics.update(**vm)
+        out['train_averages'] = train_averages
+        out['train_metrics'] = train_metrics
+        out['val_averages'] = val_averages
+        out['val_metrics'] = val_metrics
 
-        self.cache[Key.TRAIN_LOG].append([*train_averages.get(), *train_metrics.get()])
-        self.cache[Key.VALIDATION_LOG].append([*val_averages.get(), *val_metrics.get()])
-
-        epoch = site_vars['epoch']
-        self._save_if_better(epoch, val_metrics)
-        """Plot every now and then, also at the last of training"""
-        if lazy_debug(epoch):
-            _plot.plot_progress(self.cache, self.cache['log_dir'],
-                                plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG],
-                                epoch=epoch)
-        return out
-
-    def _save_if_better(self, epoch, metrics):
-        r"""
-        Save the current model as best if it has better validation scores.
-        """
-        monitor_metric, direction = self.cache['monitor_metric']
-        sc = getattr(metrics, monitor_metric)
+        sc = getattr(val_metrics, self.cache['monitor_metric'][0])
         if callable(sc):
             sc = sc()
+        out['validation_score'] = sc
+        return out
 
-        if (direction == 'maximize' and sc >= self.cache['best_val_score']) or (
-                direction == 'minimize' and sc <= self.cache['best_val_score']):
-            self.out['save_current_as_best'] = True
-            self.cache['best_val_score'] = sc
-            self.cache['best_val_epoch'] = epoch
-        else:
-            self.out['save_current_as_best'] = False
-
-    def _save_scores(self):
+    def _on_run_end(self):
         """
         ########################
         Entry: phase "next_run_waiting"
@@ -162,12 +135,11 @@ class COINNRemote:
         self.cache[Key.TEST_METRICS].append([*test_averages.get(), *test_metrics.get()])
         self.cache[Key.GLOBAL_TEST_SERIALIZABLE].append([vars(test_averages), vars(test_metrics)])
 
-        _plot.plot_progress(self.cache, self.cache['log_dir'],
-                            plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG], epoch=site_vars['epoch'])
+        _plot.plot_progress(self.cache, self.cache['log_dir'], plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG])
         _utils.save_scores(self.cache, self.cache['log_dir'], file_keys=[Key.TEST_METRICS])
 
         _cache = {**self.cache}
-        _cache['data_size'] = []
+        _cache.update(data_size=[])
         _cache[Key.GLOBAL_TEST_SERIALIZABLE] = _cache[Key.GLOBAL_TEST_SERIALIZABLE][-1]
         _utils.save_cache(_cache, self.cache['log_dir'])
 
@@ -233,23 +205,24 @@ class COINNRemote:
                 self.out.update(**self._reduce_sites())
 
             if self._check(all, 'mode', Mode.VALIDATION_WAITING, self.input):
-                self.out['global_modes'] = self._set_mode(mode=Mode.VALIDATION)
+                self.cache['epoch'] += 1
+                if self.cache['epoch'] % self.cache['validation_epochs'] == 0:
+                    self.out['global_modes'] = self._set_mode(mode=Mode.VALIDATION)
+                else:
+                    self.out['global_modes'] = self._set_mode(mode=Mode.TRAIN)
 
             if self._check(all, 'mode', Mode.TRAIN_WAITING, self.input):
-                self.out.update(**self._on_epoch_end())
-                self.out['global_modes'] = self._set_mode(mode=Mode.TRAIN)
-
-            if self._check(all, 'mode', Mode.TEST, self.input):
-                self.out.update(**self._on_epoch_end())
-                self.out['global_modes'] = self._set_mode(mode=Mode.TEST)
+                epoch_info = self._on_epoch_end()
+                nxt_epoch = self._next_epoch(**epoch_info)
+                self.out['global_modes'] = self._set_mode(mode=nxt_epoch['mode'])
 
         if self._check(all, 'phase', Phase.NEXT_RUN_WAITING, self.input):
             """
             This block runs when a fold has completed all train, test, validation phase.
             We save all the scores and plot the results.
-            We transition to new fold if there is any left, else we stop the distributed computation with a success signal.
+            We transition to new fold if there is any left, else we stop with a success signal.
             """
-            self._save_scores()
+            self._on_run_end()
             if len(self.cache['folds']) > 0:
                 self.out['nn'] = {}
                 self.out['global_runs'] = self._next_run()
@@ -263,6 +236,31 @@ class COINNRemote:
             {'output': self.out, 'cache': self.cache,
              'success': self._check(all, 'phase', Phase.SUCCESS, self.input)})
         _sys.stdout.write(output)
+
+    def _next_epoch(self, **kw):
+        out = {}
+        epochs_done = self.cache['epoch'] > self.cache['epochs']
+        if epochs_done or self._stop_early(**kw):
+            out['mode'] = Mode.TEST
+        else:
+            out['mode'] = Mode.TRAIN
+        return out
+
+    def _on_epoch_end(self):
+        epoch_info = self._accumulate_epoch_info()
+        self._save_if_better(**epoch_info)
+        self.cache[Key.TRAIN_LOG].append([*epoch_info['train_averages'].get(), *epoch_info['train_metrics'].get()])
+        self.cache[Key.VALIDATION_LOG].append([*epoch_info['val_averages'].get(), *epoch_info['val_metrics'].get()])
+        if lazy_debug(self.cache['epoch']):
+            _plot.plot_progress(self.cache, self.cache['log_dir'], plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG])
+        return epoch_info
+
+    def _save_if_better(self, **kw):
+        val_score = kw['val_metrics'].extract(self.cache['monitor_metric'][0])
+        self.out['save_current_as_best'] = performance_improved_(self.cache['epoch'], val_score, self.cache)
+
+    def _stop_early(self, **kw):
+        return stop_training_(self.cache['epoch'], self.cache)
 
     def _reduce_sites(self):
         """

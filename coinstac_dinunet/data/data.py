@@ -83,5 +83,5 @@ class COINNDataset(_Dataset):
 
     def add(self, files, cache: dict = None, state: dict = None):
         self.state[state['clientId']] = state
-        self.inputspecs[state['clientId']] = cache['inputspec']
+        self.inputspecs[state['clientId']] = cache['args']
         self._load_indices(site=state['clientId'], files=files, verbose=False)

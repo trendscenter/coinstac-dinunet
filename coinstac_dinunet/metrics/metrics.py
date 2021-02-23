@@ -89,6 +89,12 @@ class COINNMetrics(SerializableMetrics):
     def time(self):
         return _time.time()
 
+    def extract(self, name):
+        sc = getattr(self, name)
+        if callable(sc):
+            sc = sc()
+        return sc
+
 
 class COINNAverages(COINNMetrics):
     def __init__(self, num_averages=1, **kw):

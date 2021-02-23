@@ -14,6 +14,7 @@ from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.config.status import *
 from .nn import NNTrainer as _NNTrainer
 from coinstac_dinunet import COINNLocal
+from coinstac_dinunet.utils.utils import performance_improved_
 
 
 def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
@@ -21,6 +22,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
                   batch_size: int = 16,
                   local_iterations: int = 1,
                   epochs: int = 31,
+                  validation_epochs: int = 1,
                   learning_rate: float = 0.001,
                   gpus: List[int] = None,
                   pin_memory: bool = _conf.gpu_available,
@@ -55,30 +57,24 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
             return inputspec
 
         def _load_dataset(self, dataset_cls, split_key):
-            dataset = dataset_cls(mode='pre_train', limit=self.cache.get('load_limit', _conf.max_size))
+            dataset = dataset_cls(mode='train', limit=self.cache.get('load_limit', _conf.max_size))
             for site, fold in self.cache['folds'].items():
                 split = fold[self.cache['fold_ix']]
                 path = self.base_directory(site) + _os.sep + self.inputspecs[site]['split_dir']
                 split = _json.loads(open(path + _os.sep + split).read())
                 dataset.add(files=split[split_key],
-                            cache={'inputspec': self.inputspecs[site]},
+                            cache={'args': self.inputspecs[site]},
                             state={'clientId': site, "baseDirectory": self.base_directory(site)})
             return dataset
 
-        def _save_if_better(self, epoch, metrics):
-            monitor_metric, direction = self.cache['monitor_metric']
-            sc = getattr(metrics, monitor_metric)
-            if callable(sc):
-                sc = sc()
-            if (direction == 'maximize' and sc > self.cache['best_local_score']) or (
-                    direction == 'minimize' and sc < self.cache['best_local_score']):
-                self.cache['best_local_epoch'] = epoch
-                self.cache['best_local_score'] = sc
+        def _save_if_better(self, epoch, val_metrics):
+            val_score = val_metrics.extract(self.cache['monitor_metric'][0])
+            if performance_improved_(epoch, val_score, self.cache):
                 self.save_checkpoint(file_path=self.cache['log_dir'] + _os.sep + _conf.weights_file)
-                success(f"--- ### Best Model Saved!!! --- : {self.cache['best_local_score']}",
+                success(f"--- ### Best Model Saved!!! --- : {self.cache['best_val_score']}",
                         self.cache.get('verbose'))
             else:
-                warn(f"Not best!  {sc}, {self.cache['best_local_score']} in ep: {self.cache['best_local_epoch']}",
+                warn(f"Not best! {val_score}, {self.cache['best_val_score']} in ep: {self.cache['best_val_epoch']}",
                      self.cache.get('verbose'))
             return {}
 
@@ -129,6 +125,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
                          batch_size=batch_size,
                          local_iterations=local_iterations,
                          epochs=epochs,
+                         validation_epochs=validation_epochs,
                          learning_rate=learning_rate,
                          gpus=gpus,
                          pin_memory=pin_memory,

@@ -15,6 +15,7 @@ import coinstac_dinunet.config as _conf
 import coinstac_dinunet.data.datautils as _du
 from coinstac_dinunet.config.status import *
 from coinstac_dinunet.utils import FrozenDict as _FrozenDict
+import random as _rd
 
 
 class COINNLocal:
@@ -28,6 +29,7 @@ class COINNLocal:
                  local_iterations: int = 1,
                  pretrain_epochs: int = 0,
                  epochs: int = 31,
+                 validation_epochs: int = 1,
                  learning_rate: float = 0.001,
                  gpus: _List[int] = None,
                  pin_memory: bool = _conf.gpu_available,
@@ -49,6 +51,7 @@ class COINNLocal:
         self._args['batch_size'] = batch_size
         self._args['local_iterations'] = local_iterations
         self._args['epochs'] = epochs
+        self._args['validation_epochs'] = validation_epochs
         self._args['pretrain_epochs'] = pretrain_epochs
         self._args['learning_rate'] = learning_rate
         self._args['gpus'] = gpus
@@ -61,7 +64,7 @@ class COINNLocal:
         self._args['split_ratio'] = split_ratio
         self._args.update(**kw)
         self._args = _FrozenDict(self._args)
-        self._GLOBAL = {}
+        self._GLOBAL_STATE = {}
 
     def _check_args(self):
         assert self.cache['computation_id'] is not None, self._PROMPT_TASK_
@@ -74,11 +77,14 @@ class COINNLocal:
         for k, sp in self.cache['splits'].items():
             sp = _json.loads(open(self.cache['split_dir'] + _os.sep + sp).read())
             out['data_size'][k] = dict((key, len(sp[key])) for key in sp)
-        out['computation_id'] = self.cache['computation_id']
+        for k in SHARED_CACHE:
+            out[k] = self.cache.get(k)
         return out
 
-    def _init_nn(self, trainer, dataset_cls):
+    def _init_nn(self, trainer_cls, dataset_cls):
+        import torch
         out = {}
+        trainer = trainer_cls(cache=self.cache, input=self.input, state=self.state)
         self.cache['current_nn_state'] = 'current.nn.pt'
         self.cache['best_nn_state'] = 'best.nn.pt'
         trainer.cache_data_indices(dataset_cls, split_key='train')
@@ -89,15 +95,17 @@ class COINNLocal:
                 trainer.cache['gpus'] = self._args.get('gpus')
             trainer.init_nn(init_weights=True)
             out.update(**trainer.train_local(dataset_cls))
-            trainer.cache['gpus'] = self.cache['inputspec'].get('gpus')
+            trainer.cache['gpus'] = self.cache['args'].get('gpus')
+            _rd.shuffle(trainer.cache.get('data_indices', []))
             out['phase'] = Phase.PRE_COMPUTATION
 
-        if self.cache['pretrain_epochs'] >= 1 and any([r['pretrain'] for r in self._GLOBAL['runs'].values()]):
+        if self.cache['pretrain_epochs'] >= 1 and any([r['pretrain'] for r in self._GLOBAL_STATE['runs'].values()]):
             out['phase'] = Phase.PRE_COMPUTATION
 
         if out['phase'] == Phase.COMPUTATION:
             trainer.init_nn(init_weights=True)
             trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
+        torch.cuda.empty_cache()
         return out
 
     def compute(self, dataset_cls, trainer_cls):
@@ -111,22 +119,22 @@ class COINNLocal:
                 if self.cache.get(k) is None:
                     self.cache[k] = self._args[k]
             self.out.update(**self._init_runs())
-            self.cache['inputspec'] = _FrozenDict({**self.cache})
+            self.cache['args'] = _FrozenDict({**self.cache})
             self.cache['verbose'] = False
             self._check_args()
 
         elif self.out['phase'] == Phase.INIT_NN:
             """  Initialize neural network/optimizer and GPUs  """
-            self._GLOBAL['runs'] = self.input['global_runs']
-            self.cache.update(**self._GLOBAL['runs'][self.state['clientId']])
-            self.cache.update(epoch=0, cursor=0)
+            self._GLOBAL_STATE['runs'] = self.input['global_runs']
+            self.cache.update(**self._GLOBAL_STATE['runs'][self.state['clientId']])
+            self.cache.update(cursor=0)
             self.cache[Key.TRAIN_SERIALIZABLE] = []
 
             self.cache['split_file'] = self.cache['splits'][self.cache['split_ix']]
             self.cache['log_dir'] = self.state['outputDirectory'] + _sep + self.cache[
                 'computation_id'] + _sep + f"fold_{self.cache['split_ix']}"
             _os.makedirs(self.cache['log_dir'], exist_ok=True)
-            self.out.update(**self._init_nn(trainer, dataset_cls))
+            self.out.update(**self._init_nn(trainer_cls, dataset_cls))
 
         elif self.out['phase'] == Phase.PRE_COMPUTATION and self.input.get('pretrained_weights'):
             trainer.init_nn(init_weights=False)
@@ -135,8 +143,8 @@ class COINNLocal:
             self.out['phase'] = Phase.COMPUTATION
 
         """################################### Computation ##########################################"""
-        self._GLOBAL['modes'] = self.input.get('global_modes', {})
-        self.out['mode'] = self._GLOBAL['modes'].get(self.state['clientId'], self.cache['mode'])
+        self._GLOBAL_STATE['modes'] = self.input.get('global_modes', {})
+        self.out['mode'] = self._GLOBAL_STATE['modes'].get(self.state['clientId'], self.cache['mode'])
 
         if self.out['phase'] == Phase.COMPUTATION:
             """ Train/validation and test phases """
@@ -145,13 +153,12 @@ class COINNLocal:
 
             if self.input.get('save_current_as_best'):
                 trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
-                self.cache['best_epoch'] = self.cache['epoch']
 
             if self.input.get('avg_grads_file'):
                 trainer.step()
                 trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
 
-            if any(m == Mode.TRAIN for m in self._GLOBAL['modes'].values()):
+            if any(m == Mode.TRAIN for m in self._GLOBAL_STATE['modes'].values()):
                 """
                 All sites must begin/resume the training the same time.
                 To enforce this, we have a 'val_waiting' status. Lagged sites will go to this status, 
@@ -160,7 +167,7 @@ class COINNLocal:
                 """
                 self.out.update(**trainer.train_distributed(dataset_cls))
 
-            if all(m == Mode.VALIDATION for m in self._GLOBAL['modes'].values()):
+            if all(m == Mode.VALIDATION for m in self._GLOBAL_STATE['modes'].values()):
                 """
                 Once all sites are in 'val_waiting' status, remote issues 'validation' signal.
                 Once all sites run validation phase, they go to 'train_waiting' status.
@@ -169,10 +176,11 @@ class COINNLocal:
                 We send the confusion matrix to the remote to accumulate global score for model selection.
                 """
                 self.out.update(**trainer.validation_distributed(dataset_cls))
+                self.out['mode'] = Mode.TRAIN_WAITING
 
-            elif all(m == Mode.TEST for m in self._GLOBAL['modes'].values()):
+            elif all(m == Mode.TEST for m in self._GLOBAL_STATE['modes'].values()):
                 self.out.update(**trainer.test_distributed(dataset_cls))
-                self.out['mode'] = self.cache['inputspec']['mode']
+                self.out['mode'] = self.cache['args']['mode']
                 self.out['phase'] = Phase.NEXT_RUN_WAITING
 
         elif self.out['phase'] == Phase.SUCCESS:
