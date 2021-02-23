@@ -213,7 +213,7 @@ class COINNRemote:
 
             if self._check(all, 'mode', Mode.TRAIN_WAITING, self.input):
                 epoch_info = self._on_epoch_end()
-                nxt_epoch = self.next_epoch(**epoch_info)
+                nxt_epoch = self._next_epoch(**epoch_info)
                 self.out['global_modes'] = self._set_mode(mode=nxt_epoch['mode'])
 
         if self._check(all, 'phase', Phase.NEXT_RUN_WAITING, self.input):
@@ -237,7 +237,7 @@ class COINNRemote:
              'success': self._check(all, 'phase', Phase.SUCCESS, self.input)})
         _sys.stdout.write(output)
 
-    def next_epoch(self, **kw):
+    def _next_epoch(self, **kw):
         out = {}
         epochs_done = self.cache['epoch'] > self.cache['epochs']
         if epochs_done or self._stop_early(**kw):

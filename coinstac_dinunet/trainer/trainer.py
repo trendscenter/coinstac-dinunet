@@ -61,10 +61,10 @@ class COINNTrainer(_NNTrainer):
 
         its = []
         for _ in range(self.cache['local_iterations']):
-            it = self.iteration(self.next_batch(dataset_cls))
+            it = self.iteration(self._next_batch(dataset_cls))
             it['loss'].backward()
             its.append(it)
-            out.update(**self.next_iter())
+            out.update(**self._next_iter())
         it = self._reduce_iteration(its)
 
         out['grads_file'] = _conf.grads_file
@@ -102,13 +102,13 @@ class COINNTrainer(_NNTrainer):
         else:
             self.cache['data_len'] = (len(dataset) // self.cache['batch_size']) * self.cache['batch_size']
 
-    def next_batch(self, dataset_cls):
+    def _next_batch(self, dataset_cls):
         dataset = self._get_train_dataset(dataset_cls)
         dataset.indices = dataset.indices[self.cache['cursor']:]
         loader = _COINNDLoader.new(dataset=dataset, **self.cache)
         return next(loader.__iter__())
 
-    def next_iter(self):
+    def _next_iter(self):
         out = {}
         self.cache['cursor'] += self.cache['batch_size']
         if self.cache['cursor'] >= self.cache['data_len']:
