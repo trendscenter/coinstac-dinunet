@@ -71,7 +71,7 @@ class COINNTrainer(_NNTrainer):
         grads = _tu.extract_grads(self.nn[first_model])
         _tu.save_grads(self.state['transferDirectory'] + _sep + out['grads_file'], grads)
         self.cache[Key.TRAIN_SERIALIZABLE].append([vars(it['averages']), vars(it['metrics'])])
-        out.update(**self._on_iteration_end(0, self.cache['epoch'], it))
+        out.update(**self._on_iteration_end(0, 0, it))
         return out
 
     def validation_distributed(self, dataset_cls):
@@ -81,8 +81,8 @@ class COINNTrainer(_NNTrainer):
         out[Key.VALIDATION_SERIALIZABLE] = [vars(avg), vars(metrics)]
         out[Key.TRAIN_SERIALIZABLE] = self.cache[Key.TRAIN_SERIALIZABLE]
         self.cache[Key.TRAIN_SERIALIZABLE] = []
-        self.cache['cursor'] = 0
         _rd.shuffle(self.cache.get('data_indices', []))
+        self.cache['cursor'] = 0
         return out
 
     def test_distributed(self, dataset_cls):
@@ -91,7 +91,6 @@ class COINNTrainer(_NNTrainer):
         avg, metrics = self.evaluation(mode='test', save_pred=True,
                                        dataset_list=[self._get_test_dataset(dataset_cls)])
         out[Key.TEST_SERIALIZABLE] = [vars(avg), vars(metrics)]
-        out['epoch'] = self.cache['epoch']
         return out
 
     def cache_data_indices(self, dataset_cls, split_key='train'):
