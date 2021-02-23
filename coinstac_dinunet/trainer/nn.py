@@ -151,7 +151,7 @@ class NNTrainer:
                 if save_pred:
                     self.save_predictions(loader.dataset, self._reduce_iteration(its))
 
-            info(f"Final {mode} metrics: {eval_avg.get()}, {eval_metrics.get()}", self.cache.get('verbose'))
+            info(f"{mode} metrics: {eval_avg.get()}, {eval_metrics.get()}", self.cache.get('verbose'))
             return eval_avg, eval_metrics
 
     def training_iteration_local(self, i, batch):

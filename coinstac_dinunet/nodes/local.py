@@ -82,7 +82,6 @@ class COINNLocal:
         return out
 
     def _init_nn(self, trainer_cls, dataset_cls):
-        import torch
         out = {}
         trainer = trainer_cls(cache=self.cache, input=self.input, state=self.state)
         self.cache['current_nn_state'] = 'current.nn.pt'
@@ -105,7 +104,6 @@ class COINNLocal:
         if out['phase'] == Phase.COMPUTATION:
             trainer.init_nn(init_weights=True)
             trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
-        torch.cuda.empty_cache()
         return out
 
     def compute(self, dataset_cls, trainer_cls):
