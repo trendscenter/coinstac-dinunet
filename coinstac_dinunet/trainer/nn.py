@@ -18,7 +18,7 @@ import coinstac_dinunet.utils.tensorutils as _tu
 import coinstac_dinunet.vision.plotter as _plot
 from coinstac_dinunet.config.status import *
 from coinstac_dinunet.utils.logger import *
-from .utils import stop_training_
+from coinstac_dinunet.utils.utils import stop_training_
 
 
 class NNTrainer:
@@ -229,8 +229,8 @@ class NNTrainer:
                 break
 
         self._save_progress(cache, epoch=ep)
-        cache['best_local_epoch'] = self.cache['best_local_epoch']
-        cache['best_local_score'] = self.cache['best_local_score']
+        cache['best_val_epoch'] = self.cache['best_val_epoch']
+        cache['best_val_score'] = self.cache['best_val_score']
         cache.update(**self.cache)
         _utils.save_cache(cache, self.cache['log_dir'])
         return out
@@ -339,7 +339,7 @@ class NNTrainer:
         _plot.plot_progress(cache, self.cache['log_dir'], plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG], epoch=epoch)
 
     def _stop_early(self, epoch, val_metrics=None, **kw):
-        return stop_training_(epoch, val_metrics, self.cache)
+        return stop_training_(epoch, self.cache)
 
     def _set_log_headers(self):
         self.cache['log_header'] = 'Loss,Accuracy'

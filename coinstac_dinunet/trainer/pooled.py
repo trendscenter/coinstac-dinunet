@@ -14,7 +14,7 @@ from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.config.status import *
 from .nn import NNTrainer as _NNTrainer
 from coinstac_dinunet import COINNLocal
-from .utils import *
+from coinstac_dinunet.utils.utils import performance_improved_
 
 
 def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
@@ -56,7 +56,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
             return inputspec
 
         def _load_dataset(self, dataset_cls, split_key):
-            dataset = dataset_cls(mode='pre_train', limit=self.cache.get('load_limit', _conf.max_size))
+            dataset = dataset_cls(mode='train', limit=self.cache.get('load_limit', _conf.max_size))
             for site, fold in self.cache['folds'].items():
                 split = fold[self.cache['fold_ix']]
                 path = self.base_directory(site) + _os.sep + self.inputspecs[site]['split_dir']
@@ -67,7 +67,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
             return dataset
 
         def _save_if_better(self, epoch, val_metrics):
-            val_score = val_metrics.attribute(self.cache['monitor_metric'][0])
+            val_score = val_metrics.extract(self.cache['monitor_metric'][0])
             if performance_improved_(epoch, val_score, self.cache):
                 self.save_checkpoint(file_path=self.cache['log_dir'] + _os.sep + _conf.weights_file)
                 success(f"--- ### Best Model Saved!!! --- : {self.cache['best_val_score']}",

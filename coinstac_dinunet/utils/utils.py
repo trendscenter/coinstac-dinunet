@@ -16,14 +16,13 @@ def performance_improved_(epoch, score, cache):
     return improved
 
 
-def stop_training_(epoch, score, cache):
+def stop_training_(epoch, cache):
     monitor_metric, _ = cache['monitor_metric']
     if epoch - cache['best_val_epoch'] > cache.get('patience', cache['epochs']):
         return True
-    if epoch % cache.get('score_window_len', _conf.score_window_len) == 0:
-        avg = sum(cache['score_window']) / len(cache['score_window'])
-        cache['score_window'] = []
-        return abs(avg - cache['best_val_score']) <= cache.get('score_delta', _conf.score_delta)
-    else:
-        cache['score_window'].append(score)
+
+    if cache['monitor_metric'][1] == 'maximize':
+        return cache['best_val_score'] == _conf.score_high
+    elif cache['monitor_metric'][1] == 'minimize':
+        return cache['best_val_score'] == _conf.score_low
     return False

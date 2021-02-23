@@ -19,7 +19,7 @@ import coinstac_dinunet.utils.tensorutils as _tu
 from coinstac_dinunet.config.status import *
 from coinstac_dinunet.vision import plotter as _plot
 from coinstac_dinunet.utils.logger import *
-from coinstac_dinunet.trainer.utils import *
+from coinstac_dinunet.utils.utils import performance_improved_, stop_training_
 
 
 class COINNRemote:
@@ -258,13 +258,12 @@ class COINNRemote:
                                 epoch=self.cache['epoch'])
         return epoch_info
 
-    def _save_if_better(self, val_metrics):
-        val_score = val_metrics.attribute(self.cache['monitor_metric'][0])
+    def _save_if_better(self, **kw):
+        val_score = kw['val_metrics'].extract(self.cache['monitor_metric'][0])
         self.out['save_current_as_best'] = performance_improved_(self.cache['epoch'], val_score, self.cache)
 
     def _stop_early(self, **kw):
-        val_score = kw['val_metrics'].attribute(self.cache['monitor_metric'][0])
-        return stop_training_(self.cache['epoch'], val_score, self.cache)
+        return stop_training_(self.cache['epoch'], self.cache)
 
     def _reduce_sites(self):
         """

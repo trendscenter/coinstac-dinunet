@@ -16,7 +16,7 @@ import coinstac_dinunet.utils.tensorutils as _tu
 from coinstac_dinunet.config.status import *
 from coinstac_dinunet.data import COINNDataLoader as _COINNDLoader
 from .nn import NNTrainer as _NNTrainer
-from .utils import *
+from coinstac_dinunet.utils.utils import performance_improved_
 
 
 class COINNTrainer(_NNTrainer):
@@ -44,7 +44,7 @@ class COINNTrainer(_NNTrainer):
         Save the current model as best if it has better validation scores.
         """
         out = {}
-        val_score = val_metrics.attribute(self.cache['monitor_metric'][0])
+        val_score = val_metrics.extract(self.cache['monitor_metric'][0])
         if performance_improved_(epoch, val_score, self.cache):
             out['weights_file'] = _conf.weights_file
             self.save_checkpoint(file_path=self.state['transferDirectory'] + _sep + out['weights_file'])
