@@ -14,6 +14,7 @@ from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.config.status import *
 from .nn import NNTrainer as _NNTrainer
 from coinstac_dinunet import COINNLocal
+from .utils import *
 
 
 def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
@@ -65,20 +66,14 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
                             state={'clientId': site, "baseDirectory": self.base_directory(site)})
             return dataset
 
-        def _save_if_better(self, epoch, metrics):
-            monitor_metric, direction = self.cache['monitor_metric']
-            sc = getattr(metrics, monitor_metric)
-            if callable(sc):
-                sc = sc()
-            if (direction == 'maximize' and sc > self.cache['best_local_score']) or (
-                    direction == 'minimize' and sc < self.cache['best_local_score']):
-                self.cache['best_local_epoch'] = epoch
-                self.cache['best_local_score'] = sc
+        def _save_if_better(self, epoch, val_metrics):
+            val_score = val_metrics.attribute(self.cache['monitor_metric'][0])
+            if performance_improved_(epoch, val_score, self.cache):
                 self.save_checkpoint(file_path=self.cache['log_dir'] + _os.sep + _conf.weights_file)
-                success(f"--- ### Best Model Saved!!! --- : {self.cache['best_local_score']}",
+                success(f"--- ### Best Model Saved!!! --- : {self.cache['best_val_score']}",
                         self.cache.get('verbose'))
             else:
-                warn(f"Not best!  {sc}, {self.cache['best_local_score']} in ep: {self.cache['best_local_epoch']}",
+                warn(f"Not best! {val_score}, {self.cache['best_val_score']} in ep: {self.cache['best_val_epoch']}",
                      self.cache.get('verbose'))
             return {}
 

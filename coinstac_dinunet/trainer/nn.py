@@ -18,6 +18,7 @@ import coinstac_dinunet.utils.tensorutils as _tu
 import coinstac_dinunet.vision.plotter as _plot
 from coinstac_dinunet.config.status import *
 from coinstac_dinunet.utils.logger import *
+from .utils import stop_training_
 
 
 class NNTrainer:
@@ -175,8 +176,9 @@ class NNTrainer:
         cache[Key.TRAIN_LOG] = []
         cache[Key.VALIDATION_LOG] = []
         metric_direction = self.cache['monitor_metric'][1]
-        self.cache['best_local_epoch'] = 0
-        self.cache.update(best_local_score=0.0 if metric_direction == 'maximize' else _conf.max_size)
+        self.cache['best_val_epoch'] = 0
+        self.cache['score_window'] = []
+        self.cache.update(best_val_score=0.0 if metric_direction == 'maximize' else _conf.max_size)
 
         _dset_cache = {**self.cache}
         _dset_cache.update(mode=Mode.TRAIN)
@@ -222,8 +224,8 @@ class NNTrainer:
             if lazy_debug(ep):
                 self._save_progress(cache, epoch=ep)
 
-            if self._stop_early(epoch=ep, epoch_averages=ep_avg, epoch_metrics=ep_metrics,
-                                validation_averages=val_averages, validation_metric=val_metric):
+            if self._stop_early(ep, val_metric, val_averages=val_averages,
+                                epoch_averages=ep_avg, epoch_metrics=ep_metrics):
                 break
 
         self._save_progress(cache, epoch=ep)
@@ -312,7 +314,7 @@ class NNTrainer:
     def _get_test_dataset(self, dataset_cls):
         return self._load_dataset(dataset_cls, split_key='test')
 
-    def _save_if_better(self, epoch, metrics):
+    def _save_if_better(self, epoch, val_metrics):
         return {}
 
     def new_metrics(self):
@@ -336,13 +338,8 @@ class NNTrainer:
     def _save_progress(self, cache, epoch):
         _plot.plot_progress(cache, self.cache['log_dir'], plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG], epoch=epoch)
 
-    def _stop_early(self, **kw):
-        r"""
-        Stop the training based on some criteria.
-         For example: the implementation below will stop training if the validation
-         scores does not improve within a 'patience' number of epochs.
-        """
-        return kw.get('epoch') - self.cache['best_local_epoch'] >= self.cache.get('patience', 'epochs')
+    def _stop_early(self, epoch, val_metrics=None, **kw):
+        return stop_training_(epoch, val_metrics, self.cache)
 
     def _set_log_headers(self):
         self.cache['log_header'] = 'Loss,Accuracy'

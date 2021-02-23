@@ -10,10 +10,12 @@ avg_grads_file = f'avg_grads{grad_file_ext}'
 weights_file = 'weights.tar'
 metrics_eps = 1e-5
 metrics_num_precision = 5
+score_delta = 0.0001
+score_window_len = 3
 
 gpu_available = _torch.cuda.is_available()
 num_gpus = _torch.cuda.device_count()
 
 max_size = _sys.maxsize
 
-current_seed = _random.randint(0, 2**24)
+current_seed = _random.randint(0, 2 ** 24)

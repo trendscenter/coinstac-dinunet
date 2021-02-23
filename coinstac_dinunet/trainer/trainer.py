@@ -16,6 +16,7 @@ import coinstac_dinunet.utils.tensorutils as _tu
 from coinstac_dinunet.config.status import *
 from coinstac_dinunet.data import COINNDataLoader as _COINNDLoader
 from .nn import NNTrainer as _NNTrainer
+from .utils import *
 
 
 class COINNTrainer(_NNTrainer):
@@ -38,21 +39,14 @@ class COINNTrainer(_NNTrainer):
         first_optim = list(self.optimizer.keys())[0]
         self.optimizer[first_optim].step()
 
-    def _save_if_better(self, epoch, metrics):
+    def _save_if_better(self, epoch, val_metrics):
         r"""
         Save the current model as best if it has better validation scores.
         """
         out = {}
-        monitor_metric, direction = self.cache['monitor_metric']
-        sc = getattr(metrics, monitor_metric)
-        if callable(sc):
-            sc = sc()
-
-        if (direction == 'maximize' and sc > self.cache['best_local_score']) or (
-                direction == 'minimize' and sc < self.cache['best_local_score']):
+        val_score = val_metrics.attribute(self.cache['monitor_metric'][0])
+        if performance_improved_(epoch, val_score, self.cache):
             out['weights_file'] = _conf.weights_file
-            self.cache['best_local_epoch'] = epoch
-            self.cache['best_local_score'] = sc
             self.save_checkpoint(file_path=self.state['transferDirectory'] + _sep + out['weights_file'])
         return out
 

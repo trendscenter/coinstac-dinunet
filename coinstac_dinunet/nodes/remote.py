@@ -19,6 +19,7 @@ import coinstac_dinunet.utils.tensorutils as _tu
 from coinstac_dinunet.config.status import *
 from coinstac_dinunet.vision import plotter as _plot
 from coinstac_dinunet.utils.logger import *
+from coinstac_dinunet.trainer.utils import *
 
 
 class COINNRemote:
@@ -30,7 +31,7 @@ class COINNRemote:
 
     def _init_runs(self):
         site = list(self.input.values())[0]
-        for k in SHARED_ARGS:
+        for k in SHARED_CACHE:
             if site.get(k) is not None:
                 self.cache[k] = site[k]
 
@@ -62,7 +63,7 @@ class COINNRemote:
         _os.makedirs(self.cache['log_dir'], exist_ok=True)
 
         metric_direction = self.cache['monitor_metric'][1]
-        self.cache.update(epoch=1)
+        self.cache.update(epoch=1, best_val_epoch=0, score_window=[])
         self.cache.update(best_val_score=0 if metric_direction == 'maximize' else _conf.max_size)
         self.cache[Key.TRAIN_LOG] = []
         self.cache[Key.VALIDATION_LOG] = []
@@ -98,17 +99,6 @@ class COINNRemote:
     def _set_monitor_metric(self):
         self.cache['monitor_metric'] = 'time', 'maximize'
 
-    def _on_epoch_end(self):
-        epoch_info = self._accumulate_epoch_info()
-        self._save_if_better(**epoch_info)
-        self.cache[Key.TRAIN_LOG].append([*epoch_info['train_averages'].get(), *epoch_info['train_metrics'].get()])
-        self.cache[Key.VALIDATION_LOG].append([*epoch_info['val_averages'].get(), *epoch_info['val_metrics'].get()])
-        if lazy_debug(self.cache['epoch']):
-            _plot.plot_progress(self.cache, self.cache['log_dir'],
-                                plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG],
-                                epoch=self.cache['epoch'])
-        return epoch_info
-
     def _accumulate_epoch_info(self):
         out = {}
         val_averages, val_metrics = self._new_averages(), self._new_metrics()
@@ -122,6 +112,11 @@ class COINNRemote:
         out['train_metrics'] = train_metrics
         out['val_averages'] = val_averages
         out['val_metrics'] = val_metrics
+
+        sc = getattr(val_metrics, self.cache['monitor_metric'][0])
+        if callable(sc):
+            sc = sc()
+        out['validation_score'] = sc
         return out
 
     def _on_run_end(self):
@@ -211,7 +206,10 @@ class COINNRemote:
                 self.out.update(**self._reduce_sites())
 
             if self._check(all, 'mode', Mode.VALIDATION_WAITING, self.input):
-                self.out['global_modes'] = self._set_mode(mode=Mode.VALIDATION)
+                if self.cache['epoch'] % self.cache['validation_epochs'] == 0:
+                    self.out['global_modes'] = self._set_mode(mode=Mode.VALIDATION)
+                else:
+                    self.out['global_modes'] = self._set_mode(mode=Mode.TRAIN)
 
             if self._check(all, 'mode', Mode.TRAIN_WAITING, self.input):
                 epoch_info = self._on_epoch_end()
@@ -242,47 +240,31 @@ class COINNRemote:
     def next_epoch(self, **kw):
         out = {}
         epochs_done = self.cache['epoch'] > self.cache['epochs']
-        if epochs_done or self.stop_early(**kw):
+        if epochs_done or self._stop_early(**kw):
             out['mode'] = Mode.TEST
         else:
             self.cache['epoch'] += 1
             out['mode'] = Mode.TRAIN
         return out
 
-    def _save_if_better(self, **kw):
-        r"""
-        Save the current model as best if it has better validation scores.
-        """
-        monitor_metric, direction = self.cache['monitor_metric']
-        sc = getattr(kw['val_metrics'], monitor_metric)
-        if callable(sc):
-            sc = sc()
+    def _on_epoch_end(self):
+        epoch_info = self._accumulate_epoch_info()
+        self._save_if_better(**epoch_info)
+        self.cache[Key.TRAIN_LOG].append([*epoch_info['train_averages'].get(), *epoch_info['train_metrics'].get()])
+        self.cache[Key.VALIDATION_LOG].append([*epoch_info['val_averages'].get(), *epoch_info['val_metrics'].get()])
+        if lazy_debug(self.cache['epoch']):
+            _plot.plot_progress(self.cache, self.cache['log_dir'],
+                                plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG],
+                                epoch=self.cache['epoch'])
+        return epoch_info
 
-        if (direction == 'maximize' and sc >= self.cache['best_val_score']) or (
-                direction == 'minimize' and sc <= self.cache['best_val_score']):
-            self.out['save_current_as_best'] = True
-            self.cache['best_val_score'] = sc
-            self.cache['best_val_epoch'] = self.cache['epoch']
-        else:
-            self.out['save_current_as_best'] = False
+    def _save_if_better(self, val_metrics):
+        val_score = val_metrics.attribute(self.cache['monitor_metric'][0])
+        self.out['save_current_as_best'] = performance_improved_(self.cache['epoch'], val_score, self.cache)
 
-    def stop_early(self, **kw):
-        patience_exceeds = self.cache['epoch'] - self.cache['best_val_epoch'] > self.cache.get('patience',
-                                                                                               self.cache['epochs'])
-
-        delta = self.cache.get('score_delta', 0.0001)
-        monitor_metric, direction = self.cache['monitor_metric']
-        score = getattr(kw['val_metrics'], monitor_metric)
-        if callable(score):
-            score = score()
-
-        improved = True
-        if direction == 'maximize':
-            improved = score > self.cache['best_val_score'] + delta
-        elif direction == 'minimize':
-            improved = score < self.cache['best_val_score'] - delta
-
-        return patience_exceeds or not improved
+    def _stop_early(self, **kw):
+        val_score = kw['val_metrics'].attribute(self.cache['monitor_metric'][0])
+        return stop_training_(self.cache['epoch'], val_score, self.cache)
 
     def _reduce_sites(self):
         """

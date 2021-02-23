@@ -29,6 +29,7 @@ class COINNLocal:
                  local_iterations: int = 1,
                  pretrain_epochs: int = 0,
                  epochs: int = 31,
+                 validation_epochs: int = 1,
                  learning_rate: float = 0.001,
                  gpus: _List[int] = None,
                  pin_memory: bool = _conf.gpu_available,
@@ -50,6 +51,7 @@ class COINNLocal:
         self._args['batch_size'] = batch_size
         self._args['local_iterations'] = local_iterations
         self._args['epochs'] = epochs
+        self._args['validation_epochs'] = validation_epochs
         self._args['pretrain_epochs'] = pretrain_epochs
         self._args['learning_rate'] = learning_rate
         self._args['gpus'] = gpus
@@ -75,7 +77,7 @@ class COINNLocal:
         for k, sp in self.cache['splits'].items():
             sp = _json.loads(open(self.cache['split_dir'] + _os.sep + sp).read())
             out['data_size'][k] = dict((key, len(sp[key])) for key in sp)
-        for k in SHARED_ARGS:
+        for k in SHARED_CACHE:
             out[k] = self.cache.get(k)
         return out
 
