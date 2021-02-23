@@ -88,7 +88,7 @@ class COINNRemote:
         return logic(phases)
 
     def _new_metrics(self):
-        return _metric.Prf1a()
+        return _metric.COINNMetrics()
 
     def _new_averages(self):
         return _metric.COINNAverages()
