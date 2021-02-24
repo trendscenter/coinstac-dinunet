@@ -27,7 +27,6 @@ class COINNLocal:
                  mode: str = None,
                  batch_size: int = 16,
                  local_iterations: int = 1,
-                 pretrain_epochs: int = 0,
                  epochs: int = 31,
                  validation_epochs: int = 1,
                  learning_rate: float = 0.001,
@@ -39,6 +38,7 @@ class COINNLocal:
                  patience: int = None,
                  num_folds: int = None,
                  split_ratio: _List[float] = (0.6, 0.2, 0.2),
+                 pretrain_args: dict = None,
                  data_splitter: _Callable = None, **kw):
         self.out = {}
         self.cache = cache
@@ -52,7 +52,6 @@ class COINNLocal:
         self._args['local_iterations'] = local_iterations
         self._args['epochs'] = epochs
         self._args['validation_epochs'] = validation_epochs
-        self._args['pretrain_epochs'] = pretrain_epochs
         self._args['learning_rate'] = learning_rate
         self._args['gpus'] = gpus
         self._args['pin_memory'] = pin_memory
@@ -64,6 +63,7 @@ class COINNLocal:
         self._args['split_ratio'] = split_ratio
         self._args.update(**kw)
         self._args = _FrozenDict(self._args)
+        self._pretrain_args = pretrain_args if pretrain_args is not None else {}
         self._GLOBAL_STATE = {}
 
     def _check_args(self):
@@ -81,29 +81,28 @@ class COINNLocal:
             out[k] = self.cache.get(k)
         return out
 
-    def _init_nn(self, trainer_cls, dataset_cls):
+    def _init_nn_state(self, trainer):
         out = {}
-        trainer = trainer_cls(cache=self.cache, input=self.input, state=self.state)
         self.cache['current_nn_state'] = 'current.nn.pt'
         self.cache['best_nn_state'] = 'best.nn.pt'
-        trainer.cache_data_indices(dataset_cls, split_key='train')
-
+        trainer.init_nn(init_weights=True)
+        trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
         out['phase'] = Phase.COMPUTATION
-        if self.cache['pretrain_epochs'] >= 1 and self.cache['pretrain']:
-            if self._args.get('gpus') is not None:
-                trainer.cache['gpus'] = self._args.get('gpus')
-            trainer.init_nn(init_weights=True)
+        return out
+
+    def _pretrain_local(self, trainer_cls, dataset_cls):
+        out = {}
+        cache = {**self.cache}
+        cache.update(**self._pretrain_args)
+        trainer = trainer_cls(cache=cache, input=self.input, state=self.state)
+        if self._pretrain_args.get('epochs') and self.cache['pretrain']:
+            trainer.init_training_cache()
             out.update(**trainer.train_local(dataset_cls))
-            trainer.cache['gpus'] = self.cache['args'].get('gpus')
             _rd.shuffle(trainer.cache.get('data_indices', []))
             out['phase'] = Phase.PRE_COMPUTATION
 
-        if self.cache['pretrain_epochs'] >= 1 and any([r['pretrain'] for r in self._GLOBAL_STATE['runs'].values()]):
+        if self._pretrain_args.get('epochs') and any([r['pretrain'] for r in self._GLOBAL_STATE['runs'].values()]):
             out['phase'] = Phase.PRE_COMPUTATION
-
-        if out['phase'] == Phase.COMPUTATION:
-            trainer.init_nn(init_weights=True)
-            trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
         return out
 
     def compute(self, dataset_cls, trainer_cls):
@@ -132,7 +131,9 @@ class COINNLocal:
             self.cache['log_dir'] = self.state['outputDirectory'] + _sep + self.cache[
                 'computation_id'] + _sep + f"fold_{self.cache['split_ix']}"
             _os.makedirs(self.cache['log_dir'], exist_ok=True)
-            self.out.update(**self._init_nn(trainer_cls, dataset_cls))
+            self.out.update(**self._init_nn_state(trainer))
+            trainer.cache_data_indices(dataset_cls, split_key='train')
+            self.out.update(**self._pretrain_local(trainer_cls, dataset_cls))
 
         elif self.out['phase'] == Phase.PRE_COMPUTATION and self.input.get('pretrained_weights'):
             trainer.init_nn(init_weights=False)

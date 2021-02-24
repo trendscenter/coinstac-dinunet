@@ -167,29 +167,26 @@ class NNTrainer:
             self.optimizer[first_optim].zero_grad()
         return it
 
-    def train_local(self, dataset_cls):
-        cache = {'seed': self.cache['seed']}
-        out = {}
+    def init_training_cache(self):
         self._set_monitor_metric()
         self._set_log_headers()
-        cache['log_header'] = self.cache['log_header']
-        cache[Key.TRAIN_LOG] = []
-        cache[Key.VALIDATION_LOG] = []
+        self.cache[Key.TRAIN_LOG] = []
+        self.cache[Key.VALIDATION_LOG] = []
         metric_direction = self.cache['monitor_metric'][1]
         self.cache['best_val_epoch'] = 0
         self.cache.update(best_val_score=0.0 if metric_direction == 'maximize' else _conf.max_size)
 
+    def train_local(self, dataset_cls):
+        out = {}
         _dset_cache = {**self.cache}
-        _dset_cache.update(mode=Mode.TRAIN)
-        _dset_cache.update(shuffle=True)
+        _dset_cache.update(mode=Mode.TRAIN, shuffle=True)
         dataset = self._get_train_dataset(dataset_cls)
         _dset_cache['batch_size'] = _tu.get_safe_batch_size(self.cache['batch_size'], len(dataset))
         loader = _data.COINNDataLoader.new(dataset=dataset, **_dset_cache)
 
         local_iter = self.cache.get('local_iterations', 1)
         tot_iter = len(loader) // local_iter
-        cache['epochs'] = self.cache.get('pretrain_epochs', self.cache['epochs'])
-        for ep in range(1, cache['epochs'] + 1):
+        for ep in range(1, self.cache['epochs'] + 1):
             for k in self.nn:
                 self.nn[k].train()
 
@@ -206,33 +203,30 @@ class NNTrainer:
 
                     _i, its = i // local_iter, []
                     if lazy_debug(_i) or _i == tot_iter:
-                        info(f"Ep:{ep}/{cache['epochs']},Itr:{_i}/{tot_iter},{_avg.get()},{_metrics.get()}",
+                        info(f"Ep:{ep}/{self.cache['epochs']},Itr:{_i}/{tot_iter},{_avg.get()},{_metrics.get()}",
                              self.cache.get('verbose'))
-                        cache[Key.TRAIN_LOG].append([*_avg.get(), *_metrics.get()])
+                        self.cache[Key.TRAIN_LOG].append([*_avg.get(), *_metrics.get()])
                         _metrics.reset(), _avg.reset()
                     self._on_iteration_end(i=_i, ep=ep, it=it)
 
             if ep % self.cache.get('validation_epochs', 1) == 0:
                 val_averages, val_metric = self.evaluation(mode='validation',
                                                            dataset_list=[self._get_validation_dataset(dataset_cls)])
-                cache[Key.VALIDATION_LOG].append([*val_averages.get(), *val_metric.get()])
+                self.cache[Key.VALIDATION_LOG].append([*val_averages.get(), *val_metric.get()])
                 out.update(**self._save_if_better(ep, val_metric))
 
                 self._on_epoch_end(ep=ep, ep_averages=ep_avg, ep_metrics=ep_metrics,
                                    val_averages=val_averages, val_metrics=val_metric)
 
                 if lazy_debug(ep):
-                    self._save_progress(cache, epoch=ep)
+                    self._save_progress(self.cache, epoch=ep)
 
                 if self._stop_early(ep, val_metric, val_averages=val_averages,
                                     epoch_averages=ep_avg, epoch_metrics=ep_metrics):
                     break
 
-        self._save_progress(cache, epoch=ep)
-        cache['best_val_epoch'] = self.cache['best_val_epoch']
-        cache['best_val_score'] = self.cache['best_val_score']
-        cache.update(**self.cache)
-        _utils.save_cache(cache, self.cache['log_dir'])
+        self._save_progress(self.cache, epoch=ep)
+        _utils.save_cache(self.cache, self.cache['log_dir'])
         return out
 
     def iteration(self, batch):
