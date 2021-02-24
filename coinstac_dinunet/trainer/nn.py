@@ -71,7 +71,8 @@ class NNTrainer:
                     for mkey in self.nn:
                         self.nn[mkey] = _torch.nn.DataParallel(self.nn[mkey], self.cache['gpus'])
             else:
-                raise Exception(f'*** GPU not detected in {self.state["clientId"]}. ***')
+                pass
+                # raise Exception(f'*** GPU not detected in {self.state["clientId"]}. ***')
         for model_key in self.nn:
             self.nn[model_key] = self.nn[model_key].to(self.device['gpu'])
 

@@ -92,10 +92,11 @@ class COINNLocal:
 
     def _pretrain_local(self, trainer_cls, dataset_cls):
         out = {}
-        cache = {**self.cache}
-        cache.update(**self._pretrain_args)
-        trainer = trainer_cls(cache=cache, input=self.input, state=self.state)
         if self._pretrain_args.get('epochs') and self.cache['pretrain']:
+            cache = {**self.cache}
+            cache.update(**self._pretrain_args)
+            trainer = trainer_cls(cache=cache, input=self.input, state=self.state)
+            trainer.init_nn()
             trainer.init_training_cache()
             out.update(**trainer.train_local(dataset_cls))
             _rd.shuffle(trainer.cache.get('data_indices', []))
