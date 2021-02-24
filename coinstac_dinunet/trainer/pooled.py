@@ -100,6 +100,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
                 _os.makedirs(self.cache['log_dir'], exist_ok=True)
 
                 if self.cache['mode'] == Mode.TRAIN:
+                    self.init_training_cache()
                     self.train_local(dataset_cls)
 
                 if self.cache['mode'] == 'train' or self.cache.get('pretrained_path') is None:

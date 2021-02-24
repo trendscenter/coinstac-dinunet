@@ -19,7 +19,7 @@ _COLORS = ['black', 'blue', 'maroon', 'magenta', 'teal', 'red', 'blueviolet', 'b
            'chartreuse', 'coral', 'darkslateblue', 'cornflowerblue', 'indigo', 'cyan', 'navy']
 
 
-def plot_progress(cache, log_dir, plot_keys=[], num_points=21, epoch=None):
+def plot_progress(cache, log_dir, plot_keys=[], num_points=15, epoch=None):
     r"""
     Custom plot to plot data from the cache by keys.
     """
