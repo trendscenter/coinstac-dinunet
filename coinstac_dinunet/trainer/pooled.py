@@ -82,7 +82,6 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
             return f"{self.dataset_dir}/input/local{site}/simulatorRun"
 
         def run(self, dataset_cls, only_sites: list = None, only_folds: list = None):
-            self.init_nn()
             global_avg, global_metrics = self.new_averages(), self.new_metrics()
 
             if only_sites is not None:
@@ -99,8 +98,9 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
                 self.cache['log_dir'] = self.log_dir + _os.sep + f'fold_{fold_ix}'
                 _os.makedirs(self.cache['log_dir'], exist_ok=True)
 
+                self.init_nn()
+                self.init_training_cache()
                 if self.cache['mode'] == Mode.TRAIN:
-                    self.init_training_cache()
                     self.train_local(dataset_cls)
 
                 if self.cache['mode'] == 'train' or self.cache.get('pretrained_path') is None:
