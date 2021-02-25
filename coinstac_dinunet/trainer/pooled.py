@@ -26,7 +26,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
                   learning_rate: float = 0.001,
                   gpus: List[int] = None,
                   pin_memory: bool = _conf.gpu_available,
-                  num_workers: int = 2,
+                  num_workers: int = 0,
                   load_limit: int = _conf.max_size,
                   pretrained_path: str = None,
                   patience: int = None, **kw):
