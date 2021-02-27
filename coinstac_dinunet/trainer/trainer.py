@@ -77,7 +77,7 @@ class COINNTrainer(_NNTrainer):
     def validation_distributed(self, dataset_cls):
         out = {}
         avg, metrics = self.evaluation(mode='validation', save_pred=False,
-                                       dataset_list=[self._get_validation_dataset(dataset_cls)])
+                                       dataset_list=self._get_validation_dataset_list(dataset_cls))
         out[Key.VALIDATION_SERIALIZABLE] = [vars(avg), vars(metrics)]
         out[Key.TRAIN_SERIALIZABLE] = self.cache[Key.TRAIN_SERIALIZABLE]
         self.cache[Key.TRAIN_SERIALIZABLE] = []
@@ -89,17 +89,14 @@ class COINNTrainer(_NNTrainer):
         out = {}
         self.load_checkpoint(self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
         avg, metrics = self.evaluation(mode='test', save_pred=True,
-                                       dataset_list=[self._get_test_dataset(dataset_cls)])
+                                       dataset_list=self._get_test_dataset_list(dataset_cls))
         out[Key.TEST_SERIALIZABLE] = [vars(avg), vars(metrics)]
         return out
 
     def cache_data_indices(self, dataset_cls, split_key='train'):
         dataset = self._load_dataset(dataset_cls, split_key)
         self.cache['data_indices'] = dataset.indices
-        if len(dataset) % self.cache['batch_size'] >= self.cache.get('min_batch_size', _conf.min_batch_size):
-            self.cache['data_len'] = len(dataset)
-        else:
-            self.cache['data_len'] = (len(dataset) // self.cache['batch_size']) * self.cache['batch_size']
+        self.cache['data_len'] = (len(dataset) // self.cache['batch_size']) * self.cache['batch_size']
 
     def _next_batch(self, dataset_cls):
         dataset = self._get_train_dataset(dataset_cls)

@@ -105,8 +105,9 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
 
                 if self.cache['mode'] == 'train' or self.cache.get('pretrained_path') is None:
                     self.load_checkpoint(self.cache['log_dir'] + _os.sep + _conf.weights_file)
-                test_datasets = self._load_dataset(dataset_cls, 'test')
-                test_averages, test_metrics = self.evaluation(mode='test', dataset_list=[test_datasets], save_pred=True)
+                test_dataset_list = self._get_test_dataset_list(dataset_cls)
+                test_averages, test_metrics = self.evaluation(mode='test', dataset_list=test_dataset_list,
+                                                              save_pred=True)
 
                 global_avg.accumulate(test_averages), global_metrics.accumulate(test_metrics)
                 self.cache[Key.TEST_METRICS] = [[*test_averages.get(), *test_metrics.get()]]
@@ -133,5 +134,4 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
                          load_limit=load_limit,
                          pretrained_path=pretrained_path,
                          patience=patience if patience else epochs,
-                         num_workers=num_workers
-                         , **kw)
+                         num_workers=num_workers, **kw)

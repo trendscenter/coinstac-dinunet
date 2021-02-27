@@ -38,13 +38,11 @@ class COINNLocal:
                  patience: int = None,
                  num_folds: int = None,
                  split_ratio: _List[float] = (0.6, 0.2, 0.2),
-                 pretrain_args: dict = None,
-                 data_splitter: _Callable = None, **kw):
+                 pretrain_args: dict = None, **kw):
         self.out = {}
         self.cache = cache
         self.input = _FrozenDict(input)
         self.state = _FrozenDict(state)
-        self.data_splitter = data_splitter
         self._args = {}
         self._args['computation_id'] = computation_id  #
         self._args['mode'] = mode  # test/train
@@ -63,7 +61,7 @@ class COINNLocal:
         self._args['split_ratio'] = split_ratio
         self._args.update(**kw)
         self._args = _FrozenDict(self._args)
-        self._pretrain_args = pretrain_args if pretrain_args is not None else {}
+        self._pretrain_args = pretrain_args if pretrain_args else {}
         self._GLOBAL_STATE = {}
 
     def _check_args(self):
@@ -72,7 +70,7 @@ class COINNLocal:
 
     def _init_runs(self):
         out = {}
-        out.update(_du.init_k_folds(self.cache, self.state, self.data_splitter))
+        out.update(_du.init_k_folds(self.cache, self.state))
         out['data_size'] = {}
         for k, sp in self.cache['splits'].items():
             sp = _json.loads(open(self.cache['split_dir'] + _os.sep + sp).read())

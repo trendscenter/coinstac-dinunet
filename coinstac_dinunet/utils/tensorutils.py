@@ -59,7 +59,11 @@ def load_grads(file_path):
 def get_safe_batch_size(batch_size, dataset_len):
     if dataset_len % batch_size == 0:
         return batch_size
-    for i in range(batch_size, 0, -1):
-        if dataset_len % i > 1:
+
+    for i, j in zip(range(batch_size, 1, -1), range(batch_size, batch_size * 2, 1)):
+        if dataset_len % i != 1:
             return i
-    return min(_conf.min_batch_size, dataset_len, batch_size)
+        if dataset_len % j != 1:
+            return j
+
+    return batch_size
