@@ -182,8 +182,12 @@ class NNTrainer:
         _dset_cache = {**self.cache}
         _dset_cache.update(mode=Mode.TRAIN, shuffle=True)
         dataset = self._get_train_dataset(dataset_cls)
-        _dset_cache['batch_size'] = _tu.get_safe_batch_size(self.cache['batch_size'], len(dataset))
+
+        if not self.cache.get('drop_last'):
+            _dset_cache['batch_size'] = _tu.get_safe_batch_size(_dset_cache['batch_size'], len(dataset))
+
         loader = _data.COINNDataLoader.new(dataset=dataset, **_dset_cache)
+        validation_dataset_list = self._get_validation_dataset_list(dataset_cls)
 
         local_iter = self.cache.get('local_iterations', 1)
         tot_iter = len(loader) // local_iter
@@ -211,8 +215,7 @@ class NNTrainer:
                     self._on_iteration_end(i=_i, ep=ep, it=it)
 
             if ep % self.cache.get('validation_epochs', 1) == 0:
-                val_averages, val_metric = self.evaluation(mode='validation',
-                                                           dataset_list=[self._get_validation_dataset(dataset_cls)])
+                val_averages, val_metric = self.evaluation(mode='validation', dataset_list=validation_dataset_list)
                 self.cache[Key.VALIDATION_LOG].append([*val_averages.get(), *val_metric.get()])
                 out.update(**self._save_if_better(ep, val_metric))
 
@@ -303,11 +306,11 @@ class NNTrainer:
         dataset.add(files=[], cache=self.cache, state=self.state)
         return dataset
 
-    def _get_validation_dataset(self, dataset_cls):
-        return self._load_dataset(dataset_cls, split_key='validation')
+    def _get_validation_dataset_list(self, dataset_cls):
+        return [self._load_dataset(dataset_cls, split_key='validation')]
 
-    def _get_test_dataset(self, dataset_cls):
-        return self._load_dataset(dataset_cls, split_key='test')
+    def _get_test_dataset_list(self, dataset_cls):
+        return [self._load_dataset(dataset_cls, split_key='test')]
 
     def _save_if_better(self, epoch, val_metrics):
         return {}
