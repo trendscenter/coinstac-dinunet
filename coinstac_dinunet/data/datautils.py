@@ -59,7 +59,14 @@ def create_k_fold_splits(cache, state, shuffle_files=True, name='SPLIT'):
             return splits
 
 
-def init_k_folds(cache, state, data_splitter=None):
+def split_place_holder(cache, state):
+    save_to_dir = cache['split_dir']
+    splits = {'train': [], 'validation': [], 'test': []}
+    f = open(save_to_dir + _os.sep + f'empty_split.json', "w")
+    f.write(_json.dumps(splits))
+
+
+def init_k_folds(cache, state):
     """
     If one wants to use custom splits:- Populate splits_dir as specified in inputs spec with split files(.json)
         with list of file names on each train, validation, and test keys.
@@ -68,6 +75,7 @@ def init_k_folds(cache, state, data_splitter=None):
     Splits will be copied/created in output directory to have everything of a result at the same place.
     """
 
+    data_splitter = split_place_holder
     if cache.get('split_ratio') is not None:
         data_splitter = create_ratio_split
     elif cache.get('num_folds') is not None:
