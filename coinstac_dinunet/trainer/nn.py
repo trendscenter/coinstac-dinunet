@@ -301,7 +301,7 @@ class NNTrainer:
     def _get_train_dataset(self, dataset_cls):
         if self.cache.get('data_indices') is None:
             return self._load_dataset(dataset_cls, split_key='train')
-        dataset = dataset_cls(mode=Mode.PRE_TRAIN, limit=self.cache.get('load_limit', _conf.max_size))
+        dataset = dataset_cls(mode=Mode.TRAIN, limit=self.cache.get('load_limit', _conf.max_size))
         dataset.indices = self.cache['data_indices']
         dataset.add(files=[], cache=self.cache, state=self.state)
         return dataset

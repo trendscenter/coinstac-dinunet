@@ -57,7 +57,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
             return inputspec
 
         def _load_dataset(self, dataset_cls, split_key):
-            dataset = dataset_cls(mode='train', limit=self.cache.get('load_limit', _conf.max_size))
+            dataset = dataset_cls(mode=split_key, limit=self.cache.get('load_limit', _conf.max_size))
             for site, fold in self.cache['folds'].items():
                 split = fold[self.cache['fold_ix']]
                 path = self.base_directory(site) + _os.sep + self.inputspecs[site]['split_dir']

@@ -37,7 +37,7 @@ class COINNLocal:
                  pretrained_path: str = None,
                  patience: int = None,
                  num_folds: int = None,
-                 split_ratio: _List[float] = (0.6, 0.2, 0.2),
+                 split_ratio: _List[float] = None,
                  pretrain_args: dict = None, **kw):
         self.out = {}
         self.cache = cache
