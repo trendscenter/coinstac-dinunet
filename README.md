@@ -1,6 +1,7 @@
 ## coinstac-dinunet
 #### Distributed Neural Network implementation  on COINSTAC.
 
+![PyPi version](https://img.shields.io/pypi/v/coinstac-dinunet)
 [![YourActionName Actions Status](https://github.com/trendscenter/coinstac-dinunet/workflows/build/badge.svg)](https://github.com/trendscenter/coinstac-dinunet/actions)
 ![versions](https://img.shields.io/pypi/pyversions/pybadges.svg)
 
