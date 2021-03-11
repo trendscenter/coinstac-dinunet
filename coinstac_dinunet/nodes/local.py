@@ -31,7 +31,7 @@ class COINNLocal:
                  validation_epochs: int = 1,
                  learning_rate: float = 0.001,
                  gpus: _List[int] = None,
-                 pin_memory: bool = _conf.gpu_available,
+                 pin_memory: bool = False,
                  num_workers: int = 0,
                  load_limit: int = _conf.max_size,
                  pretrained_path: str = None,

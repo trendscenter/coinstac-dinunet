@@ -112,11 +112,6 @@ class COINNRemote:
         out['train_metrics'] = train_metrics
         out['val_averages'] = val_averages
         out['val_metrics'] = val_metrics
-
-        sc = getattr(val_metrics, self.cache['monitor_metric'][0])
-        if callable(sc):
-            sc = sc()
-        out['validation_score'] = sc
         return out
 
     def _on_run_end(self):

@@ -36,7 +36,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
             self.log_dir = log_dir
             self.inputspecs = self._parse_inputspec(dataset_dir + _os.sep + kw.get('inputspec_file', 'inputspec.json'))
 
-            cache = {**self.inputspecs[0], 'folds': self._init_folds()}
+            cache = {**self.inputspecs[list(self.inputspecs.keys())[0]], 'folds': self._init_folds()}
             cache['seed'] = _conf.current_seed
             cache.update(**kwargs)
             super().__init__(cache=cache, input={}, state={'clientId': 'LocalMachine'}, **kw)
@@ -53,7 +53,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
                 spec = {}
                 for k, v in isp.items():
                     spec[k] = v['value']
-                inputspec[site] = spec
+                inputspec[f'local{site}'] = spec
             return inputspec
 
         def _load_dataset(self, dataset_cls, split_key):
@@ -64,7 +64,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
                 split = _json.loads(open(path + _os.sep + split).read())
                 dataset.add(files=split[split_key],
                             cache={'args': self.inputspecs[site]},
-                            state={'clientId': site, "baseDirectory": self.base_directory(site)})
+                            state={'clientId': f"{site}", "baseDirectory": self.base_directory(site)})
             return dataset
 
         def _save_if_better(self, epoch, val_metrics):
@@ -79,7 +79,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
             return {}
 
         def base_directory(self, site):
-            return f"{self.dataset_dir}/input/local{site}/simulatorRun"
+            return f"{self.dataset_dir}/input/{site}/simulatorRun"
 
         def run(self, dataset_cls, only_sites: list = None, only_folds: list = None):
             global_avg, global_metrics = self.new_averages(), self.new_metrics()
