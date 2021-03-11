@@ -9,7 +9,7 @@ import os as _os
 import shutil as _shutil
 import sys as _sys
 from os import sep as _sep
-from typing import List as _List, Callable as _Callable
+from typing import List as _List
 
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.data.datautils as _du
