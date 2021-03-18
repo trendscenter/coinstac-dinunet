@@ -1,7 +1,6 @@
 """
 @author: Aashis Khanal
 @email: sraashis@gmail.com
-@ref: https://github.com/sraashis/easytorch
 """
 
 import abc as _abc
