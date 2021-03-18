@@ -1,7 +1,6 @@
 """
 @author: Aashis Khanal
 @email: sraashis@gmail.com
-@ref: https://github.com/sraashis/easytorch
 """
 import os as _os
 from torch.utils.data import DataLoader as _DataLoader, Dataset as _Dataset
