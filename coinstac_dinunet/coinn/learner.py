@@ -5,7 +5,6 @@ import torch as _torch
 
 from coinstac_dinunet import config as _conf
 from coinstac_dinunet.config.state import *
-from coinstac_dinunet.data import COINNDataLoader as _COINNDLoader
 from coinstac_dinunet.utils import tensorutils as _tu
 
 
