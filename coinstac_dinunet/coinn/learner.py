@@ -63,7 +63,7 @@ class CoinnLearner:
         loader = _COINNDLoader.new(dataset=dataset, **self.cache)
         return next(loader.__iter__())
 
-    def next_iter(self):
+    def next_iter(self)->dict:
         out = {}
         self.cache['cursor'] += self.cache['batch_size']
         if self.cache['cursor'] >= self.cache['data_len']:

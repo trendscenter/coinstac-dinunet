@@ -161,8 +161,8 @@ class COINNLocal:
                 self.learner.trainer.save_checkpoint(
                     file_path=self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
 
-            step_out = self.learner.step()
-            if step_out['save_state']:
+            self.out.update(**self.learner.step())
+            if self.out['save_state']:
                 self.learner.trainer.save_checkpoint(
                     file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
 

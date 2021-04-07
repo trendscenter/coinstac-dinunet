@@ -199,7 +199,7 @@ class COINNRemote:
             """
             self.out['phase'] = Phase.COMPUTATION
             if self._check(all, 'grads_file', _conf.grads_file, self.input):
-                self.out.update(self.reducer.reduce(**kw))
+                self.out.update(**self.reducer.reduce(**kw))
 
             if self._check(all, 'mode', Mode.VALIDATION_WAITING, self.input):
                 self.cache['epoch'] += 1
