@@ -5,18 +5,17 @@
 
 import json as _json
 import os as _os
+import random as _rd
 import shutil as _shutil
 import sys as _sys
 from os import sep as _sep
 from typing import List as _List
 
+import coinstac_dinunet.config as _conf
 import coinstac_dinunet.data.datautils as _du
 from coinstac_dinunet.coinn import learner as _learner
 from coinstac_dinunet.config.state import *
 from coinstac_dinunet.utils import FrozenDict as _FrozenDict
-import random as _rd
-
-import coinstac_dinunet.config as _conf
 
 
 class COINNLocal:
@@ -161,10 +160,13 @@ class COINNLocal:
                 self.learner.trainer.save_checkpoint(
                     file_path=self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
 
-            self.out.update(**self.learner.step())
-            if self.out['save_state']:
-                self.learner.trainer.save_checkpoint(
-                    file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
+            """ Reducer must issue update signal for the network to update"""
+            if self.out['update']:
+                self.out.update(**self.learner.step())
+                if self.out['save_state']:
+                    self.learner.trainer.save_checkpoint(
+                        file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state']
+                    )
 
             if any(m == Mode.TRAIN for m in self._GLOBAL_STATE['modes'].values()):
                 """
@@ -173,7 +175,10 @@ class COINNLocal:
                    and reshuffle the data,
                 take part in the training with everybody until all sites go to 'val_waiting' status.
                 """
-                self.out.update(**self.learner.backward(dataset_cls))
+                out, it = self.learner.send_to_reduce(dataset_cls)
+                self.out.update(**out)
+                self.cache[Key.TRAIN_SERIALIZABLE].append([vars(it['averages']), vars(it['metrics'])])
+                self.out.update(**self.learner.trainer.on_iteration_end(0, 0, it))
 
             if all(m == Mode.VALIDATION for m in self._GLOBAL_STATE['modes'].values()):
                 """

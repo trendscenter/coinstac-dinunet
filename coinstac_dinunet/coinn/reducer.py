@@ -24,6 +24,7 @@ class CoinnReducer:
         for layer_grad in zip(*grads):
             avg_grads.append(_np.array(layer_grad).mean(0))
         _tu.save_grads(self.state['transferDirectory'] + _os.sep + out['avg_grads_file'], avg_grads)
+        out['update'] = True
         return out
 
 

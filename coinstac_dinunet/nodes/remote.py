@@ -12,11 +12,11 @@ import sys as _sys
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.metrics as _metric
 import coinstac_dinunet.utils as _utils
+from coinstac_dinunet.coinn import reducer as _reducer
 from coinstac_dinunet.config.state import *
-from coinstac_dinunet.vision import plotter as _plot
 from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.utils.utils import performance_improved_, stop_training_
-from coinstac_dinunet.coinn import reducer as _reducer
+from coinstac_dinunet.vision import plotter as _plot
 
 
 class COINNRemote:
@@ -172,8 +172,8 @@ class COINNRemote:
         return out
 
     def compute(self, reducer_cls: _reducer.CoinnReducer = None, **kw):
-        self._set_reducer(reducer_cls)
 
+        self._set_reducer(reducer_cls)
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
         if self._check(all, 'phase', Phase.INIT_RUNS, self.input):
             """
@@ -193,9 +193,11 @@ class COINNRemote:
             """
             Main computation phase where we aggregate sites information
             We also handle train/validation/test stages of local sites by sending corresponding signals from here
+            Learner's method send_to_reduce(...) must issue a 'reduce' signal.
             """
+
             self.out['phase'] = Phase.COMPUTATION
-            if self._check(all, 'grads_file', _conf.grads_file, self.input):
+            if self._check(all, 'reduce', True, self.input):
                 self.out.update(**self.reducer.reduce(**kw))
 
             if self._check(all, 'mode', Mode.VALIDATION_WAITING, self.input):
