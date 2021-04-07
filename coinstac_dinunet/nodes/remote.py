@@ -9,24 +9,26 @@ import os as _os
 import shutil as _shutil
 import sys as _sys
 
-import numpy as _np
-
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.metrics as _metric
 import coinstac_dinunet.utils as _utils
-import coinstac_dinunet.utils.tensorutils as _tu
-from coinstac_dinunet.config.status import *
+from coinstac_dinunet.config.state import *
 from coinstac_dinunet.vision import plotter as _plot
 from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.utils.utils import performance_improved_, stop_training_
+from coinstac_dinunet.coinn import reducer as _reducer
+
+
+# from typing import Callable as _Callable
 
 
 class COINNRemote:
-    def __init__(self, cache: dict = None, input: dict = None, state: dict = None):
+    def __init__(self, cache: dict = None, input: dict = None, state: dict = None, **kw):
         self.out = {}
         self.cache = cache
         self.input = _utils.FrozenDict(input)
         self.state = _utils.FrozenDict(state)
+        self.reducer = None
 
     def _init_runs(self):
         site = list(self.input.values())[0]
@@ -172,7 +174,8 @@ class COINNRemote:
             _shutil.copy(pt_path, self.state['transferDirectory'] + _os.sep + out['pretrained_weights'])
         return out
 
-    def compute(self):
+    def compute(self, reducer_cls: _reducer.CoinnReducer = None, **kw):
+        self._set_reducer(reducer_cls)
 
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
         if self._check(all, 'phase', Phase.INIT_RUNS, self.input):
@@ -196,7 +199,7 @@ class COINNRemote:
             """
             self.out['phase'] = Phase.COMPUTATION
             if self._check(all, 'grads_file', _conf.grads_file, self.input):
-                self.out.update(**self._reduce_sites())
+                self.out.update(self.reducer.reduce(**kw))
 
             if self._check(all, 'mode', Mode.VALIDATION_WAITING, self.input):
                 self.cache['epoch'] += 1
@@ -225,12 +228,6 @@ class COINNRemote:
                 self.out.update(**self._send_global_scores())
                 self.out['phase'] = Phase.SUCCESS
 
-    def send(self):
-        output = _json.dumps(
-            {'output': self.out, 'cache': self.cache,
-             'success': self._check(all, 'phase', Phase.SUCCESS, self.input)})
-        _sys.stdout.write(output)
-
     def _next_epoch(self, **kw):
         out = {}
         epochs_done = self.cache['epoch'] > self.cache['epochs']
@@ -256,18 +253,18 @@ class COINNRemote:
     def _stop_early(self, **kw):
         return stop_training_(self.cache['epoch'], self.cache)
 
-    def _reduce_sites(self):
-        """
-      Average each sites gradients and pass it to all sites.
-      """
-        out = {'avg_grads_file': _conf.avg_grads_file}
-        grads = []
-        for site, site_vars in self.input.items():
-            grads_file = self.state['baseDirectory'] + _os.sep + site + _os.sep + site_vars['grads_file']
-            grads.append(_tu.load_grads(grads_file))
+    def _set_reducer(self, reducer_cls: _reducer.CoinnReducer = None, **kw):
 
-        avg_grads = []
-        for layer_grad in zip(*grads):
-            avg_grads.append(_np.array(layer_grad).mean(0))
-        _tu.save_grads(self.state['transferDirectory'] + _os.sep + out['avg_grads_file'], avg_grads)
-        return out
+        if reducer_cls is None:
+            reducer_cls = _reducer.CoinnReducer
+
+            if self.cache.get('dist_engine', '').strip().lower() == 'powersgd':
+                reducer_cls = _reducer.PowerSGDReducer
+
+        self.reducer = reducer_cls(cache=self.cache, input=self.input, state=self.state, **kw)
+
+    def send(self):
+        output = _json.dumps(
+            {'output': self.out, 'cache': self.cache,
+             'success': self._check(all, 'phase', Phase.SUCCESS, self.input)})
+        _sys.stdout.write(output)

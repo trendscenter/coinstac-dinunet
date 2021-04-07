@@ -1,7 +1,7 @@
 from enum import Enum as _Enum
 
 SHARED_CACHE = ['computation_id', 'mode', 'epochs', 'num_folds', 'patience', 'score_delta',
-                'validation_epochs']
+                'validation_epochs', 'dist_engine']
 
 
 class Phase(str, _Enum):

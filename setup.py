@@ -11,7 +11,7 @@ README = (HERE / "README.md").read_text()
 # This call to setup() does all the work
 setup(
     name="coinstac-dinunet",
-    version="1.1.2",
+    version="1.1.3",
     description="Distributed Neural Network implementation on COINSTAC.",
     long_description=README,
     long_description_content_type="text/markdown",
@@ -25,7 +25,7 @@ setup(
         "Programming Language :: Python :: 3.7",
     ],
     packages=['coinstac_dinunet', 'coinstac_dinunet.config', 'coinstac_dinunet.data',
-              'coinstac_dinunet.metrics', 'coinstac_dinunet.nodes', 'coinstac_dinunet.trainer',
+              'coinstac_dinunet.metrics', 'coinstac_dinunet.nodes', 'coinstac_dinunet.coinn',
               'coinstac_dinunet.utils', 'coinstac_dinunet.vision'],
     include_package_data=True,
     install_requires=['numpy', 'scipy', 'scikit-learn', 'scikit-image',

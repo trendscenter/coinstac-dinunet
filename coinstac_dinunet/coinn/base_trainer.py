@@ -15,7 +15,7 @@ import coinstac_dinunet.metrics as _base_metrics
 import coinstac_dinunet.utils as _utils
 import coinstac_dinunet.utils.tensorutils as _tu
 import coinstac_dinunet.vision.plotter as _plot
-from coinstac_dinunet.config.status import *
+from coinstac_dinunet.config.state import *
 from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.utils.utils import stop_training_
 
@@ -149,7 +149,7 @@ class NNTrainer:
                 if self.cache.get('verbose') and len(dataset_list) > 1:
                     info(f"{mode} metrics: {avg.get()}, {metrics.get()}")
                 if save_pred:
-                    self.save_predictions(loader.dataset, self._reduce_iteration(its))
+                    self.save_predictions(loader.dataset, self.reduce_iteration(its))
 
             info(f"{mode} metrics: {eval_avg.get()}, {eval_metrics.get()}", self.cache.get('verbose'))
             return eval_avg, eval_metrics
@@ -200,7 +200,7 @@ class NNTrainer:
             for i, batch in enumerate(loader, 1):
                 its.append(self.training_iteration_local(i, batch))
                 if i % local_iter == 0:
-                    it = self._reduce_iteration(its)
+                    it = self.reduce_iteration(its)
 
                     ep_avg.accumulate(it['averages']), ep_metrics.accumulate(it['metrics'])
                     _avg.accumulate(it['averages']), _metrics.accumulate(it['metrics'])
@@ -211,7 +211,7 @@ class NNTrainer:
                              self.cache.get('verbose'))
                         self.cache[Key.TRAIN_LOG].append([*_avg.get(), *_metrics.get()])
                         _metrics.reset(), _avg.reset()
-                    self._on_iteration_end(i=_i, ep=ep, it=it)
+                    self.on_iteration_end(i=_i, ep=ep, it=it)
 
             if ep % self.cache.get('validation_epochs', 1) == 0:
                 val_averages, val_metric = self.evaluation(mode='validation', dataset_list=validation_dataset_list)
@@ -258,7 +258,7 @@ class NNTrainer:
     def save_predictions(self, dataset, its):
         pass
 
-    def _reduce_iteration(self, its):
+    def reduce_iteration(self, its):
         reduced = {}.fromkeys(its[0].keys(), None)
         for key in reduced:
             if isinstance(its[0][key], _base_metrics.COINNAverages):
@@ -326,7 +326,7 @@ class NNTrainer:
         """
         return {}
 
-    def _on_iteration_end(self, i, ep, it):
+    def on_iteration_end(self, i, ep, it):
         r"""
         Any logic to run after an iteration ends.
         """
