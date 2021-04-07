@@ -9,7 +9,6 @@ from coinstac_dinunet.utils import tensorutils as _tu
 
 
 class CoinnLearner:
-
     def __init__(self, trainer=None, **kw):
         self.cache = trainer.cache
         self.input = trainer.input
