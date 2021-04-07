@@ -57,21 +57,6 @@ class CoinnLearner:
         out.update(**self.trainer.on_iteration_end(0, 0, it))
         return out
 
-    def next_batch(self, dataset_cls):
-        dataset = self.trainer._get_train_dataset(dataset_cls)
-        dataset.indices = dataset.indices[self.cache['cursor']:]
-        loader = _COINNDLoader.new(dataset=dataset, **self.cache)
-        return next(loader.__iter__())
-
-    def next_iter(self)->dict:
-        out = {}
-        self.cache['cursor'] += self.cache['batch_size']
-        if self.cache['cursor'] >= self.cache['data_len']:
-            out['mode'] = Mode.VALIDATION_WAITING
-            _rd.shuffle(self.cache['data_indices'])
-            self.cache['cursor'] = 0
-        return out
-
 
 class PowerSGDLearner(CoinnLearner):
     def __init__(self, trainer=None, **kw):

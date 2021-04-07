@@ -1,5 +1,4 @@
 import coinstac_dinunet.config as _conf
-import coinstac_dinunet.utils as _utils
 import os as _os
 import coinstac_dinunet.utils.tensorutils as _tu
 import numpy as _np
@@ -8,8 +7,8 @@ import numpy as _np
 class CoinnReducer:
     def __init__(self, cache: dict = None, input: dict = None, state: dict = None, **kw):
         self.cache = cache
-        self.input = _utils.FrozenDict(input)
-        self.state = _utils.FrozenDict(state)
+        self.input = input
+        self.state = state
 
     def reduce(self):
         """

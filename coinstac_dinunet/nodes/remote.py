@@ -19,9 +19,6 @@ from coinstac_dinunet.utils.utils import performance_improved_, stop_training_
 from coinstac_dinunet.coinn import reducer as _reducer
 
 
-# from typing import Callable as _Callable
-
-
 class COINNRemote:
     def __init__(self, cache: dict = None, input: dict = None, state: dict = None, **kw):
         self.out = {}

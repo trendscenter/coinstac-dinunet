@@ -12,6 +12,7 @@ import coinstac_dinunet.utils as _utils
 from coinstac_dinunet.config.state import *
 from coinstac_dinunet.utils.utils import performance_improved_
 from .base_trainer import NNTrainer as _NNTrainer
+from coinstac_dinunet import COINNDataLoader as _COINNDLoader
 
 
 class COINNTrainer(_NNTrainer):
@@ -26,7 +27,7 @@ class COINNTrainer(_NNTrainer):
 
     def _save_if_better(self, epoch, val_metrics):
         r"""
-        Save the current model as best if it has better validation scores.
+        Save the current model as best if it has better validation scores in pretraining step.
         """
         out = {}
         val_score = val_metrics.extract(self.cache['monitor_metric'][0])
@@ -58,3 +59,18 @@ class COINNTrainer(_NNTrainer):
         dataset = self._load_dataset(dataset_cls, split_key)
         self.cache['data_indices'] = dataset.indices
         self.cache['data_len'] = (len(dataset) // self.cache['batch_size']) * self.cache['batch_size']
+
+    def next_batch(self, dataset_cls):
+        dataset = self._get_train_dataset(dataset_cls)
+        dataset.indices = dataset.indices[self.cache['cursor']:]
+        loader = _COINNDLoader.new(dataset=dataset, **self.cache)
+        return next(loader.__iter__())
+
+    def next_iter(self) -> dict:
+        out = {}
+        self.cache['cursor'] += self.cache['batch_size']
+        if self.cache['cursor'] >= self.cache['data_len']:
+            out['mode'] = Mode.VALIDATION_WAITING
+            _rd.shuffle(self.cache['data_indices'])
+            self.cache['cursor'] = 0
+        return out
