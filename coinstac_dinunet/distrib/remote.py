@@ -12,7 +12,7 @@ import sys as _sys
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.metrics as _metric
 import coinstac_dinunet.utils as _utils
-from coinstac_dinunet.coinn import reducer as _reducer
+from coinstac_dinunet.distrib import reducer as _reducer
 from coinstac_dinunet.config.state import *
 from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.utils.utils import performance_improved_, stop_training_
@@ -171,7 +171,7 @@ class COINNRemote:
             _shutil.copy(pt_path, self.state['transferDirectory'] + _os.sep + out['pretrained_weights'])
         return out
 
-    def compute(self, reducer_cls: _reducer.CoinnReducer = None, **kw):
+    def compute(self, reducer_cls: _reducer.COINNReducer = None, **kw):
 
         self._set_reducer(reducer_cls)
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
@@ -220,7 +220,7 @@ class COINNRemote:
             """
             self._on_run_end()
             if len(self.cache['folds']) > 0:
-                self.out['nn'] = {}
+                self.out['distrib'] = {}
                 self.out['global_runs'] = self._next_run()
                 self.out['phase'] = Phase.INIT_NN
             else:
@@ -252,10 +252,10 @@ class COINNRemote:
     def _stop_early(self, **kw):
         return stop_training_(self.cache['epoch'], self.cache)
 
-    def _set_reducer(self, reducer_cls: _reducer.CoinnReducer = None, **kw):
+    def _set_reducer(self, reducer_cls: _reducer.COINNReducer = None, **kw):
 
         if reducer_cls is None:
-            reducer_cls = _reducer.CoinnReducer
+            reducer_cls = _reducer.COINNReducer
 
             if self.cache.get('dist_engine', '').strip().lower() == 'powersgd':
                 reducer_cls = _reducer.PowerSGDReducer

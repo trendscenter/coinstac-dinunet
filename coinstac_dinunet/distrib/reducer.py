@@ -4,16 +4,14 @@ import coinstac_dinunet.utils.tensorutils as _tu
 import numpy as _np
 
 
-class CoinnReducer:
+class COINNReducer:
     def __init__(self, cache: dict = None, input: dict = None, state: dict = None, **kw):
         self.cache = cache
         self.input = input
         self.state = state
 
     def reduce(self):
-        """
-        Average each sites gradients and pass it to all sites.
-        """
+        """ Average each sites gradients and pass it to all sites. """
         out = {'avg_grads_file': _conf.avg_grads_file}
         grads = []
         for site, site_vars in self.input.items():
@@ -28,5 +26,5 @@ class CoinnReducer:
         return out
 
 
-class PowerSGDReducer(CoinnReducer):
+class PowerSGDReducer(COINNReducer):
     pass

@@ -31,7 +31,7 @@ class NNTrainer:
 
     def _init_nn_model(self):
         r"""
-        User cam override and initialize required models in self.nn dict.
+        User cam override and initialize required models in self.distrib dict.
         """
         raise NotImplementedError('Must be implemented in child class.')
 
@@ -238,7 +238,7 @@ class NNTrainer:
         Example:{
                     inputs = batch['input'].to(self.device['gpu']).float()
                     labels = batch['label'].to(self.device['gpu']).long()
-                    out = self.nn['model'](inputs)
+                    out = self.distrib['model'](inputs)
                     loss = F.cross_entropy(out, labels)
                     out = F.softmax(out, 1)
                     _, pred = torch.max(out, 1)

@@ -7,7 +7,7 @@ from coinstac_dinunet import config as _conf
 from coinstac_dinunet.utils import tensorutils as _tu
 
 
-class CoinnLearner:
+class COINNLearner:
     def __init__(self, trainer=None, **kw):
         self.cache = trainer.cache
         self.input = trainer.input
@@ -31,7 +31,7 @@ class CoinnLearner:
         out['save_state'] = True
         return out
 
-    def _backward(self, dataset_cls) -> _Tuple[dict, dict]:
+    def backward(self, dataset_cls) -> _Tuple[dict, dict]:
         out = {}
 
         first_model = list(self.trainer.nn.keys())[0]
@@ -48,8 +48,8 @@ class CoinnLearner:
             out.update(**self.trainer.next_iter())
         return out, self.trainer.reduce_iteration(its)
 
-    def send_to_reduce(self, dataset_cls) -> _Tuple[dict, dict]:
-        out, it = self._backward(dataset_cls)
+    def to_reduce(self, dataset_cls) -> _Tuple[dict, dict]:
+        out, it = self.backward(dataset_cls)
         first_model = list(self.trainer.nn.keys())[0]
         out['grads_file'] = _conf.grads_file
         grads = _tu.extract_grads(self.trainer.nn[first_model])
@@ -58,6 +58,6 @@ class CoinnLearner:
         return out, it
 
 
-class PowerSGDLearner(CoinnLearner):
+class PowerSGDLearner(COINNLearner):
     def __init__(self, trainer=None, **kw):
         super().__init__(trainer=trainer, **kw)

@@ -13,7 +13,7 @@ from typing import List as _List
 
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.data.datautils as _du
-from coinstac_dinunet.coinn import learner as _learner
+from coinstac_dinunet.distrib import learner as _learner
 from coinstac_dinunet.config.state import *
 from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 
@@ -82,8 +82,8 @@ class COINNLocal:
 
     def _init_nn_state(self, trainer):
         out = {}
-        self.cache['current_nn_state'] = 'current.nn.pt'
-        self.cache['best_nn_state'] = 'best.nn.pt'
+        self.cache['current_nn_state'] = 'current.distrib.pt'
+        self.cache['best_nn_state'] = 'best.distrib.pt'
         trainer.init_nn(init_weights=True)
         trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
         out['phase'] = Phase.COMPUTATION
@@ -175,7 +175,7 @@ class COINNLocal:
                    and reshuffle the data,
                 take part in the training with everybody until all sites go to 'val_waiting' status.
                 """
-                out, it = self.learner.send_to_reduce(dataset_cls)
+                out, it = self.learner.to_reduce(dataset_cls)
                 self.out.update(**out)
                 self.cache[Key.TRAIN_SERIALIZABLE].append([vars(it['averages']), vars(it['metrics'])])
                 self.out.update(**self.learner.trainer.on_iteration_end(0, 0, it))
@@ -201,13 +201,13 @@ class COINNLocal:
             _shutil.copy(f"{self.state['baseDirectory']}{_sep}{self.input['results_zip']}.zip",
                          f"{self.state['outputDirectory'] + _sep + self.cache['computation_id']}{_sep}{self.input['results_zip']}.zip")
 
-    def _set_learner(self, learner_cls: _learner.CoinnLearner = None, trainer=None, **kw):
+    def _set_learner(self, learner_cls: _learner.COINNLearner = None, trainer=None, **kw):
 
         if learner_cls is None:
-            learner_cls = _learner.CoinnLearner
+            learner_cls = _learner.COINNLearner
 
-        if self.cache.get('dist_engine', '').strip().lower() == 'powersgd':
-            learner_cls = _learner.PowerSGDLearner
+            if self.cache.get('dist_engine', '').strip().lower() == 'powersgd':
+                learner_cls = _learner.PowerSGDLearner
 
         self.learner = learner_cls(trainer=trainer, **kw)
 
