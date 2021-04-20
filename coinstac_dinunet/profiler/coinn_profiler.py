@@ -42,7 +42,8 @@ class Profile:
         def call(*args, **kwargs):
             stats_htm = f"{self.conf.log_dir}{os.sep}{func.__name__}_STATS.html"
             stats_json = f"{self.conf.log_dir}{os.sep}{func.__name__}_STATS.json"
-            _stats_json = f"{self.conf.log_dir}{os.sep}_{func.__name__}_{self.conf.iter % self.conf.gather_frequency}.json"
+            _stats_json = f"{self.conf.log_dir}{os.sep}_{func.__name__}_{self.conf.iter}.json"
+            print(_stats_json)
 
             profiler = Profiler()
             profiler.start()
@@ -54,7 +55,8 @@ class Profile:
                 file.write(jsns[0])
 
             if self.conf.iter % self.conf.gather_frequency == 0:
-                jsns = [json.load(open(jsn, encoding='utf-8')) for jsn in glob.glob(self.conf.log_dir + "/_*.json")]
+                files = glob.glob(self.conf.log_dir + "/_*.json")
+                jsns = [json.load(open(jsn, encoding='utf-8')) for jsn in files]
 
                 if os.path.exists(stats_json):
                     jsns.append(json.load(open(stats_json, encoding='utf-8')))
@@ -67,6 +69,8 @@ class Profile:
                 renderer.set_json(jsn)
                 with open(stats_htm, 'w', encoding='utf-8') as file:
                     file.write(profiler.output(renderer))
+
+                # [os.remove(f) for f in files]
             return ret
 
         return call
@@ -82,40 +86,39 @@ class Profile:
 
 
 if __name__ == "__main__":
-    ProfilerConf.gather_frequency = 1
-    ProfilerConf.enabled = True
+    for i in range(5):
+        ProfilerConf.gather_frequency = 1
+        ProfilerConf.enabled = True
+        ProfilerConf.iter = ProfilerConf.iter + 1
+
+        @Profile(conf=ProfilerConf)
+        def test_long():
+            test1()
+            test2()
+            for i in range(1000):
+                a = [0] * 1000
+            for j in range(2833):
+                b = 0 * [10000]
 
 
-    @Profile(ProfilerConf)
-    def test_long():
-        test1()
-        test2()
-        for i in range(1000):
-            a = [0] * 1000
-        for j in range(2833):
-            b = 0 * [10000]
+        def test1():
+            test3()
+            for i in range(10100):
+                a = [0] * 1000
+            for j in range(2833):
+                b = 0 * [10000]
 
 
-    def test1():
-        test3()
-        for i in range(10100):
-            a = [0] * 1000
-        for j in range(2833):
-            b = 0 * [10000]
+        def test2():
+            for i in range(10100):
+                a = [0] * 1000
+            for j in range(2833):
+                b = 0 * [10000]
 
 
-    def test2():
-        for i in range(10100):
-            a = [0] * 1000
-        for j in range(2833):
-            b = 0 * [10000]
-
-
-    def test3():
-        for i in range(10100):
-            a = [0] * 1000
-        for j in range(2833):
-            b = 0 * [10000]
-
-
-    test_long()
+        def test3():
+            for i in range(10100):
+                a = [0] * 1000
+            for j in range(2833):
+                b = 0 * [10000]
+        test_long()

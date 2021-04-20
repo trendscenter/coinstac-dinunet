@@ -29,5 +29,5 @@ class ProfilerConf:
     enabled = False
     log_dir = "_profiler_stats"
     gather_depth = 3
-    gather_frequency = 10
+    gather_frequency = 1
     iter = 0
