@@ -13,7 +13,7 @@ import coinstac_dinunet.config as _conf
 import coinstac_dinunet.metrics as _metric
 import coinstac_dinunet.utils as _utils
 from coinstac_dinunet.distrib import reducer as _reducer
-from coinstac_dinunet.config.state import *
+from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.utils.utils import performance_improved_, stop_training_
 from coinstac_dinunet.vision import plotter as _plot

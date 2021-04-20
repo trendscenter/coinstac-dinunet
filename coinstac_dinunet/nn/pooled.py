@@ -10,7 +10,7 @@ from typing import List
 import coinstac_dinunet.config as _conf
 from coinstac_dinunet import utils as _utils
 from coinstac_dinunet.utils.logger import *
-from coinstac_dinunet.config.state import *
+from coinstac_dinunet.config.keys import *
 from .basetrainer import NNTrainer as _NNTrainer
 from coinstac_dinunet import COINNLocal
 from coinstac_dinunet.utils.utils import performance_improved_

@@ -15,7 +15,7 @@ import coinstac_dinunet.metrics as _base_metrics
 import coinstac_dinunet.utils as _utils
 import coinstac_dinunet.utils.tensorutils as _tu
 import coinstac_dinunet.vision.plotter as _plot
-from coinstac_dinunet.config.state import *
+from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.utils.utils import stop_training_
 

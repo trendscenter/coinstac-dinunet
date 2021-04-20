@@ -23,3 +23,11 @@ num_gpus = _torch.cuda.device_count()
 max_size = _sys.maxsize
 
 current_seed = _random.randint(0, 2 ** 24)
+
+
+class ProfilerConf:
+    enabled = False
+    log_dir = "_profiler_stats"
+    gather_depth = 3
+    gather_frequency = 10
+    iter = 0

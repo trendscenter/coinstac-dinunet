@@ -9,7 +9,7 @@ from os import sep as _sep
 
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.utils as _utils
-from coinstac_dinunet.config.state import *
+from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.utils.utils import performance_improved_
 from .nn import NNTrainer as _NNTrainer
 from coinstac_dinunet import COINNDataLoader as _COINNDLoader
