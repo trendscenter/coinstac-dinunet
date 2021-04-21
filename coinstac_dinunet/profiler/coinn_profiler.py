@@ -3,16 +3,20 @@ from pyinstrument import Profiler, renderers
 import os
 import json
 from coinstac_dinunet.config import ProfilerConf
+import io
 import copy
+import datetime
 
 
 # from .server import app
 
 
 class JSONToHTML(renderers.HTMLRenderer):
-    def __init__(self, json_str=None, **kw):
+    def __init__(self, json_str=None, trip_duration=None, trip_sample_size=None, **kw):
         super().__init__(**kw)
         self.json_str = json_str
+        self.trip_duration = trip_duration
+        self.trip_sample_size = trip_sample_size
 
     def set_json(self, json_str):
         self.json_str = json_str
@@ -22,17 +26,56 @@ class JSONToHTML(renderers.HTMLRenderer):
             return self.json_str
         return super().render_json(session)
 
+    def render(self, session):
+        resources_dir = os.path.join(os.path.dirname(os.path.abspath(renderers.__file__)), 'html_resources/')
+
+        if not os.path.exists(os.path.join(resources_dir, 'app.js')):
+            raise RuntimeError("Could not find app.js. If you are running "
+                               "pyinstrument from a git checkout, run 'python "
+                               "setup.py build' to compile the Javascript "
+                               "(requires nodejs).")
+
+        with io.open(os.path.join(resources_dir, 'app.js'), encoding='utf-8') as f:
+            js = f.read()
+
+        session_json = self.render_json(session)
+
+        trip_duration_bar_style = "text-align:right;background-color:#212729;font-family: 'Lucida Console', 'Courier New', monospace;font-size:18px;padding:9px 30px 9px 9px"
+        page = u'''<!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8">
+            </head>
+            <body>
+                <div id="trip-stats" style="{trip_duration_style}">COINSTAC Trip duration(#samples={trip_samples}): <span style="color:#d4414d">{trip_duration}</span></div>
+                <div id="app"></div>
+                <script>
+                    window.profileSession = {session_json}
+                </script>
+                <script>
+                    {js}
+                </script>
+            </body>
+            </html>'''.format(
+            trip_duration_style=trip_duration_bar_style,
+            trip_samples=self.trip_sample_size,
+            trip_duration=self.trip_duration,
+            js=js, session_json=session_json
+        )
+
+        return page
+
 
 import glob
 
 
 class Profile:
     _GATHER_KEYS_ = ['duration', 'sample_count', 'cpu_time']
+    _DATE_FMT_ = '%m/%d/%y %H:%M:%S'
 
-    def __init__(self, conf=ProfilerConf, renderer=JSONToHTML(), **kw):
+    def __init__(self, conf=ProfilerConf, **kw):
         self.conf = conf
         os.makedirs(conf.log_dir, exist_ok=True)
-        self.renderer = renderer
 
     def __call__(self, func):
         if not self.conf.enabled:
@@ -42,8 +85,7 @@ class Profile:
         def call(*args, **kwargs):
             stats_htm = f"{self.conf.log_dir}{os.sep}{func.__name__}_STATS.html"
             stats_json = f"{self.conf.log_dir}{os.sep}{func.__name__}_STATS.json"
-            _stats_json = f"{self.conf.log_dir}{os.sep}_{func.__name__}_{self.conf.iter}.json"
-            print(_stats_json)
+            _stats_json = f"{self.conf.log_dir}{os.sep}_{func.__name__}_part_{self.conf.iter}.json"
 
             profiler = Profiler()
             profiler.start()
@@ -55,8 +97,15 @@ class Profile:
                 file.write(jsns[0])
 
             if self.conf.iter % self.conf.gather_frequency == 0:
-                files = glob.glob(self.conf.log_dir + "/_*.json")
+                files = glob.glob(self.conf.log_dir + f"{os.sep}*{func.__name__}_part_*.json")
                 jsns = [json.load(open(jsn, encoding='utf-8')) for jsn in files]
+                trip_time = [j['start_time'] for j in jsns]
+                start = datetime.datetime.fromtimestamp(min(trip_time)).strftime(Profile._DATE_FMT_)
+                end = datetime.datetime.fromtimestamp(max(trip_time)).strftime(Profile._DATE_FMT_)
+
+                start = datetime.datetime.strptime(start, Profile._DATE_FMT_)
+                end = datetime.datetime.strptime(end, Profile._DATE_FMT_)
+                trip_duration = str((end - start) / self.conf.gather_frequency)
 
                 if os.path.exists(stats_json):
                     jsns.append(json.load(open(stats_json, encoding='utf-8')))
@@ -65,39 +114,43 @@ class Profile:
                 with open(stats_json, 'w', encoding='utf-8') as file:
                     file.write(jsn)
 
-                renderer = self.renderer
-                renderer.set_json(jsn)
+                renderer = JSONToHTML(
+                    json_str=jsn,
+                    trip_sample_size=self.conf.gather_frequency,
+                    trip_duration=trip_duration
+                )
+
                 with open(stats_htm, 'w', encoding='utf-8') as file:
                     file.write(profiler.output(renderer))
 
-                # [os.remove(f) for f in files]
+                [os.remove(f) for f in files]
             return ret
 
         return call
 
     def _gather(self, jsons):
-
         dest = jsons[-1]
         for j in jsons[:-1]:
             for k in Profile._GATHER_KEYS_:
                 dest[k] += j[k]
-
         return json.dumps(dest)
 
 
+r"""Testing"""
 if __name__ == "__main__":
-    for i in range(5):
-        ProfilerConf.gather_frequency = 1
+    for i in range(100):
+        ProfilerConf.gather_frequency = 10
         ProfilerConf.enabled = True
         ProfilerConf.iter = ProfilerConf.iter + 1
+
 
         @Profile(conf=ProfilerConf)
         def test_long():
             test1()
             test2()
-            for i in range(1000):
+            for i in range(10000):
                 a = [0] * 1000
-            for j in range(2833):
+            for j in range(28303):
                 b = 0 * [10000]
 
 
@@ -117,8 +170,10 @@ if __name__ == "__main__":
 
 
         def test3():
-            for i in range(10100):
+            for i in range(101000):
                 a = [0] * 1000
             for j in range(2833):
                 b = 0 * [10000]
+
+
         test_long()

@@ -15,9 +15,9 @@ import coinstac_dinunet.config as _conf
 import coinstac_dinunet.data.datautils as _du
 from coinstac_dinunet.distrib import learner as _learner
 from coinstac_dinunet.config.keys import *
-from coinstac_dinunet.config import ProfilerConf as _PConf
 from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 from coinstac_dinunet.profiler import Profile
+from coinstac_dinunet.config import ProfilerConf as _PConf
 
 
 class COINNLocal:
@@ -75,11 +75,13 @@ class COINNLocal:
         assert self.cache['computation_id'] is not None, self._PROMPT_TASK_
         assert self.cache['mode'] in [Mode.TRAIN, Mode.TEST], self._PROMPT_MODE_
 
-    def _set_profiler(self):
-        _PConf.enabled = self._profiler_args.get('profiler_args').get('enabled')
+    def start_profiler(self):
+        _PConf.enabled = self._profiler_args.get('enable', True)
         if _PConf.enabled:
             _PConf.gather_depth = self._profiler_args.get('depth', 3)
-            _PConf.log_dir = self._profiler_args.get('log_dir', '_profiler_logs')
+            _PConf.log_dir = self.state['outputDirectory'] + _sep \
+                             + self.cache['computation_id'] + _sep \
+                             + self._profiler_args.get('log_dir', '_profiler_data')
             _os.makedirs(_PConf.log_dir, exist_ok=True)
 
     def _init_runs(self):
@@ -120,7 +122,6 @@ class COINNLocal:
 
     @Profile(conf=_PConf)
     def compute(self, dataset_cls, trainer_cls, learner_cls: callable = None, **kw):
-
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
         self._set_learner(learner_cls,
                           trainer=trainer_cls(cache=self.cache, input=self.input, state=self.state),
