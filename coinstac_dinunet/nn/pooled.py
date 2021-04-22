@@ -14,6 +14,8 @@ from coinstac_dinunet.config.keys import *
 from .basetrainer import NNTrainer as _NNTrainer
 from coinstac_dinunet import COINNLocal
 from coinstac_dinunet.utils.utils import performance_improved_
+from coinstac_dinunet.profiler import Profile
+from coinstac_dinunet.config import ProfilerConf as _PConf
 
 
 def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
@@ -80,7 +82,9 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
         def base_directory(self, site):
             return f"{self.dataset_dir}/input/{site}/simulatorRun"
 
+        @Profile(conf=_PConf)
         def run(self, dataset_cls, only_sites: list = None, only_folds: list = None):
+            conf = _PConf
             global_avg, global_metrics = self.new_averages(), self.new_metrics()
 
             if only_sites is not None:

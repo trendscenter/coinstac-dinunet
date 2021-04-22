@@ -173,15 +173,6 @@ class COINNRemote:
             _shutil.copy(pt_path, self.state['transferDirectory'] + _os.sep + out['pretrained_weights'])
         return out
 
-    def start_profiler(self):
-        _PConf.enabled = True
-        if _PConf.enabled:
-            _PConf.gather_depth = 3
-            _PConf.log_dir = self.state['outputDirectory'] + _os.sep \
-                             + self.cache['computation_id'] + _os.sep \
-                             + "_profiler_data"
-            _os.makedirs(_PConf.log_dir, exist_ok=True)
-
     @Profile(conf=_PConf)
     def compute(self, reducer_cls: _reducer.COINNReducer = None, **kw):
 

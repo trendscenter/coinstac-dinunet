@@ -41,7 +41,6 @@ class COINNLocal:
                  num_folds: int = None,
                  split_ratio: _List[float] = None,
                  pretrain_args: dict = None,
-                 profiler_args: dict = None,
                  **kw):
 
         self.out = {}
@@ -67,22 +66,12 @@ class COINNLocal:
         self._args.update(**kw)
         self._args = _FrozenDict(self._args)
         self._pretrain_args = pretrain_args if pretrain_args else {}
-        self._profiler_args = profiler_args if profiler_args else {}
         self._GLOBAL_STATE = {}
         self.learner = None
 
     def _check_args(self):
         assert self.cache['computation_id'] is not None, self._PROMPT_TASK_
         assert self.cache['mode'] in [Mode.TRAIN, Mode.TEST], self._PROMPT_MODE_
-
-    def start_profiler(self):
-        _PConf.enabled = self._profiler_args.get('enable', True)
-        if _PConf.enabled:
-            _PConf.gather_depth = self._profiler_args.get('depth', 3)
-            _PConf.log_dir = self.state['outputDirectory'] + _sep \
-                             + self.cache['computation_id'] + _sep \
-                             + self._profiler_args.get('log_dir', '_profiler_data')
-            _os.makedirs(_PConf.log_dir, exist_ok=True)
 
     def _init_runs(self):
         out = {}

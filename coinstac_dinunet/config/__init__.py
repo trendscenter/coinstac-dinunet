@@ -28,6 +28,4 @@ current_seed = _random.randint(0, 2 ** 24)
 class ProfilerConf:
     enabled = False
     log_dir = "_profiler_stats"
-    gather_depth = 3
     gather_frequency = 1
-    iter = 0
