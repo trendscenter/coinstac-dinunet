@@ -1,14 +1,13 @@
+from coinstac_dinunet.config import ProfilerConf
+
+ProfilerConf.enabled = True
+
 import functools
 from pyinstrument import Profiler, renderers
 import os
 import json
-from coinstac_dinunet.config import ProfilerConf
 import io
-import copy
 import datetime
-
-
-# from .server import app
 
 
 class JSONToHTML(renderers.HTMLRenderer):
@@ -47,7 +46,7 @@ class JSONToHTML(renderers.HTMLRenderer):
                 <meta charset="utf-8">
             </head>
             <body>
-                <div id="trip-stats" style="{trip_duration_style}">COINSTAC Trip duration(#samples={trip_samples}): <span style="color:#d4414d">{trip_duration}</span></div>
+                <div id="trip-stats" style="{trip_duration_style}">COINSTAC iteration(#samples={trip_samples}): <span style="color:#d4414d">{trip_duration}</span></div>
                 <div id="app"></div>
                 <script>
                     window.profileSession = {session_json}
@@ -75,9 +74,12 @@ class Profile:
 
     def __init__(self, conf=ProfilerConf, **kw):
         self.conf = conf
+        self.verbose = kw.get('verbose', False)
         os.makedirs(conf.log_dir, exist_ok=True)
 
     def __call__(self, func):
+        if self.verbose:
+            print("*** Profiling ***", func, self.conf.enabled)
         if not self.conf.enabled:
             return func
 
@@ -85,7 +87,7 @@ class Profile:
         def call(*args, **kwargs):
             stats_htm = f"{self.conf.log_dir}{os.sep}{func.__name__}_STATS.html"
             stats_json = f"{self.conf.log_dir}{os.sep}{func.__name__}_STATS.json"
-            _stats_json = f"{self.conf.log_dir}{os.sep}_{func.__name__}_part_{self.conf.iter}.json"
+            _stats_json = f"{self.conf.log_dir}{os.sep}_{func.__name__}_PART_.json"
 
             profiler = Profiler()
             profiler.start()
@@ -96,8 +98,9 @@ class Profile:
             with open(_stats_json, 'w', encoding='utf-8') as file:
                 file.write(jsns[0])
 
-            if self.conf.iter % self.conf.gather_frequency == 0:
-                files = glob.glob(self.conf.log_dir + f"{os.sep}*{func.__name__}_part_*.json")
+            files = glob.glob(self.conf.log_dir + f"{os.sep}*{func.__name__}_PART_*.json")
+            if len(files) % self.conf.gather_frequency == 0:
+
                 jsns = [json.load(open(jsn, encoding='utf-8')) for jsn in files]
                 trip_time = [j['start_time'] for j in jsns]
                 start = datetime.datetime.fromtimestamp(min(trip_time)).strftime(Profile._DATE_FMT_)
@@ -136,44 +139,71 @@ class Profile:
         return json.dumps(dest)
 
 
+class Test:
+    @Profile(conf=ProfilerConf)
+    def test_long(self):
+        # self.test1()
+        # self.test2()
+        for i in range(10000):
+            a = [0] * 1000
+        for j in range(28303):
+            b = 0 * [10000]
+
+    @Profile(conf=ProfilerConf)
+    def test1(self):
+        self.test3()
+        for i in range(10100):
+            a = [0] * 1000
+        for j in range(2833):
+            b = 0 * [10000]
+
+    def test2(self):
+        for i in range(10100):
+            a = [0] * 1000
+        for j in range(2833):
+            b = 0 * [10000]
+
+    def test3(self):
+        for i in range(10100):
+            a = [0] * 1000
+        for j in range(2833):
+            b = 0 * [10000]
+
+
 r"""Testing"""
 if __name__ == "__main__":
     for i in range(100):
-        ProfilerConf.gather_frequency = 10
-        ProfilerConf.enabled = True
-        ProfilerConf.iter = ProfilerConf.iter + 1
+        c = Test()
+        c.test_long()
+        c.test1()
 
-
-        @Profile(conf=ProfilerConf)
-        def test_long():
-            test1()
-            test2()
-            for i in range(10000):
-                a = [0] * 1000
-            for j in range(28303):
-                b = 0 * [10000]
-
-
-        def test1():
-            test3()
-            for i in range(10100):
-                a = [0] * 1000
-            for j in range(2833):
-                b = 0 * [10000]
-
-
-        def test2():
-            for i in range(10100):
-                a = [0] * 1000
-            for j in range(2833):
-                b = 0 * [10000]
-
-
-        def test3():
-            for i in range(101000):
-                a = [0] * 1000
-            for j in range(2833):
-                b = 0 * [10000]
-
-
-        test_long()
+        # @Profile(conf=ProfilerConf)
+        # def test_long():
+        #     test1()
+        #     test2()
+        #     for i in range(10000):
+        #         a = [0] * 1000
+        #     for j in range(28303):
+        #         b = 0 * [10000]
+        #
+        #
+        # def test1():
+        #     test3()
+        #     for i in range(10100):
+        #         a = [0] * 1000
+        #     for j in range(2833):
+        #         b = 0 * [10000]
+        #
+        #
+        # def test2():
+        #     for i in range(10100):
+        #         a = [0] * 1000
+        #     for j in range(2833):
+        #         b = 0 * [10000]
+        #
+        #
+        # def test3():
+        #     for i in range(101000):
+        #         a = [0] * 1000
+        #     for j in range(2833):
+        #         b = 0 * [10000]

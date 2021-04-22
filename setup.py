@@ -26,7 +26,7 @@ setup(
     ],
     packages=['coinstac_dinunet', 'coinstac_dinunet.config', 'coinstac_dinunet.data',
               'coinstac_dinunet.metrics', 'coinstac_dinunet.distrib', 'coinstac_dinunet.nn',
-              'coinstac_dinunet.utils', 'coinstac_dinunet.vision'],
+              'coinstac_dinunet.profiler', 'coinstac_dinunet.utils', 'coinstac_dinunet.vision'],
     include_package_data=True,
     install_requires=['numpy', 'scipy', 'scikit-learn', 'scikit-image',
                       'pillow', 'matplotlib', 'opencv-python-headless',
