@@ -165,7 +165,7 @@ class COINNLocal:
                     file_path=self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
 
             """ Reducer must issue update signal for the network to update"""
-            if self.out['update']:
+            if self.out.get('update'):
                 self.out.update(**self.learner.step())
                 if self.out['save_state']:
                     self.learner.trainer.save_checkpoint(
