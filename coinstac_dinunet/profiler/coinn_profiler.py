@@ -8,6 +8,7 @@ import os
 import json
 import io
 import datetime
+import glob
 
 
 class JSONToHTML(renderers.HTMLRenderer):
@@ -63,9 +64,6 @@ class JSONToHTML(renderers.HTMLRenderer):
         )
 
         return page
-
-
-import glob
 
 
 class Profile:
@@ -137,73 +135,3 @@ class Profile:
             for k in Profile._GATHER_KEYS_:
                 dest[k] += j[k]
         return json.dumps(dest)
-
-
-class Test:
-    @Profile(conf=ProfilerConf)
-    def test_long(self):
-        # self.test1()
-        # self.test2()
-        for i in range(10000):
-            a = [0] * 1000
-        for j in range(28303):
-            b = 0 * [10000]
-
-    @Profile(conf=ProfilerConf)
-    def test1(self):
-        self.test3()
-        for i in range(10100):
-            a = [0] * 1000
-        for j in range(2833):
-            b = 0 * [10000]
-
-    def test2(self):
-        for i in range(10100):
-            a = [0] * 1000
-        for j in range(2833):
-            b = 0 * [10000]
-
-    def test3(self):
-        for i in range(10100):
-            a = [0] * 1000
-        for j in range(2833):
-            b = 0 * [10000]
-
-
-r"""Testing"""
-if __name__ == "__main__":
-    for i in range(100):
-        c = Test()
-        c.test_long()
-        c.test1()
-
-        # @Profile(conf=ProfilerConf)
-        # def test_long():
-        #     test1()
-        #     test2()
-        #     for i in range(10000):
-        #         a = [0] * 1000
-        #     for j in range(28303):
-        #         b = 0 * [10000]
-        #
-        #
-        # def test1():
-        #     test3()
-        #     for i in range(10100):
-        #         a = [0] * 1000
-        #     for j in range(2833):
-        #         b = 0 * [10000]
-        #
-        #
-        # def test2():
-        #     for i in range(10100):
-        #         a = [0] * 1000
-        #     for j in range(2833):
-        #         b = 0 * [10000]
-        #
-        #
-        # def test3():
-        #     for i in range(101000):
-        #         a = [0] * 1000
-        #     for j in range(2833):
-        #         b = 0 * [10000]
