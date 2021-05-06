@@ -1,1 +1,1 @@
-from .coinn_profiler import Profile
+from .coinn_profiler import Profile, default_args

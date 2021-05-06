@@ -1,91 +1,78 @@
-from coinstac_dinunet.config import ProfilerConf
-
-ProfilerConf.enabled = True
-
 import functools
 from pyinstrument import Profiler, renderers
 import os
 import json
-import io
 import datetime
 import glob
+import sys
+import argparse
+from coinstac_dinunet.profiler.utils import JSONToHTML
+from coinstac_dinunet.config import profiler_conf_file
 
 
-class JSONToHTML(renderers.HTMLRenderer):
-    def __init__(self, json_str=None, trip_duration=None, trip_sample_size=None, **kw):
-        super().__init__(**kw)
-        self.json_str = json_str
-        self.trip_duration = trip_duration
-        self.trip_sample_size = trip_sample_size
+def boolean_string(s):
+    try:
+        return str(s).strip().lower() == 'true'
+    except:
+        return False
 
-    def set_json(self, json_str):
-        self.json_str = json_str
 
-    def render_json(self, session):
-        if self.json_str is not None:
-            return self.json_str
-        return super().render_json(session)
+default_args = {}
+if '--profile' in sys.argv and boolean_string(sys.argv[sys.argv.index('--profile') + 1]):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--profile", default=False, type=boolean_string, help="Run Profiler.")
+    ap.add_argument("--profiler_gather_freq", default=1, type=int,
+                    help="Frequency to gather profiler data.")
+    ap.add_argument("--profiler_verbose", default=False, type=boolean_string, help="Verbose.")
+    ap.add_argument("--profiler_dir_key", default='outputDirectory', type=str, help="Profiler log directory.")
+    _args, _ = ap.parse_known_args()
+    default_args = vars(_args)
 
-    def render(self, session):
-        resources_dir = os.path.join(os.path.dirname(os.path.abspath(renderers.__file__)), 'html_resources/')
 
-        if not os.path.exists(os.path.join(resources_dir, 'app.js')):
-            raise RuntimeError("Could not find app.js. If you are running "
-                               "pyinstrument from a git checkout, run 'python "
-                               "setup.py build' to compile the Javascript "
-                               "(requires nodejs).")
-
-        with io.open(os.path.join(resources_dir, 'app.js'), encoding='utf-8') as f:
-            js = f.read()
-
-        session_json = self.render_json(session)
-
-        trip_duration_bar_style = "text-align:right;background-color:#212729;font-family: 'Lucida Console', 'Courier New', monospace;font-size:18px;padding:9px 30px 9px 9px"
-        page = u'''<!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="utf-8">
-            </head>
-            <body>
-                <div id="trip-stats" style="{trip_duration_style}">COINSTAC iteration(#samples={trip_samples}): <span style="color:#d4414d">{trip_duration}</span></div>
-                <div id="app"></div>
-                <script>
-                    window.profileSession = {session_json}
-                </script>
-                <script>
-                    {js}
-                </script>
-            </body>
-            </html>'''.format(
-            trip_duration_style=trip_duration_bar_style,
-            trip_samples=self.trip_sample_size,
-            trip_duration=self.trip_duration,
-            js=js, session_json=session_json
-        )
-
-        return page
+class Conf:
+    enabled = False
+    log_dir = None
+    verbose = False
+    gather_freq = False
 
 
 class Profile:
     _GATHER_KEYS_ = ['duration', 'sample_count', 'cpu_time']
     _DATE_FMT_ = '%m/%d/%y %H:%M:%S'
 
-    def __init__(self, conf=ProfilerConf, **kw):
-        self.conf = conf
-        self.verbose = kw.get('verbose', False)
-        os.makedirs(conf.log_dir, exist_ok=True)
+    def __init__(self, conf: Conf = None, **kw):
+        if conf is None:
+            self.enabled = default_args.get('profile', False)
+            self.log_dir = default_args.get('profiler_log_dir')
+            self.verbose = default_args.get('profiler_verbose', False)
+            self.gather_frequency = default_args.get('profiler_gather_freq', 1)
+            if self.enabled:
+                conf_file = profiler_conf_file
+                if os.path.exists(conf_file):
+                    conf = json.loads(open(conf_file).read())
+                    self.log_dir = conf['log_dir']
+                else:
+                    self.enabled = False
+
+                if self.log_dir is not None:
+                    os.makedirs(self.log_dir, exist_ok=True)
+        else:
+            self.enabled = conf.enabled
+            self.log_dir = conf.log_dir
+            self.verbose = conf.verbose
+            self.gather_frequency = conf.gather_freq
 
     def __call__(self, func):
         if self.verbose:
-            print("*** Profiling ***", func, self.conf.enabled)
-        if not self.conf.enabled:
+            print("*** Profiling ***", func, f"Enabled: {self.enabled}")
+        if not self.enabled:
             return func
 
         @functools.wraps(func)
         def call(*args, **kwargs):
-            stats_htm = f"{self.conf.log_dir}{os.sep}{func.__name__}_STATS.html"
-            stats_json = f"{self.conf.log_dir}{os.sep}{func.__name__}_STATS.json"
-            _stats_json = f"{self.conf.log_dir}{os.sep}_{func.__name__}_PART_.json"
+            stats_htm = f"{self.log_dir}{os.sep}{func.__name__}_STATS.html"
+            stats_json = f"{self.log_dir}{os.sep}{func.__name__}_STATS.json"
+            _stats_json = f"{self.log_dir}{os.sep}_{func.__name__}_PART_.json"
 
             profiler = Profiler()
             profiler.start()
@@ -96,8 +83,8 @@ class Profile:
             with open(_stats_json, 'w', encoding='utf-8') as file:
                 file.write(jsns[0])
 
-            files = glob.glob(self.conf.log_dir + f"{os.sep}*{func.__name__}_PART_*.json")
-            if len(files) % self.conf.gather_frequency == 0:
+            files = glob.glob(self.log_dir + f"{os.sep}*{func.__name__}_PART_*.json")
+            if len(files) % self.gather_frequency == 0:
 
                 jsns = [json.load(open(jsn, encoding='utf-8')) for jsn in files]
                 trip_time = [j['start_time'] for j in jsns]
@@ -106,7 +93,7 @@ class Profile:
 
                 start = datetime.datetime.strptime(start, Profile._DATE_FMT_)
                 end = datetime.datetime.strptime(end, Profile._DATE_FMT_)
-                trip_duration = str((end - start) / self.conf.gather_frequency)
+                trip_duration = str((end - start) / self.gather_frequency)
 
                 if os.path.exists(stats_json):
                     jsns.append(json.load(open(stats_json, encoding='utf-8')))
@@ -117,7 +104,7 @@ class Profile:
 
                 renderer = JSONToHTML(
                     json_str=jsn,
-                    trip_sample_size=self.conf.gather_frequency,
+                    trip_sample_size=self.gather_frequency,
                     trip_duration=trip_duration
                 )
 
