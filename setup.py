@@ -24,7 +24,7 @@ setup(
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
     ],
-    packages=['coinstac_dinunet', 'coinstac_dinunet.config', 'coinstac_dinunet.data',
+    packages=['coinstac_dinunet', 'coinstac_dinunet.config', 'coinstac_dinunet.data',  'coinstac_dinunet.io',
               'coinstac_dinunet.metrics', 'coinstac_dinunet.distrib', 'coinstac_dinunet.nn',
               'coinstac_dinunet.profiler', 'coinstac_dinunet.utils', 'coinstac_dinunet.vision'],
     include_package_data=True,

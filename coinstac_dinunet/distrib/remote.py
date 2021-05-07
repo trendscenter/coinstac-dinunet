@@ -15,7 +15,7 @@ import coinstac_dinunet.utils as _utils
 from coinstac_dinunet.distrib import reducer as _reducer
 from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.utils.logger import *
-from coinstac_dinunet.utils import performance_improved_, stop_training_, configure_profiler
+from coinstac_dinunet.utils import performance_improved_, stop_training_
 from coinstac_dinunet.vision import plotter as _plot
 from coinstac_dinunet.profiler import Profile
 
@@ -26,7 +26,6 @@ class COINNRemote:
         self.cache = cache
         self.input = _utils.FrozenDict(input)
         self.state = _utils.FrozenDict(state)
-        configure_profiler(self.cache, self.state)
         self.reducer = None
 
     def _init_runs(self):

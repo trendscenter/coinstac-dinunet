@@ -4,7 +4,6 @@
 """
 
 import json as _json
-import os
 import os as _os
 import random as _rd
 import shutil as _shutil
@@ -16,7 +15,7 @@ import coinstac_dinunet.config as _conf
 import coinstac_dinunet.data.datautils as _du
 from coinstac_dinunet.distrib import learner as _learner
 from coinstac_dinunet.config.keys import *
-from coinstac_dinunet.utils import FrozenDict as _FrozenDict, configure_profiler as _configure_profiler
+from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 from coinstac_dinunet.profiler import Profile
 
 
@@ -68,7 +67,6 @@ class COINNLocal:
         self._pretrain_args = pretrain_args if pretrain_args else {}
         self._GLOBAL_STATE = {}
         self.learner = None
-        _configure_profiler(self.cache, self.state)
 
     def _check_args(self):
         assert self.cache['computation_id'] is not None, self._PROMPT_TASK_

@@ -1,8 +1,4 @@
 from coinstac_dinunet import config as _conf
-from coinstac_dinunet.profiler import default_args as _args
-import os as _os
-import json as _json
-import traceback as _tb
 
 
 def performance_improved_(epoch, score, cache):
@@ -30,19 +26,3 @@ def stop_training_(epoch, cache):
     elif cache['monitor_metric'][1] == 'minimize':
         return cache['best_val_score'] == _conf.score_low
     return False
-
-
-def configure_profiler(cache, state):
-    if not cache.get('profiler_configured') and _args.get('profile'):
-        profiler_conf = _conf.profiler_conf_file
-        if _os.path.exists(profiler_conf):
-            _os.remove(profiler_conf)
-
-        with open(profiler_conf, 'w') as conf:
-            try:
-                jsn = {'log_dir': state[_args['profiler_dir_key']]}
-                conf.write(_json.dumps(jsn))
-            except:
-                _os.remove(profiler_conf)
-                _tb.print_exc()
-        cache['profiler_configured'] = True

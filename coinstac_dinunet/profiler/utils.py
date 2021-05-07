@@ -1,22 +1,20 @@
 import io
 import os
+import json
 
 from pyinstrument import renderers
+import datetime
 
 
 class JSONToHTML(renderers.HTMLRenderer):
-    def __init__(self, json_str=None, trip_duration=None, trip_sample_size=None, **kw):
+    def __init__(self, json=None, trip_sample_size=None, **kw):
         super().__init__(**kw)
-        self.json_str = json_str
-        self.trip_duration = trip_duration
+        self.json = json
         self.trip_sample_size = trip_sample_size
 
-    def set_json(self, json_str):
-        self.json_str = json_str
-
     def render_json(self, session):
-        if self.json_str is not None:
-            return self.json_str
+        if self.json is not None:
+            return json.dumps(self.json)
         return super().render_json(session)
 
     def render(self, session):
@@ -33,14 +31,18 @@ class JSONToHTML(renderers.HTMLRenderer):
 
         session_json = self.render_json(session)
 
-        trip_duration_bar_style = "text-align:right;background-color:#212729;font-family: 'Lucida Console', 'Courier New', monospace;font-size:18px;padding:9px 30px 9px 9px"
+        avg_trip_css = "text-align:right;background-color:#21181b;font-family: 'Lucida Console', 'Courier New', monospace;font-size:18px;padding:9px 30px 9px 9px"
+        duration_css = "text-align:right;background-color:#000000;font-family: 'Lucida Console', 'Courier New', monospace;font-size:18px;padding:9px 30px 9px 9px"
         page = u'''<!DOCTYPE html>
             <html>
             <head>
                 <meta charset="utf-8">
             </head>
             <body>
-                <div id="trip-stats" style="{trip_duration_style}">COINSTAC iteration(#samples={trip_samples}): <span style="color:#d4414d">{trip_duration}</span></div>
+                <div id="trip-stats" style="{avg_trip_css}">Total Time Elapsed: <span style="color:#d4414d">{time_elapsed}</span></div>
+                <div id="trip-stats" style="{avg_trip_css}">Average trip duration(n={trip_samples}): <span style="color:#d4414d">{trip_duration}</span></div>
+                <div id="trip-stats" style="{duration_css}">Total time in trips: <span style="color:#d4414d">{total_duration_in_trip}</span></div>
+                <div id="trip-stats" style="{duration_css}">Total time in computation: <span style="color:#d4414d">{total_duration_in_computation}</span></div>
                 <div id="app"></div>
                 <script>
                     window.profileSession = {session_json}
@@ -50,9 +52,13 @@ class JSONToHTML(renderers.HTMLRenderer):
                 </script>
             </body>
             </html>'''.format(
-            trip_duration_style=trip_duration_bar_style,
+            time_elapsed=str(self.json['time_elapsed']),
+            avg_trip_css=avg_trip_css,
+            duration_css=duration_css,
             trip_samples=self.trip_sample_size,
-            trip_duration=self.trip_duration,
+            trip_duration=self.json['avg_trip_duration'],
+            total_duration_in_trip=str(datetime.timedelta(0, self.json['total_seconds_in_trip'])),
+            total_duration_in_computation=str(datetime.timedelta(0, self.json['total_seconds_in_computation'])),
             js=js, session_json=session_json
         )
 

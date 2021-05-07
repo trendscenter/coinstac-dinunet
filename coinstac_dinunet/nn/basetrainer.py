@@ -17,7 +17,7 @@ import coinstac_dinunet.utils.tensorutils as _tu
 import coinstac_dinunet.vision.plotter as _plot
 from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.utils.logger import *
-from coinstac_dinunet.utils import stop_training_, configure_profiler
+from coinstac_dinunet.utils import stop_training_
 
 
 class NNTrainer:
@@ -28,8 +28,7 @@ class NNTrainer:
         self.nn = _ODict()
         self.device = _ODict()
         self.optimizer = _ODict()
-        configure_profiler(self.cache, self.state)
-        
+
     def _init_nn_model(self):
         r"""
         User cam override and initialize required models in self.distrib dict.

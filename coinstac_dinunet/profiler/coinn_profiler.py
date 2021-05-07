@@ -1,66 +1,30 @@
 import functools
+import time
+
 from pyinstrument import Profiler, renderers
 import os
 import json
 import datetime
 import glob
-import sys
-import argparse
 from coinstac_dinunet.profiler.utils import JSONToHTML
-from coinstac_dinunet.config import profiler_conf_file
-
-
-def boolean_string(s):
-    try:
-        return str(s).strip().lower() == 'true'
-    except:
-        return False
-
-
-default_args = {}
-if '--profile' in sys.argv and boolean_string(sys.argv[sys.argv.index('--profile') + 1]):
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--profile", default=False, type=boolean_string, help="Run Profiler.")
-    ap.add_argument("--profiler_gather_freq", default=1, type=int,
-                    help="Frequency to gather profiler data.")
-    ap.add_argument("--profiler_verbose", default=False, type=boolean_string, help="Verbose.")
-    ap.add_argument("--profiler_dir_key", default='outputDirectory', type=str, help="Profiler log directory.")
-    _args, _ = ap.parse_known_args()
-    default_args = vars(_args)
-
-
-class Conf:
-    enabled = False
-    log_dir = None
-    verbose = False
-    gather_freq = False
+from coinstac_dinunet.config import default_args as _args
+from coinstac_dinunet.io import RECV as _RECV
+import uuid as _UID
 
 
 class Profile:
     _GATHER_KEYS_ = ['duration', 'sample_count', 'cpu_time']
     _DATE_FMT_ = '%m/%d/%y %H:%M:%S'
 
-    def __init__(self, conf: Conf = None, **kw):
-        if conf is None:
-            self.enabled = default_args.get('profile', False)
-            self.log_dir = default_args.get('profiler_log_dir')
-            self.verbose = default_args.get('profiler_verbose', False)
-            self.gather_frequency = default_args.get('profiler_gather_freq', 1)
-            if self.enabled:
-                conf_file = profiler_conf_file
-                if os.path.exists(conf_file):
-                    conf = json.loads(open(conf_file).read())
-                    self.log_dir = conf['log_dir']
-                else:
-                    self.enabled = False
-
-                if self.log_dir is not None:
-                    os.makedirs(self.log_dir, exist_ok=True)
-        else:
-            self.enabled = conf.enabled
-            self.log_dir = conf.log_dir
-            self.verbose = conf.verbose
-            self.gather_frequency = conf.gather_freq
+    def __init__(self, **kw):
+        self.enabled = _args.get('profile', False)
+        self.log_dir = _args.get('profiler_log_dir')
+        self.verbose = _args.get('profiler_verbose', False)
+        self.gather_frequency = _args.get('profiler_gather_freq', 1)
+        if self.enabled:
+            self.log_dir = _RECV['state']['outputDirectory'] + os.sep + "_profiler_logs"
+            if self.log_dir is not None:
+                os.makedirs(self.log_dir, exist_ok=True)
 
     def __call__(self, func):
         if self.verbose:
@@ -72,7 +36,7 @@ class Profile:
         def call(*args, **kwargs):
             stats_htm = f"{self.log_dir}{os.sep}{func.__name__}_STATS.html"
             stats_json = f"{self.log_dir}{os.sep}{func.__name__}_STATS.json"
-            _stats_json = f"{self.log_dir}{os.sep}_{func.__name__}_PART_.json"
+            _stats_json = f"{self.log_dir}{os.sep}_{func.__name__}_PART_{_UID.uuid4()}.json"
 
             profiler = Profiler()
             profiler.start()
@@ -84,28 +48,43 @@ class Profile:
                 file.write(jsns[0])
 
             files = glob.glob(self.log_dir + f"{os.sep}*{func.__name__}_PART_*.json")
-            if len(files) % self.gather_frequency == 0:
-
+            if len(files) % (self.gather_frequency + 1) == 0:
                 jsns = [json.load(open(jsn, encoding='utf-8')) for jsn in files]
-                trip_time = [j['start_time'] for j in jsns]
-                start = datetime.datetime.fromtimestamp(min(trip_time)).strftime(Profile._DATE_FMT_)
-                end = datetime.datetime.fromtimestamp(max(trip_time)).strftime(Profile._DATE_FMT_)
+                start_times = [j['start_time'] for j in jsns]
+                comp_duration = sum(
+                    [datetime.timedelta(0, j['duration']).total_seconds() for j in jsns][:self.gather_frequency]
+                )
+                comp_duration = datetime.timedelta(0, comp_duration)
 
-                start = datetime.datetime.strptime(start, Profile._DATE_FMT_)
-                end = datetime.datetime.strptime(end, Profile._DATE_FMT_)
-                trip_duration = str((end - start) / self.gather_frequency)
+                start = datetime.datetime.fromtimestamp(min(start_times))
+                end = datetime.datetime.fromtimestamp(max(start_times))
 
+                trip_duration = end - start - comp_duration
+                avg_trip_duration = str(trip_duration / self.gather_frequency)
+
+                jsn = self._gather(jsns[:self.gather_frequency])
+
+                _current = {}
                 if os.path.exists(stats_json):
-                    jsns.append(json.load(open(stats_json, encoding='utf-8')))
+                    _current = json.loads(open(stats_json).read())
 
-                jsn = self._gather(jsns)
+                jsn['start_time'] = _current.get('start_time', time.time())
+                jsn['time_elapsed'] = str(datetime.datetime.fromtimestamp(time.time()) - datetime.datetime.fromtimestamp(
+                    jsn['start_time']))
+
+                jsn['total_seconds_in_trip'] = trip_duration.total_seconds() + _current.get(
+                    'total_seconds_in_trip',
+                    0)
+                jsn['total_seconds_in_computation'] = comp_duration.total_seconds() + _current.get(
+                    'total_seconds_in_computation',
+                    0)
+                jsn['avg_trip_duration'] = avg_trip_duration
                 with open(stats_json, 'w', encoding='utf-8') as file:
-                    file.write(jsn)
+                    file.write(json.dumps(jsn))
 
                 renderer = JSONToHTML(
-                    json_str=jsn,
-                    trip_sample_size=self.gather_frequency,
-                    trip_duration=trip_duration
+                    json=jsn,
+                    trip_sample_size=self.gather_frequency
                 )
 
                 with open(stats_htm, 'w', encoding='utf-8') as file:
@@ -121,4 +100,6 @@ class Profile:
         for j in jsons[:-1]:
             for k in Profile._GATHER_KEYS_:
                 dest[k] += j[k]
-        return json.dumps(dest)
+        for k in Profile._GATHER_KEYS_:
+            dest[k] = dest[k] / len(jsons)
+        return dest
