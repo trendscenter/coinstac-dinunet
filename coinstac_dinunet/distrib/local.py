@@ -108,7 +108,7 @@ class COINNLocal:
             out['phase'] = Phase.PRE_COMPUTATION
         return out
 
-    # @Profile()
+    @Profile()
     def compute(self, dataset_cls, trainer_cls, learner_cls: callable = None, **kw):
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
         self._set_learner(learner_cls,
@@ -164,7 +164,7 @@ class COINNLocal:
                     file_path=self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
 
             """ Reducer must issue update signal for the network to update"""
-            if self.out.get('update'):
+            if self.input.get('update'):
                 self.out.update(**self.learner.step())
                 if self.out['save_state']:
                     self.learner.trainer.save_checkpoint(

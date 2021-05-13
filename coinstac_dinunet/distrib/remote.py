@@ -172,7 +172,7 @@ class COINNRemote:
             _shutil.copy(pt_path, self.state['transferDirectory'] + _os.sep + out['pretrained_weights'])
         return out
 
-    # @Profile()
+    @Profile()
     def compute(self, reducer_cls: _reducer.COINNReducer = None, **kw):
 
         self._set_reducer(reducer_cls)
