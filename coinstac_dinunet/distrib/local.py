@@ -108,7 +108,7 @@ class COINNLocal:
             out['phase'] = Phase.PRE_COMPUTATION
         return out
 
-    @Profile()
+    # @Profile()
     def compute(self, dataset_cls, trainer_cls, learner_cls: callable = None, **kw):
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
         self._set_learner(learner_cls,

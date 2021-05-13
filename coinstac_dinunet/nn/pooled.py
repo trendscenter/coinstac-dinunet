@@ -81,7 +81,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
         def base_directory(self, site):
             return f"{self.dataset_dir}/input/{site}/simulatorRun"
 
-        @Profile()
+        # @Profile()
         def run(self, dataset_cls, only_sites: list = None, only_folds: list = None):
             global_avg, global_metrics = self.new_averages(), self.new_metrics()
 
