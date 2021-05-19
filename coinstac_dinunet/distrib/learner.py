@@ -56,8 +56,3 @@ class COINNLearner:
         _tu.save_grads(self.state['transferDirectory'] + _sep + out['grads_file'], grads)
         out['reduce'] = True
         return out, it
-
-
-class PowerSGDLearner(COINNLearner):
-    def __init__(self, trainer=None, **kw):
-        super().__init__(trainer=trainer, **kw)

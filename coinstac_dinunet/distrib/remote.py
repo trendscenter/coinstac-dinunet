@@ -10,6 +10,7 @@ import shutil as _shutil
 import sys as _sys
 
 import coinstac_dinunet.config as _conf
+import coinstac_dinunet.distrib.utils
 import coinstac_dinunet.metrics as _metric
 import coinstac_dinunet.utils as _utils
 from coinstac_dinunet.distrib import reducer as _reducer
@@ -260,7 +261,7 @@ class COINNRemote:
             reducer_cls = _reducer.COINNReducer
 
             if self.cache.get('dist_engine', '').strip().lower() == 'powersgd':
-                reducer_cls = _reducer.PowerSGDReducer
+                reducer_cls = coinstac_dinunet.distrib.utils.DADReducer
 
         self.reducer = reducer_cls(cache=self.cache, input=self.input, state=self.state, **kw)
 

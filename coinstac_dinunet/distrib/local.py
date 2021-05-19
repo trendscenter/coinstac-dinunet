@@ -13,10 +13,11 @@ from typing import List as _List
 
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.data.datautils as _du
-from coinstac_dinunet.distrib import learner as _learner
+import coinstac_dinunet.distrib.utils
 from coinstac_dinunet.config.keys import *
-from coinstac_dinunet.utils import FrozenDict as _FrozenDict
+from coinstac_dinunet.distrib import learner as _learner
 from coinstac_dinunet.profiler import Profile
+from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 
 
 class COINNLocal:
@@ -180,8 +181,9 @@ class COINNLocal:
                 """
                 out, it = self.learner.to_reduce(dataset_cls)
                 self.out.update(**out)
-                self.cache[Key.TRAIN_SERIALIZABLE].append([vars(it['averages']), vars(it['metrics'])])
-                self.out.update(**self.learner.trainer.on_iteration_end(0, 0, it))
+                if it.get('averages') and it.get('metrics'):
+                    self.cache[Key.TRAIN_SERIALIZABLE].append([vars(it['averages']), vars(it['metrics'])])
+                    self.out.update(**self.learner.trainer.on_iteration_end(0, 0, it))
 
             if all(m == Mode.VALIDATION for m in self._GLOBAL_STATE['modes'].values()):
                 """
@@ -210,7 +212,7 @@ class COINNLocal:
             learner_cls = _learner.COINNLearner
 
             if self.cache.get('dist_engine', '').strip().lower() == 'powersgd':
-                learner_cls = _learner.PowerSGDLearner
+                learner_cls = coinstac_dinunet.distrib.utils.DADLearner
 
         self.learner = learner_cls(trainer=trainer, **kw)
 
