@@ -15,13 +15,16 @@ def hook_wrapper(site, hook_type, layer, save_to='', debug=False):
     name = _os.path.join(save_to, f"Site:{site}-Type:{hook_type}-Layer:{layer}")
 
     def hook_save(a, in_grad, out_grad):
-        for i, b in enumerate(in_grad):
-            if b is not None:
-                _np.save(name + f"-IO:in-Index:{i}.npy", b.clone().detach().numpy())
+        if hook_type.lower() == 'forward':
+            for i, b in enumerate(in_grad):
+                if b is not None:
+                    _np.save(name + f"-IO:in-Index:{i}.npy", b.clone().detach().numpy())
+                break
         if hook_type.lower() == 'backward':
             for i, c in enumerate(out_grad):
                 if c is not None:
                     _np.save(name + f"-IO:out-index:{i}.npy", c.clone().detach().numpy())
+                break
 
     return hook_save
 
@@ -76,6 +79,8 @@ class DADLearner(COINNLearner):
         return out, self.trainer.reduce_iteration(its)
 
     def dad_backward(self):
+        #Todo
+        """Update each layer's grads after getting aggregate from remote"""
         pass
 
     def to_reduce(self, dataset_cls) -> _Tuple[dict, dict]:
