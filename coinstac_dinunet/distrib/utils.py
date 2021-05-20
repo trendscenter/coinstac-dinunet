@@ -49,8 +49,8 @@ class DADLearner(COINNLearner):
 
     def step(self) -> dict:
         if self.input.get('dad_layer'):
-            """First layer since step is called before dad_backward"""
             self.dad_backward()
+
         out = {}
         out['save_state'] = False
         if self.input.get('dad_step'):
@@ -98,7 +98,7 @@ class DADLearner(COINNLearner):
 
         if len(self.cache['dad_layers']) > 0:
             self.cache['dad_layer'] = self.cache['dad_layers'].pop()
-            layer_files = _glob.glob(self.log_dir + _os.sep + f"*-Layer:{self.cache['dad_iter']}-*")
+            layer_files = _glob.glob(self.log_dir + _os.sep + f"*-Layer:{self.cache['dad_layer']}-*")
             transfer_path = self.state['transferDirectory'] + _os.sep + DADLearner.DATA_PATH
             _os.makedirs(transfer_path)
             for file in layer_files:
@@ -115,10 +115,9 @@ class DADReducer(COINNReducer):
         super().__init__(**kw)
 
     def reduce(self):
-        """ Average each sites gradients and pass it to all sites. """
         out = {}
         for site, site_vars in self.input.items():
-            re = f"*-Layer:{self.cache['dad_iter']}-*"
+            re = f"*-Layer:{self.cache['dad_layer']}-*"
             layer_files = _glob.glob(
                 self.state['baseDirectory'] + _os.sep + site + _os.sep + DADLearner.DATA_PATH + _os.sep + re
             )
