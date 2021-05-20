@@ -1,3 +1,4 @@
+import glob as _glob
 import os as _os
 import shutil as _shu
 from typing import Tuple as _Tuple
@@ -25,24 +26,36 @@ def hook_wrapper(site, hook_type, layer, save_to='', debug=False):
     return hook_save
 
 
+def check(logic, k, v, kw):
+    phases = []
+    for site_vars in kw.values():
+        phases.append(site_vars.get(k) == v)
+    return logic(phases)
+
+
 class DADLearner(COINNLearner):
+    DATA_PATH = '_dad_data'
 
     def __init__(self, **kw):
         super().__init__(**kw)
-        self.base_dir_fw = self.state['outputDirectory'] + _os.sep + '_dad_temp'
-        self.base_dir_bk = self.state['outputDirectory'] + _os.sep + '_dad_temp'
+        self.log_dir = self.cache['outputDirectory'] + _os.sep + DADLearner.DATA_PATH
         for model_key in self.trainer.nn.keys():
             for layer, ch in list(self.trainer.nn[model_key].children())[::-1]:
-                ch.register_forward_hook(hook_wrapper(self.state['clientId'], 'forward', layer, self.base_dir_fw))
-                ch.register_backward_hook(hook_wrapper(self.state['clientId'], 'backward', layer, self.base_dir_bk))
+                ch.register_forward_hook(hook_wrapper(self.state['clientId'], 'forward', layer, self.log_dir))
+                ch.register_backward_hook(hook_wrapper(self.state['clientId'], 'backward', layer, self.log_dir))
 
     def step(self) -> dict:
+        if self.input.get('dad_layer'):
+            """First layer since step is called before dad_backward"""
+            self.dad_backward()
         out = {}
-        # Todo
-        out['save_state'] = True
+        out['save_state'] = False
+        if self.input.get('dad_step'):
+            # Todo
+            out['save_state'] = True
         return out
 
-    def fw_backward(self, dataset_cls) -> _Tuple[dict, dict]:
+    def forward(self, dataset_cls) -> _Tuple[dict, dict]:
         out = {}
 
         first_model = list(self.trainer.nn.keys())[0]
@@ -51,9 +64,7 @@ class DADLearner(COINNLearner):
         self.trainer.nn[first_model].train()
         self.trainer.optimizer[first_optim].zero_grad()
 
-        _os.makedirs(self.base_dir_fw, exist_ok=True)
-        _os.makedirs(self.base_dir_bk, exist_ok=True)
-
+        _os.makedirs(self.log_dir, exist_ok=True)
         its = []
         """Cannot use grad accumulation with DAD at the moment"""
         # for _ in range(self.cache['local_iterations']):
@@ -64,29 +75,57 @@ class DADLearner(COINNLearner):
             out.update(**self.trainer.next_iter())
         return out, self.trainer.reduce_iteration(its)
 
+    def dad_backward(self):
+        pass
+
     def to_reduce(self, dataset_cls) -> _Tuple[dict, dict]:
         out, it = {}, {}
-        if len(self.cache.get('dad_iterations', [])) == 0:
+        if len(self.cache.get('dad_layers', [])) == 0:
 
             """Clear for next global iteration"""
-            if _os.path.exists(self.base_dir_fw):
-                _shu.rmtree(self.base_dir_fw)
-            if _os.path.exists(self.base_dir_bk):
-                _shu.rmtree(self.base_dir_bk)
+            if _os.path.exists(self.log_dir):
+                _shu.rmtree(self.log_dir)
 
-            out, it = self.fw_backward(dataset_cls)
+            out, it = self.forward(dataset_cls)
             fk = list(self.trainer.nn.keys())[0]
-            self.cache['dad_iterations'] = [k for k, v in self.trainer.nn[fk].children()]
+            self.cache['dad_layers'] = [k for k, v in self.trainer.nn[fk].children()]
+            out['last_layer'] = True
 
-        if len(self.cache['dad_iterations']) > 0:
-            self.cache['dad_iter'] = self.cache['dad_iterations'].pop()
-            """Todo for sending layer's data"""
-            out['dad_iter'] = self.cache['dad_iter']
-            out['to_step'] = len(self.cache['dad_iterations']) == 0
+        if len(self.cache['dad_layers']) > 0:
+            self.cache['dad_layer'] = self.cache['dad_layers'].pop()
+            layer_files = _glob.glob(self.log_dir + _os.sep + f"*-Layer:{self.cache['dad_iter']}-*")
+            transfer_path = self.state['transferDirectory'] + _os.sep + DADLearner.DATA_PATH
+            _os.makedirs(transfer_path)
+            for file in layer_files:
+                _shu.move(file, transfer_path)
+            out['dad_layer'] = self.cache['dad_layer']
 
+        out['to_step'] = len(self.cache['dad_layers']) == 0
         out['reduce'] = True
         return out, it
 
 
 class DADReducer(COINNReducer):
-    pass
+    def __init__(self, **kw):
+        super().__init__(**kw)
+
+    def reduce(self):
+        """ Average each sites gradients and pass it to all sites. """
+        out = {}
+        for site, site_vars in self.input.items():
+            re = f"*-Layer:{self.cache['dad_iter']}-*"
+            layer_files = _glob.glob(
+                self.state['baseDirectory'] + _os.sep + site + _os.sep + DADLearner.DATA_PATH + _os.sep + re
+            )
+
+            if site_vars.get('last_layer'):
+                """Vertical concat"""
+                pass
+            else:
+                """Vertical concat"""
+                pass
+
+        out['dad_layer'] = site_vars.get('dad_layer')
+        out['update'] = True
+        out['dad_step'] = check(all, 'to_step', True, self.input)
+        return out

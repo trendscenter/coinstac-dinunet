@@ -17,6 +17,7 @@ from coinstac_dinunet.distrib import reducer as _reducer
 from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.utils import performance_improved_, stop_training_
+from coinstac_dinunet.distrib.utils import check
 from coinstac_dinunet.vision import plotter as _plot
 from coinstac_dinunet.profiler import Profile
 
@@ -79,13 +80,6 @@ class COINNRemote:
             fold['pretrain'] = site == max_data_site
             out[site] = fold
         return out
-
-    @staticmethod
-    def _check(logic, k, v, kw):
-        phases = []
-        for site_vars in kw.values():
-            phases.append(site_vars.get(k) == v)
-        return logic(phases)
 
     def _new_metrics(self):
         return _metric.COINNMetrics()
@@ -178,7 +172,7 @@ class COINNRemote:
 
         self._set_reducer(reducer_cls)
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
-        if self._check(all, 'phase', Phase.INIT_RUNS, self.input):
+        if check(all, 'phase', Phase.INIT_RUNS, self.input):
             """
             Initialize all folds and loggers
             """
@@ -187,12 +181,12 @@ class COINNRemote:
             self.cache['verbose'] = False
             self.out['phase'] = Phase.INIT_NN
 
-        if self._check(all, 'phase', Phase.PRE_COMPUTATION, self.input):
+        if check(all, 'phase', Phase.PRE_COMPUTATION, self.input):
             self.out.update(**self._pre_compute())
             self.out['phase'] = Phase.PRE_COMPUTATION
 
         self.out['global_modes'] = self._set_mode()
-        if self._check(all, 'phase', Phase.COMPUTATION, self.input):
+        if check(all, 'phase', Phase.COMPUTATION, self.input):
             """
             Main computation phase where we aggregate sites information
             We also handle train/validation/test stages of local sites by sending corresponding signals from here
@@ -200,22 +194,22 @@ class COINNRemote:
             """
 
             self.out['phase'] = Phase.COMPUTATION
-            if self._check(all, 'reduce', True, self.input):
+            if check(all, 'reduce', True, self.input):
                 self.out.update(**self.reducer.reduce(**kw))
 
-            if self._check(all, 'mode', Mode.VALIDATION_WAITING, self.input):
+            if check(all, 'mode', Mode.VALIDATION_WAITING, self.input):
                 self.cache['epoch'] += 1
                 if self.cache['epoch'] % self.cache['validation_epochs'] == 0:
                     self.out['global_modes'] = self._set_mode(mode=Mode.VALIDATION)
                 else:
                     self.out['global_modes'] = self._set_mode(mode=Mode.TRAIN)
 
-            if self._check(all, 'mode', Mode.TRAIN_WAITING, self.input):
+            if check(all, 'mode', Mode.TRAIN_WAITING, self.input):
                 epoch_info = self._on_epoch_end()
                 nxt_epoch = self._next_epoch(**epoch_info)
                 self.out['global_modes'] = self._set_mode(mode=nxt_epoch['mode'])
 
-        if self._check(all, 'phase', Phase.NEXT_RUN_WAITING, self.input):
+        if check(all, 'phase', Phase.NEXT_RUN_WAITING, self.input):
             """
             This block runs when a fold has completed all train, test, validation phase.
             We save all the scores and plot the results.
