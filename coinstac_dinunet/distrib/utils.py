@@ -4,6 +4,7 @@ import shutil as _shu
 from typing import Tuple as _Tuple
 
 import numpy as _np
+import torch as _torch
 
 from coinstac_dinunet import COINNLearner, COINNReducer
 
@@ -12,7 +13,7 @@ def hook_wrapper(site, hook_type, layer, save_to='', debug=False):
     if debug:
         print(f"**** {site}, {hook_type}, {layer} ****")
 
-    name = _os.path.join(save_to, f"Site:{site}-Type:{hook_type}-Layer:{layer}")
+    name = _os.path.join(save_to, f"Type:{hook_type}-Layer:{layer}")
 
     def hook_save(a, in_grad, out_grad):
         if hook_type.lower() == 'forward':
@@ -23,7 +24,7 @@ def hook_wrapper(site, hook_type, layer, save_to='', debug=False):
         if hook_type.lower() == 'backward':
             for i, c in enumerate(out_grad):
                 if c is not None:
-                    _np.save(name + f"-IO:out-index:{i}.npy", c.clone().detach().numpy())
+                    _np.save(name + f"-IO:out-Index:{i}.npy", c.clone().detach().numpy())
                 break
 
     return hook_save
@@ -37,24 +38,31 @@ def check(logic, k, v, kw):
 
 
 class DADLearner(COINNLearner):
-    DATA_PATH = '_dad_data'
+    DATA_PATH = '_dad_layers_data'
+    GRADS_PATH = '_dad_grads_update'
 
     def __init__(self, **kw):
         super().__init__(**kw)
         self.log_dir = self.cache['outputDirectory'] + _os.sep + DADLearner.DATA_PATH
+        self.grads_dir = self.cache['outputDirectory'] + _os.sep + DADLearner.GRADS_PATH
+
         for model_key in self.trainer.nn.keys():
             for layer, ch in list(self.trainer.nn[model_key].children())[::-1]:
                 ch.register_forward_hook(hook_wrapper(self.state['clientId'], 'forward', layer, self.log_dir))
                 ch.register_backward_hook(hook_wrapper(self.state['clientId'], 'backward', layer, self.log_dir))
 
     def step(self) -> dict:
-        if self.input.get('dad_layer'):
+        if self.input.get('dad_layer_activation'):
             self.dad_backward()
 
         out = {}
         out['save_state'] = False
         if self.input.get('dad_step'):
-            # Todo
+            for layer, param in self.trainer.nn[list(self.trainer.nn.keys())[0]].named_parameters():
+                param.grad = _torch.load(self.grads_dir + _os.sep + f"{layer}_grad.tar")
+
+            first_optim = list(self.trainer.optimizer.keys())[0]
+            self.trainer.optimizer[first_optim].step()
             out['save_state'] = True
         return out
 
@@ -79,9 +87,13 @@ class DADLearner(COINNLearner):
         return out, self.trainer.reduce_iteration(its)
 
     def dad_backward(self):
-        #Todo
+        # Todo
         """Update each layer's grads after getting aggregate from remote"""
-        pass
+
+        act = _torch.FloatTensor(self.state['baseDirectory'] + _os.sep + self.input['dad_layer_activation'], device=self.trainer.device['gpu'])
+        grad = _torch.FloatTensor(self.state['baseDirectory'] + _os.sep + self.input['dad_layer_grad'], device=self.trainer.device['gpu'])
+        _torch.save(act.T.mm(grad),
+                    self.grads_dir + _os.sep + self.input['dad_step'] + self.input['dad_layer'] + "_grad.tar")
 
     def to_reduce(self, dataset_cls) -> _Tuple[dict, dict]:
         out, it = {}, {}
@@ -91,6 +103,9 @@ class DADLearner(COINNLearner):
             if _os.path.exists(self.log_dir):
                 _shu.rmtree(self.log_dir)
 
+            if _os.path.exists(self.grads_dir):
+                _shu.rmtree(self.grads_dir)
+
             out, it = self.forward(dataset_cls)
             fk = list(self.trainer.nn.keys())[0]
             self.cache['dad_layers'] = [k for k, v in self.trainer.nn[fk].children()]
@@ -98,11 +113,9 @@ class DADLearner(COINNLearner):
 
         if len(self.cache['dad_layers']) > 0:
             self.cache['dad_layer'] = self.cache['dad_layers'].pop()
-            layer_files = _glob.glob(self.log_dir + _os.sep + f"*-Layer:{self.cache['dad_layer']}-*")
-            transfer_path = self.state['transferDirectory'] + _os.sep + DADLearner.DATA_PATH
-            _os.makedirs(transfer_path)
-            for file in layer_files:
-                _shu.move(file, transfer_path)
+            out['layer_files'] = _glob.glob(self.log_dir + _os.sep + f"*-Layer:{self.cache['dad_layer']}-*")
+            for file in out['layer_files']:
+                _shu.move(file, self.state['transferDirectory'])
             out['dad_layer'] = self.cache['dad_layer']
 
         out['to_step'] = len(self.cache['dad_layers']) == 0
@@ -114,22 +127,28 @@ class DADReducer(COINNReducer):
     def __init__(self, **kw):
         super().__init__(**kw)
 
-    def reduce(self):
+    def reduce_VGG(self):
         out = {}
+        h, grad_prev = [], []
         for site, site_vars in self.input.items():
-            re = f"*-Layer:{self.cache['dad_layer']}-*"
-            layer_files = _glob.glob(
-                self.state['baseDirectory'] + _os.sep + site + _os.sep + DADLearner.DATA_PATH + _os.sep + re
-            )
+            fw_file = self.state[
+                          'baseDirectory'] + _os.sep + f"Type:forward-Layer:{self.cache['dad_layer']}-IO:in-Index:0.npy"
+            bk_file = self.state[
+                          'baseDirectory'] + _os.sep + f"Type:backward-Layer:{self.cache['dad_layer']}-IO:out-Index:0.npy"
+            if fw_file in site_vars['layer_files'] and bk_file in site_vars['layer_files']:
+                h.append(_np.load(fw_file))
+                grad_prev.append(_np.load(bk_file))
 
-            if site_vars.get('last_layer'):
-                """Vertical concat"""
-                pass
-            else:
-                """Vertical concat"""
-                pass
+        out["dad_layer_activation"] = site_vars['dad_layer'] + "_activation.npy"
+        out["dad_layer_grad"] = site_vars['dad_layer'] + "_grads.npy"
 
-        out['dad_layer'] = site_vars.get('dad_layer')
+        _np.save(self.state['transferDirectory'] + _os.sep + out['dad_layer_activation'], _np.concatenate(h))
+        _np.save(self.state['transferDirectory'] + _os.sep + out['dad_layer_grads'], _np.concatenate(grad_prev))
+
+        out['dad_reduced_layer'] = site_vars['dad_layer']
         out['update'] = True
         out['dad_step'] = check(all, 'to_step', True, self.input)
         return out
+
+    def reduce(self):
+        return self.reduce_VGG()
