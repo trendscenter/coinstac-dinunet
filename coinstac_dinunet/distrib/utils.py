@@ -16,7 +16,7 @@ def hook_wrapper(site, hook_type, layer, save_to='', debug=False):
 
     name = _os.path.join(save_to, f"Type:{hook_type}-Layer:{layer}")
 
-    def hook_save(a, in_grad, out_grad):
+    def save(m, in_grad, out_grad):
         if hook_type.lower() == 'forward':
             for i, b in enumerate(in_grad):
                 if b is not None:
@@ -28,7 +28,7 @@ def hook_wrapper(site, hook_type, layer, save_to='', debug=False):
                     _np.save(name + f"-IO:out-Index:{i}.npy", c.clone().detach().numpy())
                 break
 
-    return hook_save
+    return save
 
 
 def check(logic, k, v, kw):
