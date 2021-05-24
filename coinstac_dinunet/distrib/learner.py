@@ -34,7 +34,7 @@ class COINNLearner:
     def backward(self, dataset_cls) -> _Tuple[dict, dict]:
         out = {}
 
-        first_model = list(self.trainer.nn.keys())[0]
+        first_model = list(self.trainer.nn. keys())[0]
         first_optim = list(self.trainer.optimizer.keys())[0]
 
         self.trainer.nn[first_model].train()

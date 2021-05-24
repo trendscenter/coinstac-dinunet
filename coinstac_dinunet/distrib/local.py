@@ -13,7 +13,6 @@ from typing import List as _List
 
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.data.datautils as _du
-import coinstac_dinunet.distrib.utils
 from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.distrib import learner as _learner
 from coinstac_dinunet.profiler import Profile
@@ -112,9 +111,7 @@ class COINNLocal:
     @Profile()
     def compute(self, dataset_cls, trainer_cls, learner_cls: callable = None, **kw):
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
-        self._set_learner(learner_cls,
-                          trainer=trainer_cls(cache=self.cache, input=self.input, state=self.state),
-                          **kw)
+        trainer = trainer_cls(cache=self.cache, input=self.input, state=self.state)
 
         if self.out['phase'] == Phase.INIT_RUNS:
             """ Generate folds as specified.   """
@@ -138,15 +135,15 @@ class COINNLocal:
             self.cache['log_dir'] = self.state['outputDirectory'] + _sep + self.cache[
                 'computation_id'] + _sep + f"fold_{self.cache['split_ix']}"
             _os.makedirs(self.cache['log_dir'], exist_ok=True)
-            self.out.update(**self._init_nn_state(self.learner.trainer))
-            self.learner.trainer.cache_data_indices(dataset_cls, split_key='train')
+            self.out.update(**self._init_nn_state(trainer))
+            trainer.cache_data_indices(dataset_cls, split_key='train')
             self.out.update(**self._pretrain_local(trainer_cls, dataset_cls))
 
         elif self.out['phase'] == Phase.PRE_COMPUTATION and self.input.get('pretrained_weights'):
-            self.learner.trainer.init_nn(init_weights=False)
-            self.learner.trainer.load_checkpoint(
+            trainer.init_nn(init_weights=False)
+            trainer.load_checkpoint(
                 file_path=self.state['baseDirectory'] + _sep + self.input['pretrained_weights'])
-            self.learner.trainer.save_checkpoint(
+            trainer.save_checkpoint(
                 file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
             self.out['phase'] = Phase.COMPUTATION
 
@@ -156,19 +153,23 @@ class COINNLocal:
 
         if self.out['phase'] == Phase.COMPUTATION:
             """ Train/validation and test phases """
-            self.learner.trainer.init_nn(init_weights=False)
-            self.learner.trainer.load_checkpoint(
+            trainer.init_nn(init_weights=False)
+
+            trainer.load_checkpoint(
                 file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
 
             if self.input.get('save_current_as_best'):
-                self.learner.trainer.save_checkpoint(
+                trainer.save_checkpoint(
                     file_path=self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
+
+            """Initialize Learner and assign trainer"""
+            self._set_learner(learner_cls, trainer=trainer, **kw)
 
             """ Reducer must issue update signal for the network to update"""
             if self.input.get('update'):
                 self.out.update(**self.learner.step())
                 if self.out['save_state']:
-                    self.learner.trainer.save_checkpoint(
+                    trainer.save_checkpoint(
                         file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state']
                     )
 
@@ -183,7 +184,7 @@ class COINNLocal:
                 self.out.update(**out)
                 if it.get('averages') and it.get('metrics'):
                     self.cache[Key.TRAIN_SERIALIZABLE].append([vars(it['averages']), vars(it['metrics'])])
-                    self.out.update(**self.learner.trainer.on_iteration_end(0, 0, it))
+                    self.out.update(**trainer.on_iteration_end(0, 0, it))
 
             if all(m == Mode.VALIDATION for m in self._GLOBAL_STATE['modes'].values()):
                 """
@@ -193,11 +194,11 @@ class COINNLocal:
                  and all sites reshuffle the indices and r esume training.
                 We send the confusion matrix to the remote to accumulate global score for model selection.
                 """
-                self.out.update(**self.learner.trainer.validation_distributed(dataset_cls))
+                self.out.update(**trainer.validation_distributed(dataset_cls))
                 self.out['mode'] = Mode.TRAIN_WAITING
 
             elif all(m == Mode.TEST for m in self._GLOBAL_STATE['modes'].values()):
-                self.out.update(**self.learner.trainer.test_distributed(dataset_cls))
+                self.out.update(*trainer.test_distributed(dataset_cls))
                 self.out['mode'] = self.cache['args']['mode']
                 self.out['phase'] = Phase.NEXT_RUN_WAITING
 
@@ -210,9 +211,6 @@ class COINNLocal:
 
         if learner_cls is None:
             learner_cls = _learner.COINNLearner
-
-            if self.cache.get('dist_engine', '').strip().lower() == 'powersgd':
-                learner_cls = coinstac_dinunet.distrib.utils.DADLearner
 
         self.learner = learner_cls(trainer=trainer, **kw)
 

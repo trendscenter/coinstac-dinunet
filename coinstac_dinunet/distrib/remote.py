@@ -10,7 +10,6 @@ import shutil as _shutil
 import sys as _sys
 
 import coinstac_dinunet.config as _conf
-import coinstac_dinunet.distrib.utils
 import coinstac_dinunet.metrics as _metric
 import coinstac_dinunet.utils as _utils
 from coinstac_dinunet.distrib import reducer as _reducer
@@ -168,7 +167,7 @@ class COINNRemote:
         return out
 
     @Profile()
-    def compute(self, reducer_cls: _reducer.COINNReducer = None, **kw):
+    def compute(self, reducer_cls: callable = None, **kw):
 
         self._set_reducer(reducer_cls)
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
@@ -254,13 +253,10 @@ class COINNRemote:
         if reducer_cls is None:
             reducer_cls = _reducer.COINNReducer
 
-            if self.cache.get('dist_engine', '').strip().lower() == 'powersgd':
-                reducer_cls = coinstac_dinunet.distrib.utils.DADReducer
-
         self.reducer = reducer_cls(cache=self.cache, input=self.input, state=self.state, **kw)
 
     def send(self):
         output = _json.dumps(
             {'output': self.out, 'cache': self.cache,
-             'success': self._check(all, 'phase', Phase.SUCCESS, self.input)})
+             'success': check(all, 'phase', Phase.SUCCESS, self.input)})
         _sys.stdout.write(output)

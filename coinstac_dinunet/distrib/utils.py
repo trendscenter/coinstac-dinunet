@@ -6,7 +6,8 @@ from typing import Tuple as _Tuple
 import numpy as _np
 import torch as _torch
 
-from coinstac_dinunet import COINNLearner, COINNReducer
+from coinstac_dinunet.distrib.learner import COINNLearner
+from coinstac_dinunet.distrib.reducer import COINNReducer
 
 
 def hook_wrapper(site, hook_type, layer, save_to='', debug=False):
@@ -43,8 +44,8 @@ class DADLearner(COINNLearner):
 
     def __init__(self, **kw):
         super().__init__(**kw)
-        self.log_dir = self.cache['outputDirectory'] + _os.sep + DADLearner.DATA_PATH
-        self.grads_dir = self.cache['outputDirectory'] + _os.sep + DADLearner.GRADS_PATH
+        self.log_dir = self.state['outputDirectory'] + _os.sep + DADLearner.DATA_PATH
+        self.grads_dir = self.state['outputDirectory'] + _os.sep + DADLearner.GRADS_PATH
 
         for model_key in self.trainer.nn.keys():
             for layer, ch in list(self.trainer.nn[model_key].children())[::-1]:
@@ -52,7 +53,7 @@ class DADLearner(COINNLearner):
                 ch.register_backward_hook(hook_wrapper(self.state['clientId'], 'backward', layer, self.log_dir))
 
     def step(self) -> dict:
-        if self.input.get('dad_layer_activation'):
+        if self.input.get('dad_reduced_layer'):
             self.dad_backward()
 
         out = {}
@@ -76,6 +77,7 @@ class DADLearner(COINNLearner):
         self.trainer.optimizer[first_optim].zero_grad()
 
         _os.makedirs(self.log_dir, exist_ok=True)
+        _os.makedirs(self.grads_dir, exist_ok=True)
         its = []
         """Cannot use grad accumulation with DAD at the moment"""
         # for _ in range(self.cache['local_iterations']):
@@ -87,13 +89,13 @@ class DADLearner(COINNLearner):
         return out, self.trainer.reduce_iteration(its)
 
     def dad_backward(self):
-        # Todo
         """Update each layer's grads after getting aggregate from remote"""
 
-        act = _torch.FloatTensor(self.state['baseDirectory'] + _os.sep + self.input['dad_layer_activation'], device=self.trainer.device['gpu'])
-        grad = _torch.FloatTensor(self.state['baseDirectory'] + _os.sep + self.input['dad_layer_grad'], device=self.trainer.device['gpu'])
-        _torch.save(act.T.mm(grad),
-                    self.grads_dir + _os.sep + self.input['dad_step'] + self.input['dad_layer'] + "_grad.tar")
+        act = _torch.FloatTensor(self.state['baseDirectory'] + _os.sep + self.input['dad_layer_activation'],
+                                 device=self.trainer.device['gpu'])
+        grad = _torch.FloatTensor(self.state['baseDirectory'] + _os.sep + self.input['dad_layer_grad'],
+                                  device=self.trainer.device['gpu'])
+        _torch.save(act.T.mm(grad), self.grads_dir + _os.sep + self.input['dad_layer'] + "_grad.tar")
 
     def to_reduce(self, dataset_cls) -> _Tuple[dict, dict]:
         out, it = {}, {}
