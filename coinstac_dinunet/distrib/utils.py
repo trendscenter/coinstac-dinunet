@@ -14,18 +14,18 @@ def hook_wrapper(site, hook_type, layer, save_to='', debug=False):
     if debug:
         print(f"**** {site}, {hook_type}, {layer} ****")
 
-    name = _os.path.join(save_to, f"Type:{hook_type}-Layer:{layer}")
+    name = _os.path.join(save_to, f"Type-{hook_type}_Layer-{layer}")
 
     def save(m, in_grad, out_grad):
         if hook_type.lower() == 'forward':
             for i, b in enumerate(in_grad):
                 if b is not None:
-                    _np.save(name + f"-IO:in-Index:{i}.npy", b.clone().detach().numpy())
+                    _np.save(name + f"_IO-in_Index-{i}.npy", b.clone().detach().numpy())
                 break
         if hook_type.lower() == 'backward':
             for i, c in enumerate(out_grad):
                 if c is not None:
-                    _np.save(name + f"-IO:out-Index:{i}.npy", c.clone().detach().numpy())
+                    _np.save(name + f"_IO-out_Index-{i}.npy", c.clone().detach().numpy())
                 break
 
     return save
@@ -40,7 +40,7 @@ def check(logic, k, v, kw):
 
 class DADLearner(COINNLearner):
     DATA_PATH = '_dad_layers_data'
-    GRADS_PATH = '_dad_grads_update'
+    GRADS_PATH = '_dad_weights_update'
 
     def __init__(self, **kw):
         super().__init__(**kw)
@@ -48,7 +48,7 @@ class DADLearner(COINNLearner):
         self.grads_dir = self.state['outputDirectory'] + _os.sep + DADLearner.GRADS_PATH
 
         for model_key in self.trainer.nn.keys():
-            for layer, ch in list(self.trainer.nn[model_key].children())[::-1]:
+            for layer, ch in list(self.trainer.nn[model_key].named_children()):
                 ch.register_forward_hook(hook_wrapper(self.state['clientId'], 'forward', layer, self.log_dir))
                 ch.register_backward_hook(hook_wrapper(self.state['clientId'], 'backward', layer, self.log_dir))
 
@@ -59,8 +59,12 @@ class DADLearner(COINNLearner):
         out = {}
         out['save_state'] = False
         if self.input.get('dad_step'):
-            for layer, param in self.trainer.nn[list(self.trainer.nn.keys())[0]].named_parameters():
-                param.grad = _torch.load(self.grads_dir + _os.sep + f"{layer}_grad.tar")
+            grads = []
+            for layer, _ in self.trainer.nn[list(self.trainer.nn.keys())[0]].named_parameters():
+                grads.append(_torch.tensor(_np.load(self.grads_dir + _os.sep + f"{layer}_grad.npy").T))
+
+            for i, param in enumerate(self.trainer.nn[list(self.trainer.nn.keys())[0]].parameters()):
+                param.grad = grads[i].to(self.trainer.device['gpu'])
 
             first_optim = list(self.trainer.optimizer.keys())[0]
             self.trainer.optimizer[first_optim].step()
@@ -91,11 +95,12 @@ class DADLearner(COINNLearner):
     def dad_backward(self):
         """Update each layer's grads after getting aggregate from remote"""
 
-        act = _torch.FloatTensor(self.state['baseDirectory'] + _os.sep + self.input['dad_layer_activation'],
+        act = _torch.FloatTensor(_np.load(self.state['baseDirectory'] + _os.sep + self.input['dad_layer_activation']),
                                  device=self.trainer.device['gpu'])
-        grad = _torch.FloatTensor(self.state['baseDirectory'] + _os.sep + self.input['dad_layer_grad'],
+        grad = _torch.FloatTensor(_np.load(self.state['baseDirectory'] + _os.sep + self.input['dad_layer_grads']),
                                   device=self.trainer.device['gpu'])
-        _torch.save(act.T.mm(grad), self.grads_dir + _os.sep + self.input['dad_layer'] + "_grad.tar")
+        _np.save(self.grads_dir + _os.sep + self.input['dad_reduced_layer'] + ".weight_grad.npy",
+                 (act.T.mm(grad)).cpu().numpy())
 
     def to_reduce(self, dataset_cls) -> _Tuple[dict, dict]:
         out, it = {}, {}
@@ -110,13 +115,13 @@ class DADLearner(COINNLearner):
 
             out, it = self.forward(dataset_cls)
             fk = list(self.trainer.nn.keys())[0]
-            self.cache['dad_layers'] = [k for k, v in self.trainer.nn[fk].children()]
+            self.cache['dad_layers'] = [k for k, v in self.trainer.nn[fk].named_children()]
             out['last_layer'] = True
 
         if len(self.cache['dad_layers']) > 0:
             self.cache['dad_layer'] = self.cache['dad_layers'].pop()
-            out['layer_files'] = _glob.glob(self.log_dir + _os.sep + f"*-Layer:{self.cache['dad_layer']}-*")
-            for file in out['layer_files']:
+            layer_files = _glob.glob(self.log_dir + _os.sep + f"*_Layer-{self.cache['dad_layer']}_*")
+            for file in layer_files:
                 _shu.move(file, self.state['transferDirectory'])
             out['dad_layer'] = self.cache['dad_layer']
 
@@ -134,15 +139,14 @@ class DADReducer(COINNReducer):
         h, grad_prev = [], []
         for site, site_vars in self.input.items():
             fw_file = self.state[
-                          'baseDirectory'] + _os.sep + f"Type:forward-Layer:{self.cache['dad_layer']}-IO:in-Index:0.npy"
+                          'baseDirectory'] + _os.sep + site + _os.sep + f"Type-forward_Layer-{site_vars['dad_layer']}_IO-in_Index-0.npy"
             bk_file = self.state[
-                          'baseDirectory'] + _os.sep + f"Type:backward-Layer:{self.cache['dad_layer']}-IO:out-Index:0.npy"
-            if fw_file in site_vars['layer_files'] and bk_file in site_vars['layer_files']:
-                h.append(_np.load(fw_file))
-                grad_prev.append(_np.load(bk_file))
+                          'baseDirectory'] + _os.sep + site + _os.sep + f"Type-backward_Layer-{site_vars['dad_layer']}_IO-out_Index-0.npy"
+            h.append(_np.load(fw_file))
+            grad_prev.append(_np.load(bk_file))
 
         out["dad_layer_activation"] = site_vars['dad_layer'] + "_activation.npy"
-        out["dad_layer_grad"] = site_vars['dad_layer'] + "_grads.npy"
+        out["dad_layer_grads"] = site_vars['dad_layer'] + "_grads.npy"
 
         _np.save(self.state['transferDirectory'] + _os.sep + out['dad_layer_activation'], _np.concatenate(h))
         _np.save(self.state['transferDirectory'] + _os.sep + out['dad_layer_grads'], _np.concatenate(grad_prev))
