@@ -13,7 +13,7 @@ def performance_improved_(epoch, score, cache):
     if improved:
         cache['best_val_epoch'] = epoch
         cache['best_val_score'] = score
-    return improved
+    return bool(improved)
 
 
 def stop_training_(epoch, cache):

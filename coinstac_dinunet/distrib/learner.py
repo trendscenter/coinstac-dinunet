@@ -8,11 +8,12 @@ from coinstac_dinunet.utils import tensorutils as _tu
 
 
 class COINNLearner:
-    def __init__(self, trainer=None, **kw):
+    def __init__(self, trainer=None, global_state=None, **kw):
         self.cache = trainer.cache
         self.input = trainer.input
         self.state = trainer.state
         self.trainer = trainer
+        self.global_state = global_state
 
     def step(self) -> dict:
         out = {}
@@ -34,7 +35,7 @@ class COINNLearner:
     def backward(self, dataset_cls) -> _Tuple[dict, dict]:
         out = {}
 
-        first_model = list(self.trainer.nn. keys())[0]
+        first_model = list(self.trainer.nn.keys())[0]
         first_optim = list(self.trainer.optimizer.keys())[0]
 
         self.trainer.nn[first_model].train()

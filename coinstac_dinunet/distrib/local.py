@@ -197,8 +197,8 @@ class COINNLocal:
                 self.out.update(**trainer.validation_distributed(dataset_cls))
                 self.out['mode'] = Mode.TRAIN_WAITING
 
-            elif all(m == Mode.TEST for m in self._GLOBAL_STATE['modes'].values()):
-                self.out.update(*trainer.test_distributed(dataset_cls))
+            if all(m == Mode.TEST for m in self._GLOBAL_STATE['modes'].values()):
+                self.out.update(**trainer.test_distributed(dataset_cls))
                 self.out['mode'] = self.cache['args']['mode']
                 self.out['phase'] = Phase.NEXT_RUN_WAITING
 
@@ -212,8 +212,12 @@ class COINNLocal:
         if learner_cls is None:
             learner_cls = _learner.COINNLearner
 
-        self.learner = learner_cls(trainer=trainer, **kw)
+        self.learner = learner_cls(trainer=trainer, global_state=self._GLOBAL_STATE, **kw)
 
     def send(self):
-        output = _json.dumps({'output': self.out, 'cache': self.cache})
-        _sys.stdout.write(output)
+        output = {'output': self.out, 'cache': self.cache}
+        try:
+            output = _json.dumps(output)
+            _sys.stdout.write(output)
+        except Exception as e:
+            raise Exception(f"Error parsing Json at {self.state['clientId']} {e}:\n", output)

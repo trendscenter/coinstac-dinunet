@@ -5,6 +5,7 @@ from typing import Tuple as _Tuple
 
 import numpy as _np
 import torch as _torch
+from coinstac_dinunet.config.keys import Mode
 
 from coinstac_dinunet.distrib.learner import COINNLearner
 from coinstac_dinunet.distrib.reducer import COINNReducer
@@ -47,10 +48,11 @@ class DADLearner(COINNLearner):
         self.log_dir = self.state['outputDirectory'] + _os.sep + DADLearner.DATA_PATH
         self.grads_dir = self.state['outputDirectory'] + _os.sep + DADLearner.GRADS_PATH
 
-        for model_key in self.trainer.nn.keys():
-            for layer, ch in list(self.trainer.nn[model_key].named_children()):
-                ch.register_forward_hook(hook_wrapper(self.state['clientId'], 'forward', layer, self.log_dir))
-                ch.register_backward_hook(hook_wrapper(self.state['clientId'], 'backward', layer, self.log_dir))
+        if self.global_state['modes'][self.state['clientId']] == Mode.TRAIN:
+            for model_key in self.trainer.nn.keys():
+                for layer, ch in list(self.trainer.nn[model_key].named_children()):
+                    ch.register_forward_hook(hook_wrapper(self.state['clientId'], 'forward', layer, self.log_dir))
+                    ch.register_backward_hook(hook_wrapper(self.state['clientId'], 'backward', layer, self.log_dir))
 
     def step(self) -> dict:
         if self.input.get('dad_reduced_layer'):

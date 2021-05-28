@@ -24,7 +24,10 @@ from coinstac_dinunet.profiler import Profile
 class COINNRemote:
     def __init__(self, cache: dict = None, input: dict = None, state: dict = None, **kw):
         self.out = {}
+
         self.cache = cache
+        cache.update(**kw)
+
         self.input = _utils.FrozenDict(input)
         self.state = _utils.FrozenDict(state)
         self.reducer = None
@@ -256,7 +259,10 @@ class COINNRemote:
         self.reducer = reducer_cls(cache=self.cache, input=self.input, state=self.state, **kw)
 
     def send(self):
-        output = _json.dumps(
-            {'output': self.out, 'cache': self.cache,
-             'success': check(all, 'phase', Phase.SUCCESS, self.input)})
-        _sys.stdout.write(output)
+        output = {'output': self.out, 'cache': self.cache,
+                  'success': check(all, 'phase', Phase.SUCCESS, self.input)}
+        try:
+            output = _json.dumps(output)
+            _sys.stdout.write(output)
+        except Exception as e:
+            raise Exception(f'Error parsing Json at remote {e}:\n', output)
