@@ -40,8 +40,9 @@ torchvision==0.6.1+cu92
 ### General use case:
 #### imports
 ```python
-from coinstac_dinunet import COINNDataset, COINNTrainer, COINNRemote, COINNLocal
+from coinstac_dinunet import COINNDataset, COINNTrainer, COINNLocal
 from coinstac_dinunet.metrics import COINNAverages, Prf1a
+from coinstac_dinunet.io import RECV
 ```
 
 #### 1. Define Data Loader
@@ -91,14 +92,15 @@ class MyTrainer(COINNTrainer):
 #### 3. Supply to local node in local.py
 ```python
 if __name__ == "__main__":
-    args = json.loads(sys.stdin.read())
-    local = COINNLocal(cache=args['cache'], input=args['input'], state=args['state'])
+    local = COINNLocal(cache=RECV['cache'], input=RECV['input'], state=RECV['state'])
     local.compute(MyDataset, MyTrainer)
     local.send()
 ```
 #### 4. Define remote node in remote.py
 
 ```python
+from coinstac_dinunet import COINNRemote
+from coinstac_dinunet.io import RECV
 class MyRemote(COINNRemote):
 
     def _new_metrics(self):  #
@@ -112,8 +114,7 @@ class MyRemote(COINNRemote):
 
 
 if __name__ == "__main__":
-    args = json.loads(sys.stdin.read())
-    remote = MyRemote(cache=args['cache'], input=args['input'], state=args['state'])
+    remote = MyRemote(cache=RECV['cache'], input=RECV['input'], state=RECV['state'])
     remote.compute()
     remote.send()
 ```
