@@ -21,6 +21,8 @@ torchvision==0.6.1+cu92
 3. Automatic model checkpointing.
 4. GPU enabled local sites.
 5. Customizable metrics(w/Auto serialization between nodes) to work with any schemes.
+6. We can integrate any custom reduction and learning mechanism by extending coinstac_dinunet.distrib.reducer/learner.
+7. Realtime profiling each sites by specifying in compspec file(see dinune_fsv example below for details). 
 ...
 ```
 
@@ -30,6 +32,7 @@ torchvision==0.6.1+cu92
 ## Pipeline for reducing gradients across sites.
 
 ![DINUNET](assets/dinunet.png)
+
 
 ### Full working examples
 1. **[FreeSurfer volumes classification.](https://github.com/trendscenter/dinunet/tree/packaging)**
