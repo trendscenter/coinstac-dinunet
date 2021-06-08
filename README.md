@@ -35,7 +35,7 @@ torchvision==0.6.1+cu92
 
 
 ### Full working examples
-1. **[FreeSurfer volumes classification.](https://github.com/trendscenter/dinunet/tree/packaging)**
+1. **[FreeSurfer volumes classification.](https://github.com/trendscenter/dinunet_fsv/)**
 2. **[VBM 3D images classification.](https://github.com/trendscenter/dinunet_vbm)**
 ### General use case:
 #### imports
