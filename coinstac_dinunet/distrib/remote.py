@@ -9,24 +9,28 @@ import os as _os
 import shutil as _shutil
 import sys as _sys
 
-import numpy as _np
-
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.metrics as _metric
 import coinstac_dinunet.utils as _utils
-import coinstac_dinunet.utils.tensorutils as _tu
-from coinstac_dinunet.config.status import *
-from coinstac_dinunet.vision import plotter as _plot
+from coinstac_dinunet.distrib import reducer as _reducer
+from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.utils.logger import *
-from coinstac_dinunet.utils.utils import performance_improved_, stop_training_
+from coinstac_dinunet.utils import performance_improved_, stop_training_
+from coinstac_dinunet.distrib.utils import check
+from coinstac_dinunet.vision import plotter as _plot
+from coinstac_dinunet.profiler import Profile
 
 
 class COINNRemote:
-    def __init__(self, cache: dict = None, input: dict = None, state: dict = None):
+    def __init__(self, cache: dict = None, input: dict = None, state: dict = None, **kw):
         self.out = {}
+
         self.cache = cache
+        cache.update(**kw)
+
         self.input = _utils.FrozenDict(input)
         self.state = _utils.FrozenDict(state)
+        self.reducer = None
 
     def _init_runs(self):
         site = list(self.input.values())[0]
@@ -78,13 +82,6 @@ class COINNRemote:
             fold['pretrain'] = site == max_data_site
             out[site] = fold
         return out
-
-    @staticmethod
-    def _check(logic, k, v, kw):
-        phases = []
-        for site_vars in kw.values():
-            phases.append(site_vars.get(k) == v)
-        return logic(phases)
 
     def _new_metrics(self):
         return _metric.COINNMetrics()
@@ -172,10 +169,12 @@ class COINNRemote:
             _shutil.copy(pt_path, self.state['transferDirectory'] + _os.sep + out['pretrained_weights'])
         return out
 
-    def compute(self):
+    @Profile()
+    def compute(self, reducer_cls: callable = None, **kw):
 
+        self._set_reducer(reducer_cls)
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
-        if self._check(all, 'phase', Phase.INIT_RUNS, self.input):
+        if check(all, 'phase', Phase.INIT_RUNS, self.input):
             """
             Initialize all folds and loggers
             """
@@ -184,33 +183,35 @@ class COINNRemote:
             self.cache['verbose'] = False
             self.out['phase'] = Phase.INIT_NN
 
-        if self._check(all, 'phase', Phase.PRE_COMPUTATION, self.input):
+        if check(all, 'phase', Phase.PRE_COMPUTATION, self.input):
             self.out.update(**self._pre_compute())
             self.out['phase'] = Phase.PRE_COMPUTATION
 
         self.out['global_modes'] = self._set_mode()
-        if self._check(all, 'phase', Phase.COMPUTATION, self.input):
+        if check(all, 'phase', Phase.COMPUTATION, self.input):
             """
             Main computation phase where we aggregate sites information
             We also handle train/validation/test stages of local sites by sending corresponding signals from here
+            Learner's method send_to_reduce(...) must issue a 'reduce' signal.
             """
-            self.out['phase'] = Phase.COMPUTATION
-            if self._check(all, 'grads_file', _conf.grads_file, self.input):
-                self.out.update(**self._reduce_sites())
 
-            if self._check(all, 'mode', Mode.VALIDATION_WAITING, self.input):
+            self.out['phase'] = Phase.COMPUTATION
+            if check(all, 'reduce', True, self.input):
+                self.out.update(**self.reducer.reduce(**kw))
+
+            if check(all, 'mode', Mode.VALIDATION_WAITING, self.input):
                 self.cache['epoch'] += 1
                 if self.cache['epoch'] % self.cache['validation_epochs'] == 0:
                     self.out['global_modes'] = self._set_mode(mode=Mode.VALIDATION)
                 else:
                     self.out['global_modes'] = self._set_mode(mode=Mode.TRAIN)
 
-            if self._check(all, 'mode', Mode.TRAIN_WAITING, self.input):
+            if check(all, 'mode', Mode.TRAIN_WAITING, self.input):
                 epoch_info = self._on_epoch_end()
                 nxt_epoch = self._next_epoch(**epoch_info)
                 self.out['global_modes'] = self._set_mode(mode=nxt_epoch['mode'])
 
-        if self._check(all, 'phase', Phase.NEXT_RUN_WAITING, self.input):
+        if check(all, 'phase', Phase.NEXT_RUN_WAITING, self.input):
             """
             This block runs when a fold has completed all train, test, validation phase.
             We save all the scores and plot the results.
@@ -218,18 +219,12 @@ class COINNRemote:
             """
             self._on_run_end()
             if len(self.cache['folds']) > 0:
-                self.out['nn'] = {}
+                self.out['distrib'] = {}
                 self.out['global_runs'] = self._next_run()
                 self.out['phase'] = Phase.INIT_NN
             else:
                 self.out.update(**self._send_global_scores())
                 self.out['phase'] = Phase.SUCCESS
-
-    def send(self):
-        output = _json.dumps(
-            {'output': self.out, 'cache': self.cache,
-             'success': self._check(all, 'phase', Phase.SUCCESS, self.input)})
-        _sys.stdout.write(output)
 
     def _next_epoch(self, **kw):
         out = {}
@@ -256,18 +251,18 @@ class COINNRemote:
     def _stop_early(self, **kw):
         return stop_training_(self.cache['epoch'], self.cache)
 
-    def _reduce_sites(self):
-        """
-      Average each sites gradients and pass it to all sites.
-      """
-        out = {'avg_grads_file': _conf.avg_grads_file}
-        grads = []
-        for site, site_vars in self.input.items():
-            grads_file = self.state['baseDirectory'] + _os.sep + site + _os.sep + site_vars['grads_file']
-            grads.append(_tu.load_grads(grads_file))
+    def _set_reducer(self, reducer_cls: _reducer.COINNReducer = None, **kw):
 
-        avg_grads = []
-        for layer_grad in zip(*grads):
-            avg_grads.append(_np.array(layer_grad).mean(0))
-        _tu.save_grads(self.state['transferDirectory'] + _os.sep + out['avg_grads_file'], avg_grads)
-        return out
+        if reducer_cls is None:
+            reducer_cls = _reducer.COINNReducer
+
+        self.reducer = reducer_cls(cache=self.cache, input=self.input, state=self.state, **kw)
+
+    def send(self):
+        output = {'output': self.out, 'cache': self.cache,
+                  'success': check(all, 'phase', Phase.SUCCESS, self.input)}
+        try:
+            output = _json.dumps(output)
+            _sys.stdout.write(output)
+        except Exception as e:
+            raise Exception(f'Error parsing Json at remote {e}:\n', output)

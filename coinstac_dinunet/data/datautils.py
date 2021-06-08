@@ -86,19 +86,16 @@ def init_k_folds(cache, state):
     split_dir = state['baseDirectory'] + _os.sep + cache['split_dir']
 
     cache['split_dir'] = state['outputDirectory'] + _os.sep + cache['computation_id'] + _os.sep + cache['split_dir']
-    _shutil.rmtree(cache['split_dir'], ignore_errors=True)
     _os.makedirs(cache['split_dir'], exist_ok=True)
 
-    if not _os.path.exists(split_dir) or len(_os.listdir(split_dir)) == 0:
+    if _os.path.exists(split_dir) and len(_os.listdir(split_dir)) > 0:
+        [_shutil.copy(split_dir + _os.sep + f, cache['split_dir'] + _os.sep + f) for f in _os.listdir(split_dir)]
+
+    elif len(_os.listdir(cache['split_dir'])) == 0:
         data_splitter(cache, state)
 
-    elif cache.get('num_folds') and len(_os.listdir(split_dir)) != cache['num_folds']:
-        raise ValueError(f"Number of splits in {split_dir} of site {state['clientId']} \
-                                must be {cache['num_folds']} instead of {len(_os.listdir(split_dir))}")
-
-    [_shutil.copy(split_dir + _os.sep + f, cache['split_dir'] + _os.sep + f) for f in _os.listdir(split_dir)]
     splits = sorted(_os.listdir(cache['split_dir']))
-
     cache['splits'] = dict(zip([str(i) for i in range(len(splits))], splits))
+    cache['num_folds'] = len(splits)
     out['num_folds'] = len(splits)
     return out

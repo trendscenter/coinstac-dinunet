@@ -10,10 +10,11 @@ from typing import List
 import coinstac_dinunet.config as _conf
 from coinstac_dinunet import utils as _utils
 from coinstac_dinunet.utils.logger import *
-from coinstac_dinunet.config.status import *
-from .nn import NNTrainer as _NNTrainer
+from coinstac_dinunet.config.keys import *
+from .basetrainer import NNTrainer as _NNTrainer
 from coinstac_dinunet import COINNLocal
 from coinstac_dinunet.utils.utils import performance_improved_
+from coinstac_dinunet.profiler import Profile
 
 
 def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
@@ -32,13 +33,13 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
     class PooledTrainer(base, COINNLocal):
         def __init__(self, dataset_dir=None, log_dir=None, **kwargs):
             self.dataset_dir = dataset_dir
-            self.log_dir = log_dir
             self.inputspecs = self._parse_inputspec(dataset_dir + _os.sep + kw.get('inputspec_file', 'inputspec.json'))
 
             cache = {**self.inputspecs[list(self.inputspecs.keys())[0]], 'folds': self._init_folds()}
             cache['seed'] = _conf.current_seed
             cache.update(**kwargs)
-            super().__init__(cache=cache, input={}, state={'clientId': 'LocalMachine'}, **kw)
+            state = {'clientId': 'LocalMachine', 'outputDirectory': log_dir}
+            super().__init__(cache=cache, input={}, state=state, **kw)
 
         def _init_folds(self):
             folds = {}
@@ -80,6 +81,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
         def base_directory(self, site):
             return f"{self.dataset_dir}/input/{site}/simulatorRun"
 
+        # @Profile()
         def run(self, dataset_cls, only_sites: list = None, only_folds: list = None):
             global_avg, global_metrics = self.new_averages(), self.new_metrics()
 
@@ -94,7 +96,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
 
             for fold_ix in folds:
                 self.cache['fold_ix'] = fold_ix
-                self.cache['log_dir'] = self.log_dir + _os.sep + f'fold_{fold_ix}'
+                self.cache['log_dir'] = self.state['outputDirectory'] + _os.sep + f'fold_{fold_ix}'
                 _os.makedirs(self.cache['log_dir'], exist_ok=True)
 
                 self.init_nn()
@@ -115,7 +117,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
 
             self.cache[Key.GLOBAL_TEST_METRICS] = [[*global_avg.get(), *global_metrics.get()]]
             success(f"Global: {self.cache[Key.GLOBAL_TEST_METRICS]}", self.cache.get('verbose'))
-            _utils.save_scores(self.cache, log_dir=self.log_dir, file_keys=[Key.GLOBAL_TEST_METRICS])
+            _utils.save_scores(self.cache, log_dir=self.state['outputDirectory'], file_keys=[Key.GLOBAL_TEST_METRICS])
 
         def enable_sites(self, sites: list = None):
             self.inputspecs = {site: self.inputspecs[site] for site in sites}

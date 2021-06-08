@@ -5,6 +5,7 @@
 
 import json as _json
 import os as _os
+import random as _rd
 import shutil as _shutil
 import sys as _sys
 from os import sep as _sep
@@ -12,9 +13,10 @@ from typing import List as _List
 
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.data.datautils as _du
-from coinstac_dinunet.config.status import *
+from coinstac_dinunet.config.keys import *
+from coinstac_dinunet.distrib import learner as _learner
+from coinstac_dinunet.profiler import Profile
 from coinstac_dinunet.utils import FrozenDict as _FrozenDict
-import random as _rd
 
 
 class COINNLocal:
@@ -37,7 +39,9 @@ class COINNLocal:
                  patience: int = None,
                  num_folds: int = None,
                  split_ratio: _List[float] = None,
-                 pretrain_args: dict = None, **kw):
+                 pretrain_args: dict = None,
+                 **kw):
+
         self.out = {}
         self.cache = cache
         self.input = _FrozenDict(input)
@@ -62,6 +66,7 @@ class COINNLocal:
         self._args = _FrozenDict(self._args)
         self._pretrain_args = pretrain_args if pretrain_args else {}
         self._GLOBAL_STATE = {}
+        self.learner = None
 
     def _check_args(self):
         assert self.cache['computation_id'] is not None, self._PROMPT_TASK_
@@ -80,8 +85,8 @@ class COINNLocal:
 
     def _init_nn_state(self, trainer):
         out = {}
-        self.cache['current_nn_state'] = 'current.nn.pt'
-        self.cache['best_nn_state'] = 'best.nn.pt'
+        self.cache['current_nn_state'] = 'current.distrib.pt'
+        self.cache['best_nn_state'] = 'best.distrib.pt'
         trainer.init_nn(init_weights=True)
         trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
         out['phase'] = Phase.COMPUTATION
@@ -103,7 +108,8 @@ class COINNLocal:
             out['phase'] = Phase.PRE_COMPUTATION
         return out
 
-    def compute(self, dataset_cls, trainer_cls):
+    @Profile()
+    def compute(self, dataset_cls, trainer_cls, learner_cls: callable = None, **kw):
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
         trainer = trainer_cls(cache=self.cache, input=self.input, state=self.state)
 
@@ -135,8 +141,10 @@ class COINNLocal:
 
         elif self.out['phase'] == Phase.PRE_COMPUTATION and self.input.get('pretrained_weights'):
             trainer.init_nn(init_weights=False)
-            trainer.load_checkpoint(file_path=self.state['baseDirectory'] + _sep + self.input['pretrained_weights'])
-            trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
+            trainer.load_checkpoint(
+                file_path=self.state['baseDirectory'] + _sep + self.input['pretrained_weights'])
+            trainer.save_checkpoint(
+                file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
             self.out['phase'] = Phase.COMPUTATION
 
         """################################### Computation ##########################################"""
@@ -146,14 +154,24 @@ class COINNLocal:
         if self.out['phase'] == Phase.COMPUTATION:
             """ Train/validation and test phases """
             trainer.init_nn(init_weights=False)
-            trainer.load_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
+
+            trainer.load_checkpoint(
+                file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
 
             if self.input.get('save_current_as_best'):
-                trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
+                trainer.save_checkpoint(
+                    file_path=self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
 
-            if self.input.get('avg_grads_file'):
-                trainer.step()
-                trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
+            """Initialize Learner and assign trainer"""
+            self._set_learner(learner_cls, trainer=trainer, **kw)
+
+            """ Reducer must issue update signal for the network to update"""
+            if self.input.get('update'):
+                self.out.update(**self.learner.step())
+                if self.out['save_state']:
+                    trainer.save_checkpoint(
+                        file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state']
+                    )
 
             if any(m == Mode.TRAIN for m in self._GLOBAL_STATE['modes'].values()):
                 """
@@ -162,7 +180,11 @@ class COINNLocal:
                    and reshuffle the data,
                 take part in the training with everybody until all sites go to 'val_waiting' status.
                 """
-                self.out.update(**trainer.train_distributed(dataset_cls))
+                out, it = self.learner.to_reduce(dataset_cls)
+                self.out.update(**out)
+                if it.get('averages') and it.get('metrics'):
+                    self.cache[Key.TRAIN_SERIALIZABLE].append([vars(it['averages']), vars(it['metrics'])])
+                    self.out.update(**trainer.on_iteration_end(0, 0, it))
 
             if all(m == Mode.VALIDATION for m in self._GLOBAL_STATE['modes'].values()):
                 """
@@ -175,7 +197,7 @@ class COINNLocal:
                 self.out.update(**trainer.validation_distributed(dataset_cls))
                 self.out['mode'] = Mode.TRAIN_WAITING
 
-            elif all(m == Mode.TEST for m in self._GLOBAL_STATE['modes'].values()):
+            if all(m == Mode.TEST for m in self._GLOBAL_STATE['modes'].values()):
                 self.out.update(**trainer.test_distributed(dataset_cls))
                 self.out['mode'] = self.cache['args']['mode']
                 self.out['phase'] = Phase.NEXT_RUN_WAITING
@@ -185,6 +207,17 @@ class COINNLocal:
             _shutil.copy(f"{self.state['baseDirectory']}{_sep}{self.input['results_zip']}.zip",
                          f"{self.state['outputDirectory'] + _sep + self.cache['computation_id']}{_sep}{self.input['results_zip']}.zip")
 
+    def _set_learner(self, learner_cls: _learner.COINNLearner = None, trainer=None, **kw):
+
+        if learner_cls is None:
+            learner_cls = _learner.COINNLearner
+
+        self.learner = learner_cls(trainer=trainer, global_state=self._GLOBAL_STATE, **kw)
+
     def send(self):
-        output = _json.dumps({'output': self.out, 'cache': self.cache})
-        _sys.stdout.write(output)
+        output = {'output': self.out, 'cache': self.cache}
+        try:
+            output = _json.dumps(output)
+            _sys.stdout.write(output)
+        except Exception as e:
+            raise Exception(f"Error parsing Json at {self.state['clientId']} {e}:\n", output)
