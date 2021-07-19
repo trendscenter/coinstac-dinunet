@@ -18,7 +18,6 @@ from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.utils import performance_improved_, stop_training_
 from coinstac_dinunet.distrib.utils import check
 from coinstac_dinunet.vision import plotter as _plot
-from coinstac_dinunet.profiler import Profile
 
 
 class COINNRemote:
@@ -169,7 +168,6 @@ class COINNRemote:
             _shutil.copy(pt_path, self.state['transferDirectory'] + _os.sep + out['pretrained_weights'])
         return out
 
-    @Profile()
     def compute(self, reducer_cls: callable = None, **kw):
 
         self._set_reducer(reducer_cls)
@@ -257,6 +255,10 @@ class COINNRemote:
             reducer_cls = _reducer.COINNReducer
 
         self.reducer = reducer_cls(cache=self.cache, input=self.input, state=self.state, **kw)
+
+    def __call__(self, *args, **kwargs):
+        self.compute(*args, **kwargs)
+        return self.out
 
     def send(self):
         output = {'output': self.out, 'cache': self.cache,

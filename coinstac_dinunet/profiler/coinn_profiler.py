@@ -8,7 +8,8 @@ import datetime
 import glob
 from coinstac_dinunet.profiler.utils import JSONToHTML
 from coinstac_dinunet.config import default_args as _args
-from coinstac_dinunet.io import RECV as _RECV
+
+_RECV = {}
 import uuid as _UID
 
 
@@ -69,8 +70,9 @@ class Profile:
                     _current = json.loads(open(stats_json).read())
 
                 jsn['start_time'] = _current.get('start_time', time.time())
-                jsn['time_elapsed'] = str(datetime.datetime.fromtimestamp(time.time()) - datetime.datetime.fromtimestamp(
-                    jsn['start_time']))
+                jsn['time_elapsed'] = str(
+                    datetime.datetime.fromtimestamp(time.time()) - datetime.datetime.fromtimestamp(
+                        jsn['start_time']))
 
                 jsn['total_seconds_in_trip'] = trip_duration.total_seconds() + _current.get(
                     'total_seconds_in_trip',

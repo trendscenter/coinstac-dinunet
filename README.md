@@ -42,7 +42,7 @@ torchvision==0.6.1+cu92
 ```python
 from coinstac_dinunet import COINNDataset, COINNTrainer, COINNLocal
 from coinstac_dinunet.metrics import COINNAverages, Prf1a
-from coinstac_dinunet.io import RECV
+from coinstac_dinunet.io import 
 ```
 
 #### 1. Define Data Loader

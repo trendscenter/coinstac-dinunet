@@ -15,7 +15,6 @@ import coinstac_dinunet.config as _conf
 import coinstac_dinunet.data.datautils as _du
 from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.distrib import learner as _learner
-from coinstac_dinunet.profiler import Profile
 from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 
 
@@ -108,7 +107,6 @@ class COINNLocal:
             out['phase'] = Phase.PRE_COMPUTATION
         return out
 
-    @Profile()
     def compute(self, dataset_cls, trainer_cls, learner_cls: callable = None, **kw):
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
         trainer = trainer_cls(cache=self.cache, input=self.input, state=self.state)
@@ -213,6 +211,10 @@ class COINNLocal:
             learner_cls = _learner.COINNLearner
 
         self.learner = learner_cls(trainer=trainer, global_state=self._GLOBAL_STATE, **kw)
+
+    def __call__(self, *args, **kwargs):
+        self.compute(*args, **kwargs)
+        return self.out
 
     def send(self):
         output = {'output': self.out, 'cache': self.cache}
