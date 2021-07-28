@@ -84,15 +84,16 @@ class COINNLocal:
 
     def _init_nn_state(self, trainer):
         out = {}
-        self.cache['current_nn_state'] = 'current.distrib.pt'
-        self.cache['best_nn_state'] = 'best.distrib.pt'
+        self.cache['best_nn_state'] = f"best.{self.cache['computation_id']}-{self.cache['split_ix']}.pt"
         trainer.init_nn(init_weights=True)
-        trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
+        self.cache['nn'] = trainer.nn
+        self.cache['device'] = trainer.device
+        self.cache['optimizer'] = trainer.optimizer
         out['phase'] = Phase.COMPUTATION
         return out
 
     def _pretrain_local(self, trainer_cls, dataset_cls):
-        out = {}
+        out = {'phase': Phase.COMPUTATION}
         if self._pretrain_args.get('epochs') and self.cache['pretrain']:
             cache = {**self.cache}
             cache.update(**self._pretrain_args)
@@ -133,6 +134,7 @@ class COINNLocal:
             self.cache['log_dir'] = self.state['outputDirectory'] + _sep + self.cache[
                 'computation_id'] + _sep + f"fold_{self.cache['split_ix']}"
             _os.makedirs(self.cache['log_dir'], exist_ok=True)
+
             self.out.update(**self._init_nn_state(trainer))
             trainer.cache_data_indices(dataset_cls, split_key='train')
             self.out.update(**self._pretrain_local(trainer_cls, dataset_cls))
@@ -140,9 +142,8 @@ class COINNLocal:
         elif self.out['phase'] == Phase.PRE_COMPUTATION and self.input.get('pretrained_weights'):
             trainer.init_nn(init_weights=False)
             trainer.load_checkpoint(
-                file_path=self.state['baseDirectory'] + _sep + self.input['pretrained_weights'])
-            trainer.save_checkpoint(
-                file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
+                file_path=self.state['baseDirectory'] + _sep + self.input['pretrained_weights']
+            )
             self.out['phase'] = Phase.COMPUTATION
 
         """################################### Computation ##########################################"""
@@ -151,14 +152,10 @@ class COINNLocal:
 
         if self.out['phase'] == Phase.COMPUTATION:
             """ Train/validation and test phases """
-            trainer.init_nn(init_weights=False)
-
-            trainer.load_checkpoint(
-                file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state'])
-
             if self.input.get('save_current_as_best'):
                 trainer.save_checkpoint(
-                    file_path=self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
+                    file_path=self.cache['log_dir'] + _sep + self.cache['best_nn_state']
+                )
 
             """Initialize Learner and assign trainer"""
             self._set_learner(learner_cls, trainer=trainer, **kw)
@@ -166,10 +163,6 @@ class COINNLocal:
             """ Reducer must issue update signal for the network to update"""
             if self.input.get('update'):
                 self.out.update(**self.learner.step())
-                if self.out['save_state']:
-                    trainer.save_checkpoint(
-                        file_path=self.cache['log_dir'] + _sep + self.cache['current_nn_state']
-                    )
 
             if any(m == Mode.TRAIN for m in self._GLOBAL_STATE['modes'].values()):
                 """
@@ -214,7 +207,7 @@ class COINNLocal:
 
     def __call__(self, *args, **kwargs):
         self.compute(*args, **kwargs)
-        return self.out
+        return {'output': self.out}
 
     def send(self):
         output = {'output': self.out, 'cache': self.cache}

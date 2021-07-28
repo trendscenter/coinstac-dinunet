@@ -258,9 +258,10 @@ class COINNRemote:
 
     def __call__(self, *args, **kwargs):
         self.compute(*args, **kwargs)
-        return self.out
+        return {'output': self.out, 'success': check(all, 'phase', Phase.SUCCESS, self.input)}
 
     def send(self):
+        """For legacy coinstac"""
         output = {'output': self.out, 'cache': self.cache,
                   'success': check(all, 'phase', Phase.SUCCESS, self.input)}
         try:

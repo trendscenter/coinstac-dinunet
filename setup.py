@@ -24,11 +24,11 @@ setup(
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
     ],
-    packages=['coinstac_dinunet', 'coinstac_dinunet.config', 'coinstac_dinunet.data',  'coinstac_dinunet.io',
+    packages=['coinstac_dinunet', 'coinstac_dinunet.config', 'coinstac_dinunet.data', 'coinstac_dinunet.io',
               'coinstac_dinunet.metrics', 'coinstac_dinunet.distrib', 'coinstac_dinunet.nn',
-              'coinstac_dinunet.profiler', 'coinstac_dinunet.utils', 'coinstac_dinunet.vision'],
+              'coinstac_dinunet.utils', 'coinstac_dinunet.vision'],
     include_package_data=True,
     install_requires=['numpy', 'scipy', 'scikit-learn', 'scikit-image',
                       'pillow', 'matplotlib', 'opencv-python-headless',
-                      'pandas', 'seaborn', 'pyinstrument', 'websockets']
+                      'pandas', 'seaborn', 'pyinstrument', 'asyncio', 'websockets']
 )

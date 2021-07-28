@@ -7,76 +7,76 @@ Forked from https://pypi.org/project/coinstac/
 import asyncio as _asyncio
 import websockets as _ws
 import json as _json
-from datetime import datetime as _dt
-
+from coinstac_dinunet.utils import duration as _duration
+from coinstac_dinunet.utils.logger import *
+import time as _time
 
 class COINPyService:
     def __init__(self, **kw):
-        self.parsed = None
+        self.cache = kw.get('cache', {})
+        self.debug = kw.get('debug', True)
 
-    def _local(self) -> callable:
+    def _local(self, msg) -> callable:
         return ...
 
-    def _remote(self) -> callable:
+    def _remote(self, msg) -> callable:
         return ...
 
-    def _local_compute_args(self) -> list:
+    def _local_compute_args(self, msg) -> list:
         return []
 
-    def _remote_compute_args(self) -> list:
+    def _remote_compute_args(self, msg) -> list:
         return []
 
     async def _run(self, websocket, path):
         message = await websocket.recv()
         try:
             if message is not None:
-                self.parsed = _json.loads(message)
+                message = _json.loads(message)
 
         except Exception as e:
             await websocket.close(1011, 'JSON data parse failed')
 
-        if self.parsed['mode'] == 'remote':
+        if message['mode'] == 'remote':
             try:
-                start = _dt.now()
+                start = _time.time()
                 output = await _asyncio.get_event_loop().run_in_executor(
                     None,
-                    self._remote(),
-                    *self._remote_compute_args()
+                    self._remote(message),
+                    *self._remote_compute_args(message)
                 )
-                print('Remote exec time:')
-                print((_dt.now() - start).total_seconds())
+                _duration(self.cache, start, 'remote_iter_duration')
+                info(f"Remote Iter: {self.cache.get('remote_iter_duration', ['undef'])[-1]}", self.debug)
                 await websocket.send(_json.dumps({'type': 'stdout', 'data': output, 'end': True}))
 
             except Exception as e:
-                print(e)
-                print('Remote data:')
-                print(self.parsed['data'])
+                error(e)
+                error('Remote data:')
+                error(message['data'])
                 await websocket.send(_json.dumps({'type': 'stderr', 'data': e, 'end': True}))
 
-        elif self.parsed['mode'] == 'local':
+        elif message['mode'] == 'local':
             try:
-                start = _dt.now()
+                start = _time.time()
                 output = await _asyncio.get_event_loop().run_in_executor(
                     None,
-                    self._local(),
-                    *self._local_compute_args()
+                    self._local(message),
+                    *self._local_compute_args(message)
                 )
-
-                print('Local exec time:')
-                print((_dt.now() - start).total_seconds())
+                _duration(self.cache, start, 'local_iter_duration')
+                info(f"Local Iter: {self.cache.get('local_iter_duration', ['undef'])[-1]}", self.debug)
                 await websocket.send(_json.dumps({'type': 'stdout', 'data': output, 'end': True}))
 
             except Exception as e:
-                print(e)
-                print('Local data:')
-                print(self.parsed['data'])
+                error(e)
+                error('Local data:')
+                error(message['data'])
                 await websocket.send(_json.dumps({'type': 'stderr', 'data': e, 'end': True}))
         else:
             await websocket.close()
 
     def start(self):
         start_server = _ws.serve(self._run, '0.0.0.0', 8881)
-        print("Python microservice started on 8881")
-
+        info("Python microservice started on 8881")
         _asyncio.get_event_loop().run_until_complete(start_server)
         _asyncio.get_event_loop().run_forever()

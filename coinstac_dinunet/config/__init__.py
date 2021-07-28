@@ -31,16 +31,3 @@ def boolean_string(s):
         return str(s).strip().lower() == 'true'
     except:
         return False
-
-
-default_args = {}
-ap = _ap.ArgumentParser()
-
-if '--profile' in _sys.argv and boolean_string(_sys.argv[_sys.argv.index('--profile') + 1]):
-    ap.add_argument("--profile", default=False, type=boolean_string, help="Run Profiler.")
-    ap.add_argument("--profiler_gather_freq", default=1, type=int,
-                    help="Frequency to gather profiler data.")
-    ap.add_argument("--profiler_verbose", default=False, type=boolean_string, help="Verbose.")
-    ap.add_argument("--profiler_dir_key", default='outputDirectory', type=str, help="Profiler log directory.")
-    _args, _ = ap.parse_known_args()
-    default_args = vars(_args)

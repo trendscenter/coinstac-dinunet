@@ -4,7 +4,6 @@
 """
 
 import random as _rd
-from collections import OrderedDict as _ODict
 from os import sep as _sep
 
 import coinstac_dinunet.config as _conf
@@ -21,9 +20,9 @@ class COINNTrainer(_NNTrainer):
         self.cache = cache
         self.input = _utils.FrozenDict(input)
         self.state = _utils.FrozenDict(state)
-        self.nn = _ODict()
-        self.device = _ODict()
-        self.optimizer = _ODict()
+        self.nn = self.cache.get('nn', {})
+        self.device = self.cache.get('device', {})
+        self.optimizer = self.cache.get('optimizer', {})
 
     def _save_if_better(self, epoch, val_metrics):
         r"""

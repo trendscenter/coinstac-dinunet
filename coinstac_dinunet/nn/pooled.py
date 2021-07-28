@@ -14,7 +14,6 @@ from coinstac_dinunet.config.keys import *
 from .basetrainer import NNTrainer as _NNTrainer
 from coinstac_dinunet import COINNLocal
 from coinstac_dinunet.utils.utils import performance_improved_
-from coinstac_dinunet.profiler import Profile
 
 
 def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
