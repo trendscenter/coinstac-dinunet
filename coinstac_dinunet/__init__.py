@@ -1,4 +1,4 @@
-from .data import COINNDataLoader, COINNDataset
+from .data import COINNDataset, COINNDataHandle
 from .distrib import COINNLocal, COINNRemote
 from .trainer import COINNTrainer
 from .nn import PooledTrainer

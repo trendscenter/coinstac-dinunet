@@ -34,7 +34,7 @@ class COINNTrainer(_NNTrainer):
             self.save_checkpoint(file_path=self.state['transferDirectory'] + _sep + out['weights_file'])
         return out
 
-    def validation_distributed(self):
+    def validation_distributed(self, dataset_cls):
         out = {}
         validation_dataset = self.data_handle.dataset['validation']
         if not isinstance(validation_dataset, list):
@@ -48,35 +48,17 @@ class COINNTrainer(_NNTrainer):
         out[Key.VALIDATION_SERIALIZABLE] = [vars(avg), vars(metrics)]
         out[Key.TRAIN_SERIALIZABLE] = self.cache[Key.TRAIN_SERIALIZABLE]
         self.cache[Key.TRAIN_SERIALIZABLE] = []
-        _rd.shuffle(self.data_handle.dataset['train'].indices)
         self.cache['cursor'] = 0
         return out
 
-    def test_distributed(self):
+    def test_distributed(self, dataset_cls):
         out = {}
         self.load_checkpoint(self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
-        test_dataset = self.data_handle.get_test_dataset()
+        test_dataset = self.data_handle.get_test_dataset(dataset_cls)
         if not isinstance(test_dataset, list):
             test_dataset = [test_dataset]
 
         avg, metrics = self.evaluation(mode='test', save_pred=True,
                                        dataset_list=test_dataset)
         out[Key.TEST_SERIALIZABLE] = [vars(avg), vars(metrics)]
-        return out
-
-    def next_batch(self):
-        if self.cache['cursor'] == 0:
-            dataset = self.data_handle.dataset['train']
-            self.cache['train_loader_iter'] = iter(
-                self.data_handle.get_loader(handle_key='train', dataset=dataset, shuffle=True)
-            )
-        return next(self.cache['train_loader_iter'])
-
-    def next_iter(self) -> dict:
-        out = {}
-        self.cache['cursor'] += self.cache['batch_size']
-        if self.cache['cursor'] >= self.cache['data_len']:
-            out['mode'] = Mode.VALIDATION_WAITING
-            _rd.shuffle(self.data_handle.dataset['train'].indices)
-            self.cache['cursor'] = 0
         return out

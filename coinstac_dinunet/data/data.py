@@ -11,6 +11,7 @@ from torch.utils.data._utils.collate import default_collate as _default_collate
 
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.utils as _utils
+from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.utils.logger import *
 
 _sep = _os.sep
@@ -22,27 +23,6 @@ def safe_collate(batch):
     Savely select batches/skip errors in file loading.
     """
     return _default_collate([b for b in batch if b])
-
-
-class COINNDataLoader(_DataLoader):
-
-    @classmethod
-    def new(cls, **kw):
-        _kw = {
-            'dataset': None,
-            'batch_size': 1,
-            'sampler': None,
-            'shuffle': False,
-            'batch_sampler': None,
-            'num_workers': 0,
-            'pin_memory': False,
-            'drop_last': False,
-            'timeout': 0,
-            'worker_init_fn': None
-        }
-        for k in _kw.keys():
-            _kw[k] = kw.get(k, _kw.get(k))
-        return cls(collate_fn=safe_collate, **_kw)
 
 
 class COINNDataset(_Dataset):
@@ -110,13 +90,14 @@ class COINNDataHandle:
         self.input = input
         self.state = state
         self.dataset = self.cache.get('dataset', {})
+        self.dataloader = self.cache.get('dataloader', {})
         self.dataloader_args = _utils.FrozenDict(dataloader_args)
 
     def get_dataset(self, handle_key, files, dataset_cls=None):
         dataset = dataset_cls(mode=handle_key, limit=self.cache['load_limit'])
         dataset.add(files=files, cache=self.cache, state=self.state)
         self.dataset[handle_key] = dataset
-        return dataset
+        return self.dataset[handle_key]
 
     def get_train_dataset(self, dataset_cls):
         if dataset_cls is None or self.dataloader_args.get('train', {}).get('dataset'):
@@ -154,8 +135,7 @@ class COINNDataHandle:
             if len(datasets) > 0 and sum([len(t) for t in datasets if t]) > 0:
                 return datasets
 
-    def get_loader(self, handle_key='',  **kw):
-
+    def get_loader(self, handle_key='', **kw):
         args = {**self.cache}
         args.update(self.dataloader_args.get(handle_key, {}))
         args.update(**kw)
@@ -176,3 +156,21 @@ class COINNDataHandle:
             loader_args[k] = args.get(k, loader_args.get(k))
 
         return _DataLoader(collate_fn=safe_collate, **loader_args)
+
+    def next_iter(self, handle_key=Mode.TRAIN, shuffle=True) -> tuple:
+        out = {}
+
+        if self.cache['cursor'] == 0:
+            dataset = self.dataset[handle_key]
+            loader = self.get_loader(handle_key=handle_key, shuffle=shuffle, dataset=dataset)
+            self.cache['data_len'] = (len(dataset) // self.cache['batch_size']) * self.cache['batch_size']
+            self.cache['train_loader_iter'] = iter(loader)
+
+        batch = next(self.cache['train_loader_iter'])
+        self.cache['cursor'] += self.cache['batch_size']
+
+        if self.cache['cursor'] >= self.cache['data_len']:
+            out['mode'] = Mode.VALIDATION_WAITING
+            self.cache['cursor'] = 0
+
+        return batch, out

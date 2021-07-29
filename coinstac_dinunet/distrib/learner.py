@@ -33,7 +33,6 @@ class COINNLearner:
 
     def backward(self) -> _Tuple[dict, dict]:
         out = {}
-
         first_model = list(self.trainer.nn.keys())[0]
         first_optim = list(self.trainer.optimizer.keys())[0]
 
@@ -42,10 +41,11 @@ class COINNLearner:
 
         its = []
         for _ in range(self.cache['local_iterations']):
-            it = self.trainer.iteration(self.trainer.next_batch())
+            batch, nxt_iter_out = self.trainer.data_handle.next_iter()
+            it = self.trainer.iteration(batch)
             it['loss'].backward()
             its.append(it)
-            out.update(**self.trainer.next_iter())
+            out.update(**nxt_iter_out)
         return out, self.trainer.reduce_iteration(its)
 
     def to_reduce(self) -> _Tuple[dict, dict]:
@@ -55,4 +55,4 @@ class COINNLearner:
         grads = _tu.extract_grads(self.trainer.nn[first_model])
         _tu.save_grads(self.state['transferDirectory'] + _sep + out['grads_file'], grads)
         out['reduce'] = True
-        return out, it
+        return it, out

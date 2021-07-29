@@ -5,11 +5,13 @@ Forked from https://pypi.org/project/coinstac/
 """
 
 import asyncio as _asyncio
-import websockets as _ws
 import json as _json
+import time as _time
+
+import websockets as _ws
+
 from coinstac_dinunet.utils import duration as _duration
 from coinstac_dinunet.utils.logger import *
-import time as _time
 
 
 class COINPyService:
@@ -39,15 +41,28 @@ class COINPyService:
 
         if message['mode'] == 'remote':
             try:
+                if self.verbose:
+                    info(
+                        f"ITERATION-{message['data']['state']['iteration']}"
+                        f"---------------------------------------------------------------------------------------"
+                    )
+                    info(f"[*** REMOTE input ***] : {message['data']['input']}")
+
                 start = _time.time()
                 output = await _asyncio.get_event_loop().run_in_executor(
                     None,
                     self.get_remote(message),
                     *self.get_remote_compute_args(message)
                 )
+
                 if self.profile:
                     _duration(self.cache, start, 'remote_iter_duration')
                     info(f"Remote Iter: {self.cache.get('remote_iter_duration', ['undef'])[-1]}", self.verbose)
+
+                if self.verbose:
+                    info(f"[*** REMOTE cache ***]: {self.cache}")
+                    info(f"[*** REMOTE output ***]: {output}")
+
                 await websocket.send(_json.dumps({'type': 'stdout', 'data': output, 'end': True}))
 
             except Exception as e:
@@ -58,15 +73,28 @@ class COINPyService:
 
         elif message['mode'] == 'local':
             try:
+                if self.verbose:
+                    info(
+                        f"ITERATION-{message['data']['state']['iteration']}"
+                        f"---------------------------------------------------------------------------------------"
+                    )
+                    info(f"[*** {message['data']['state']['clientId']} input ***]: {message['data']['input']}")
+
                 start = _time.time()
                 output = await _asyncio.get_event_loop().run_in_executor(
                     None,
                     self.get_local(message),
                     *self.get_local_compute_args(message)
                 )
+
                 if self.profile:
                     _duration(self.cache, start, 'local_iter_duration')
                     info(f"Local Iter: {self.cache.get('local_iter_duration', ['undef'])[-1]}", self.verbose)
+
+                if self.verbose:
+                    info(f"[*** {message['data']['state']['clientId']} cache ***]: {self.cache}")
+                    info(f"[*** {message['data']['state']['clientId']} output ***]: {output}")
+
                 await websocket.send(_json.dumps({'type': 'stdout', 'data': output, 'end': True}))
 
             except Exception as e:
@@ -79,6 +107,6 @@ class COINPyService:
 
     def start(self):
         start_server = _ws.serve(self._run, '0.0.0.0', 8881)
-        info("Python microservice started on 8881")
+        success("Python microservice started on 8881")
         _asyncio.get_event_loop().run_until_complete(start_server)
         _asyncio.get_event_loop().run_forever()

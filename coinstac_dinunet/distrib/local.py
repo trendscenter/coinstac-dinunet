@@ -12,6 +12,7 @@ from typing import List as _List
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.data.datautils as _du
 from coinstac_dinunet.config.keys import *
+from coinstac_dinunet.data import COINNDataHandle as _DataHandle
 from coinstac_dinunet.distrib import learner as _learner
 from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 
@@ -32,6 +33,7 @@ class COINNLocal:
                  pin_memory: bool = False,
                  num_workers: int = 0,
                  load_limit: int = _conf.max_size,
+                 load_sparse=False,
                  pretrained_path: str = None,
                  patience: int = None,
                  num_folds: int = None,
@@ -56,6 +58,7 @@ class COINNLocal:
         self._args['pin_memory'] = pin_memory
         self._args['num_workers'] = num_workers
         self._args['load_limit'] = load_limit
+        self._args['load_sparse'] = load_sparse
         self._args['pretrained_path'] = pretrained_path
         self._args['patience'] = patience if patience else epochs
         self._args['num_folds'] = num_folds
@@ -82,14 +85,13 @@ class COINNLocal:
             out[k] = self.cache.get(k)
         return out
 
-    def _init_nn_state(self, trainer):
+    def _attach_nn_state(self, trainer):
         out = {}
         trainer.init_nn(init_weights=True)
         self.cache['nn'] = trainer.nn
         self.cache['device'] = trainer.device
         self.cache['optimizer'] = trainer.optimizer
         self.cache['dataset'] = trainer.data_handle.dataset
-        trainer.data_handle.dataloader_args = self._dataloader_args
         self.cache['best_nn_state'] = f"best.{self.cache['computation_id']}-{self.cache['split_ix']}.pt"
         out['phase'] = Phase.COMPUTATION
         return out
@@ -112,7 +114,13 @@ class COINNLocal:
 
     def compute(self, dataset_cls, trainer_cls, learner_cls: callable = None, **kw):
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
-        trainer = trainer_cls(cache=self.cache, input=self.input, state=self.state)
+        trainer = trainer_cls(
+            cache=self.cache, input=self.input, state=self.state,
+            data_handle=_DataHandle(
+                cache=self.cache, input=self.input, state=self.state,
+                dataloader_args=self._dataloader_args
+            )
+        )
 
         if self.out['phase'] == Phase.INIT_RUNS:
             """ Generate folds as specified.   """
@@ -137,7 +145,7 @@ class COINNLocal:
                 'computation_id'] + _sep + f"fold_{self.cache['split_ix']}"
             _os.makedirs(self.cache['log_dir'], exist_ok=True)
 
-            self.out.update(**self._init_nn_state(trainer))
+            self.out.update(**self._attach_nn_state(trainer))
             self.out.update(
                 **self._pretrain_local(
                     trainer_cls,
@@ -174,7 +182,7 @@ class COINNLocal:
                    and reshuffle the data,
                 take part in the training with everybody until all sites go to 'val_waiting' status.
                 """
-                out, it = self.learner.to_reduce(dataset_cls)
+                it, out = self.learner.to_reduce()
                 self.out.update(**out)
                 if it.get('averages') and it.get('metrics'):
                     self.cache[Key.TRAIN_SERIALIZABLE].append([vars(it['averages']), vars(it['metrics'])])
@@ -188,11 +196,11 @@ class COINNLocal:
                  and all sites reshuffle the indices and r esume training.
                 We send the confusion matrix to the remote to accumulate global score for model selection.
                 """
-                self.out.update(**trainer.validation_distributed())
+                self.out.update(**trainer.validation_distributed(dataset_cls))
                 self.out['mode'] = Mode.TRAIN_WAITING
 
             if all(m == Mode.TEST for m in self._GLOBAL_STATE['modes'].values()):
-                self.out.update(**trainer.test_distributed())
+                self.out.update(**trainer.test_distributed(dataset_cls))
                 self.out['mode'] = self.cache['args']['mode']
                 self.out['phase'] = Phase.NEXT_RUN_WAITING
 

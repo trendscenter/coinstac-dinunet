@@ -8,12 +8,12 @@ import os as _os
 from typing import List
 
 import coinstac_dinunet.config as _conf
-from coinstac_dinunet import utils as _utils
-from coinstac_dinunet.utils.logger import *
-from coinstac_dinunet.config.keys import *
-from .basetrainer import NNTrainer as _NNTrainer
 from coinstac_dinunet import COINNLocal
+from coinstac_dinunet import utils as _utils
+from coinstac_dinunet.config.keys import *
+from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.utils.utils import performance_improved_
+from .basetrainer import NNTrainer as _NNTrainer
 
 
 def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
@@ -66,6 +66,20 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
                             state={'clientId': f"{site}", "baseDirectory": self.base_directory(site)})
             return dataset
 
+        def _get_train_dataset(self, dataset_cls):
+            if self.cache.get('data_indices') is None:
+                return self._load_dataset(dataset_cls, split_key='train')
+            dataset = dataset_cls(mode=Mode.TRAIN, limit=self.cache.get('load_limit', _conf.max_size))
+            dataset.indices = self.cache['data_indices']
+            dataset.add(files=[], cache=self.cache, state=self.state)
+            return dataset
+
+        def _get_validation_dataset(self, dataset_cls):
+            return self._load_dataset(dataset_cls, split_key='validation')
+
+        def _get_test_dataset(self, dataset_cls):
+            return self._load_dataset(dataset_cls, split_key='test')
+
         def _save_if_better(self, epoch, val_metrics):
             val_score = val_metrics.extract(self.cache['monitor_metric'][0])
             if performance_improved_(epoch, val_score, self.cache):
@@ -80,7 +94,6 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
         def base_directory(self, site):
             return f"{self.dataset_dir}/input/{site}/simulatorRun"
 
-        # @Profile()
         def run(self, dataset_cls, only_sites: list = None, only_folds: list = None):
             global_avg, global_metrics = self.new_averages(), self.new_metrics()
 
@@ -101,12 +114,18 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
                 self.init_nn()
                 self.init_training_cache()
                 if self.cache['mode'] == Mode.TRAIN:
-                    self.train_local(dataset_cls)
+                    train_dataset = self._get_train_dataset(dataset_cls)
+                    val_dataset = self._get_validation_dataset(dataset_cls)
+                    self.train_local(train_dataset, val_dataset)
 
                 if self.cache['mode'] == 'train' or self.cache.get('pretrained_path') is None:
                     self.load_checkpoint(self.cache['log_dir'] + _os.sep + _conf.weights_file)
-                test_dataset_list = self._get_test_dataset_list(dataset_cls)
-                test_averages, test_metrics = self.evaluation(mode='test', dataset_list=test_dataset_list,
+                test_dataset = self._get_test_dataset(dataset_cls)
+
+                if not isinstance(test_dataset, list):
+                    test_dataset = [test_dataset]
+
+                test_averages, test_metrics = self.evaluation(mode='test', dataset_list=test_dataset,
                                                               save_pred=True)
 
                 global_avg.accumulate(test_averages), global_metrics.accumulate(test_metrics)
