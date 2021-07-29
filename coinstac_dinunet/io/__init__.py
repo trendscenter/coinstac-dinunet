@@ -11,6 +11,7 @@ from coinstac_dinunet.utils import duration as _duration
 from coinstac_dinunet.utils.logger import *
 import time as _time
 
+
 class COINPyService:
     def __init__(self, **kw):
         self.cache = kw.get('cache', {})
