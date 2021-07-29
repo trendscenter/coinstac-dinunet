@@ -10,14 +10,14 @@ from os import sep as _sep
 import torch as _torch
 
 import coinstac_dinunet.config as _conf
-import coinstac_dinunet.data as _data
 import coinstac_dinunet.metrics as _base_metrics
 import coinstac_dinunet.utils as _utils
 import coinstac_dinunet.utils.tensorutils as _tu
 import coinstac_dinunet.vision.plotter as _plot
 from coinstac_dinunet.config.keys import *
-from coinstac_dinunet.utils.logger import *
+from coinstac_dinunet.data import COINNDataHandle as _DataHandle
 from coinstac_dinunet.utils import stop_training_
+from coinstac_dinunet.utils.logger import *
 
 
 class NNTrainer:
@@ -28,6 +28,7 @@ class NNTrainer:
         self.nn = _ODict()
         self.device = _ODict()
         self.optimizer = _ODict()
+        self.data_handle = _DataHandle(cache=self.cache, input=self.input, state=self.state)
 
     def _init_nn_model(self):
         r"""
@@ -120,14 +121,17 @@ class NNTrainer:
         for k in self.nn:
             self.nn[k].eval()
 
-        _cache = {**self.cache}
-        _cache.update(shuffle=False)
-        _cache['mode'] = mode
         eval_avg, eval_metrics = self.new_averages(), self.new_metrics()
         eval_loaders = []
         for dataset in [d for d in dataset_list if d is not None]:
-            _cache['batch_size'] = _tu.get_safe_batch_size(self.cache['batch_size'], len(dataset))
-            eval_loaders.append(_data.COINNDataLoader.new(dataset=dataset, **_cache))
+            bz = _tu.get_safe_batch_size(self.cache['batch_size'], len(dataset))
+            eval_loaders.append(
+                self.data_handle.get_loader(
+                    handle_key=mode, batch_size=bz,
+                    dataset=dataset, shuffle=False,
+                    reuse=len(dataset_list) == 1
+                )
+            )
 
         with _torch.no_grad():
             for loader in eval_loaders:
@@ -176,18 +180,15 @@ class NNTrainer:
         self.cache['best_val_epoch'] = 0
         self.cache.update(best_val_score=0.0 if metric_direction == 'maximize' else _conf.max_size)
 
-    def train_local(self, dataset_cls):
+    def train_local(self, train_dataset, val_dataset):
         out = {}
-        _dset_cache = {**self.cache}
-        _dset_cache.update(mode=Mode.TRAIN, shuffle=True)
-        dataset = self._get_train_dataset(dataset_cls)
 
-        if not self.cache.get('drop_last'):
-            _dset_cache['batch_size'] = _tu.get_safe_batch_size(_dset_cache['batch_size'], len(dataset))
+        if self.data_handle.dataloader_args.get('drop_last') or self.cache.get('drop_last'):
+            bz = self.cache['batch_size']
+        else:
+            bz = _tu.get_safe_batch_size(self.cache['batch_size'], len(train_dataset))
 
-        loader = _data.COINNDataLoader.new(dataset=dataset, **_dset_cache)
-        validation_dataset_list = self._get_validation_dataset_list(dataset_cls)
-
+        loader = self.data_handle.get_loader('train', dataset=train_dataset, shuffle=True, batch_size=bz)
         local_iter = self.cache.get('local_iterations', 1)
         tot_iter = len(loader) // local_iter
         for ep in range(1, self.cache['epochs'] + 1):
@@ -214,7 +215,7 @@ class NNTrainer:
                     self.on_iteration_end(i=_i, ep=ep, it=it)
 
             if ep % self.cache.get('validation_epochs', 1) == 0:
-                val_averages, val_metric = self.evaluation(mode='validation', dataset_list=validation_dataset_list)
+                val_averages, val_metric = self.evaluation(mode='validation', dataset_list=[val_dataset])
                 self.cache[Key.VALIDATION_LOG].append([*val_averages.get(), *val_metric.get()])
                 out.update(**self._save_if_better(ep, val_metric))
 

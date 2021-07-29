@@ -7,7 +7,7 @@ Forked from https://pypi.org/project/coinstac/
 import asyncio as _asyncio
 import websockets as _ws
 import json as _json
-from coinstac_dinunet.utils import duration as _duration, save_cache as _save
+from coinstac_dinunet.utils import duration as _duration
 from coinstac_dinunet.utils.logger import *
 import time as _time
 
@@ -15,8 +15,8 @@ import time as _time
 class COINPyService:
     def __init__(self, **kw):
         self.cache = kw.get('cache', {})
-        self.verbose = kw.get('verbose', True)
-        self.cache['start_time'] = _time.time()
+        self.verbose = kw.get('verbose', False)
+        self.profile = kw.get('profile', False)
 
     def get_local(self, msg) -> callable:
         return ...
@@ -33,9 +33,7 @@ class COINPyService:
     async def _run(self, websocket, path):
         message = await websocket.recv()
         try:
-            if message is not None:
-                message = _json.loads(message)
-
+            message = _json.loads(message)
         except Exception as e:
             await websocket.close(1011, 'JSON data parse failed')
 
@@ -47,8 +45,9 @@ class COINPyService:
                     self.get_remote(message),
                     *self.get_remote_compute_args(message)
                 )
-                _duration(self.cache, start, 'remote_iter_duration')
-                info(f"Remote Iter: {self.cache.get('remote_iter_duration', ['undef'])[-1]}", self.verbose)
+                if self.profile:
+                    _duration(self.cache, start, 'remote_iter_duration')
+                    info(f"Remote Iter: {self.cache.get('remote_iter_duration', ['undef'])[-1]}", self.verbose)
                 await websocket.send(_json.dumps({'type': 'stdout', 'data': output, 'end': True}))
 
             except Exception as e:
@@ -65,8 +64,9 @@ class COINPyService:
                     self.get_local(message),
                     *self.get_local_compute_args(message)
                 )
-                _duration(self.cache, start, 'local_iter_duration')
-                info(f"Local Iter: {self.cache.get('local_iter_duration', ['undef'])[-1]}", self.verbose)
+                if self.profile:
+                    _duration(self.cache, start, 'local_iter_duration')
+                    info(f"Local Iter: {self.cache.get('local_iter_duration', ['undef'])[-1]}", self.verbose)
                 await websocket.send(_json.dumps({'type': 'stdout', 'data': output, 'end': True}))
 
             except Exception as e:
@@ -75,7 +75,6 @@ class COINPyService:
                 error(message['data'])
                 await websocket.send(_json.dumps({'type': 'stderr', 'data': e, 'end': True}))
         else:
-            _save({'duration': f"{_duration(self.cache, self.cache.get('start_time'))}"}, self.cache['log_dir'])
             await websocket.close()
 
     def start(self):

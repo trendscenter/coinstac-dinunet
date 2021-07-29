@@ -11,7 +11,6 @@ import coinstac_dinunet.utils as _utils
 from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.utils.utils import performance_improved_
 from .nn import NNTrainer as _NNTrainer
-from coinstac_dinunet import COINNDataLoader as _COINNDLoader
 
 
 class COINNTrainer(_NNTrainer):
@@ -35,41 +34,49 @@ class COINNTrainer(_NNTrainer):
             self.save_checkpoint(file_path=self.state['transferDirectory'] + _sep + out['weights_file'])
         return out
 
-    def validation_distributed(self, dataset_cls):
+    def validation_distributed(self):
         out = {}
-        avg, metrics = self.evaluation(mode='validation', save_pred=False,
-                                       dataset_list=self._get_validation_dataset_list(dataset_cls))
+        validation_dataset = self.data_handle.dataset['validation']
+        if not isinstance(validation_dataset, list):
+            validation_dataset = [validation_dataset]
+
+        avg, metrics = self.evaluation(
+            mode='validation',
+            save_pred=False,
+            dataset_list=validation_dataset
+        )
         out[Key.VALIDATION_SERIALIZABLE] = [vars(avg), vars(metrics)]
         out[Key.TRAIN_SERIALIZABLE] = self.cache[Key.TRAIN_SERIALIZABLE]
         self.cache[Key.TRAIN_SERIALIZABLE] = []
-        _rd.shuffle(self.cache.get('data_indices', []))
+        _rd.shuffle(self.data_handle.dataset['train'].indices)
         self.cache['cursor'] = 0
         return out
 
-    def test_distributed(self, dataset_cls):
+    def test_distributed(self):
         out = {}
         self.load_checkpoint(self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
+        test_dataset = self.data_handle.get_test_dataset()
+        if not isinstance(test_dataset, list):
+            test_dataset = [test_dataset]
+
         avg, metrics = self.evaluation(mode='test', save_pred=True,
-                                       dataset_list=self._get_test_dataset_list(dataset_cls))
+                                       dataset_list=test_dataset)
         out[Key.TEST_SERIALIZABLE] = [vars(avg), vars(metrics)]
         return out
 
-    def cache_data_indices(self, dataset_cls, split_key='train'):
-        dataset = self._load_dataset(dataset_cls, split_key)
-        self.cache['data_indices'] = dataset.indices
-        self.cache['data_len'] = (len(dataset) // self.cache['batch_size']) * self.cache['batch_size']
-
-    def next_batch(self, dataset_cls):
-        dataset = self._get_train_dataset(dataset_cls)
-        dataset.indices = dataset.indices[self.cache['cursor']:]
-        loader = _COINNDLoader.new(dataset=dataset, **self.cache)
-        return next(loader.__iter__())
+    def next_batch(self):
+        if self.cache['cursor'] == 0:
+            dataset = self.data_handle.dataset['train']
+            self.cache['train_loader_iter'] = iter(
+                self.data_handle.get_loader(handle_key='train', dataset=dataset, shuffle=True)
+            )
+        return next(self.cache['train_loader_iter'])
 
     def next_iter(self) -> dict:
         out = {}
         self.cache['cursor'] += self.cache['batch_size']
         if self.cache['cursor'] >= self.cache['data_len']:
             out['mode'] = Mode.VALIDATION_WAITING
-            _rd.shuffle(self.cache['data_indices'])
+            _rd.shuffle(self.data_handle.dataset['train'].indices)
             self.cache['cursor'] = 0
         return out

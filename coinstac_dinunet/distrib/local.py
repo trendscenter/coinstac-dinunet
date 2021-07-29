@@ -5,7 +5,6 @@
 
 import json as _json
 import os as _os
-import random as _rd
 import shutil as _shutil
 from os import sep as _sep
 from typing import List as _List
@@ -38,6 +37,7 @@ class COINNLocal:
                  num_folds: int = None,
                  split_ratio: _List[float] = None,
                  pretrain_args: dict = None,
+                 dataloader_args: dict = None,
                  **kw):
 
         self.out = {}
@@ -63,6 +63,7 @@ class COINNLocal:
         self._args.update(**kw)
         self._args = _FrozenDict(self._args)
         self._pretrain_args = pretrain_args if pretrain_args else {}
+        self._dataloader_args = dataloader_args if dataloader_args else {}
         self._GLOBAL_STATE = {}
         self.learner = None
 
@@ -87,20 +88,22 @@ class COINNLocal:
         self.cache['nn'] = trainer.nn
         self.cache['device'] = trainer.device
         self.cache['optimizer'] = trainer.optimizer
+        self.cache['dataset'] = trainer.data_handle.dataset
+        trainer.data_handle.dataloader_args = self._dataloader_args
         self.cache['best_nn_state'] = f"best.{self.cache['computation_id']}-{self.cache['split_ix']}.pt"
         out['phase'] = Phase.COMPUTATION
         return out
 
-    def _pretrain_local(self, trainer_cls, dataset_cls):
+    def _pretrain_local(self, trainer_cls, train_dataset, validation_dataset):
         out = {'phase': Phase.COMPUTATION}
         if self._pretrain_args.get('epochs') and self.cache['pretrain']:
             cache = {**self.cache}
             cache.update(**self._pretrain_args)
             trainer = trainer_cls(cache=cache, input=self.input, state=self.state)
             trainer.init_nn()
+
             trainer.init_training_cache()
-            out.update(**trainer.train_local(dataset_cls))
-            _rd.shuffle(trainer.cache.get('data_indices', []))
+            out.update(**trainer.train_local(train_dataset, validation_dataset))
             out['phase'] = Phase.PRE_COMPUTATION
 
         if self._pretrain_args.get('epochs') and any([r['pretrain'] for r in self._GLOBAL_STATE['runs'].values()]):
@@ -123,7 +126,6 @@ class COINNLocal:
             self._check_args()
 
         elif self.out['phase'] == Phase.NEXT_RUN:
-            """  Initialize neural network/optimizer and GPUs  """
             self._GLOBAL_STATE['runs'] = self.input['global_runs']
             self.cache.update(**self._GLOBAL_STATE['runs'][self.state['clientId']])
 
@@ -136,11 +138,14 @@ class COINNLocal:
             _os.makedirs(self.cache['log_dir'], exist_ok=True)
 
             self.out.update(**self._init_nn_state(trainer))
-            trainer.cache_data_indices(dataset_cls, split_key='train')
-            self.out.update(**self._pretrain_local(trainer_cls, dataset_cls))
+            self.out.update(
+                **self._pretrain_local(
+                    trainer_cls,
+                    trainer.data_handle.get_train_dataset(dataset_cls),
+                    trainer.data_handle.get_validation_dataset(dataset_cls))
+            )
 
         elif self.out['phase'] == Phase.PRE_COMPUTATION and self.input.get('pretrained_weights'):
-            trainer.init_nn(init_weights=False)
             trainer.load_checkpoint(
                 file_path=self.state['baseDirectory'] + _sep + self.input['pretrained_weights']
             )
@@ -183,11 +188,11 @@ class COINNLocal:
                  and all sites reshuffle the indices and r esume training.
                 We send the confusion matrix to the remote to accumulate global score for model selection.
                 """
-                self.out.update(**trainer.validation_distributed(dataset_cls))
+                self.out.update(**trainer.validation_distributed())
                 self.out['mode'] = Mode.TRAIN_WAITING
 
             if all(m == Mode.TEST for m in self._GLOBAL_STATE['modes'].values()):
-                self.out.update(**trainer.test_distributed(dataset_cls))
+                self.out.update(**trainer.test_distributed())
                 self.out['mode'] = self.cache['args']['mode']
                 self.out['phase'] = Phase.NEXT_RUN_WAITING
 

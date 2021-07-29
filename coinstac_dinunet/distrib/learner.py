@@ -29,10 +29,9 @@ class COINNLearner:
 
         first_optim = list(self.trainer.optimizer.keys())[0]
         self.trainer.optimizer[first_optim].step()
-        out['save_state'] = True
         return out
 
-    def backward(self, dataset_cls) -> _Tuple[dict, dict]:
+    def backward(self) -> _Tuple[dict, dict]:
         out = {}
 
         first_model = list(self.trainer.nn.keys())[0]
@@ -43,14 +42,14 @@ class COINNLearner:
 
         its = []
         for _ in range(self.cache['local_iterations']):
-            it = self.trainer.iteration(self.trainer.next_batch(dataset_cls))
+            it = self.trainer.iteration(self.trainer.next_batch())
             it['loss'].backward()
             its.append(it)
             out.update(**self.trainer.next_iter())
         return out, self.trainer.reduce_iteration(its)
 
-    def to_reduce(self, dataset_cls) -> _Tuple[dict, dict]:
-        out, it = self.backward(dataset_cls)
+    def to_reduce(self) -> _Tuple[dict, dict]:
+        out, it = self.backward()
         first_model = list(self.trainer.nn.keys())[0]
         out['grads_file'] = _conf.grads_file
         grads = _tu.extract_grads(self.trainer.nn[first_model])
