@@ -5,7 +5,7 @@ SHARED_CACHE = ['computation_id', 'mode', 'epochs', 'num_folds', 'patience', 'sc
 
 class Phase(str, _Enum):
     INIT_RUNS = 'init_runs'
-    INIT_NN = 'init_nn'
+    NEXT_RUN = 'next_run'
     PRE_COMPUTATION = 'pre_computation'
     COMPUTATION = 'computation'
     NEXT_RUN_WAITING = 'next_run_waiting'

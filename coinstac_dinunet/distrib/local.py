@@ -7,7 +7,6 @@ import json as _json
 import os as _os
 import random as _rd
 import shutil as _shutil
-import sys as _sys
 from os import sep as _sep
 from typing import List as _List
 
@@ -84,11 +83,11 @@ class COINNLocal:
 
     def _init_nn_state(self, trainer):
         out = {}
-        self.cache['best_nn_state'] = f"best.{self.cache['computation_id']}-{self.cache['split_ix']}.pt"
         trainer.init_nn(init_weights=True)
         self.cache['nn'] = trainer.nn
         self.cache['device'] = trainer.device
         self.cache['optimizer'] = trainer.optimizer
+        self.cache['best_nn_state'] = f"best.{self.cache['computation_id']}-{self.cache['split_ix']}.pt"
         out['phase'] = Phase.COMPUTATION
         return out
 
@@ -123,10 +122,11 @@ class COINNLocal:
             self.cache['verbose'] = False
             self._check_args()
 
-        elif self.out['phase'] == Phase.INIT_NN:
+        elif self.out['phase'] == Phase.NEXT_RUN:
             """  Initialize neural network/optimizer and GPUs  """
             self._GLOBAL_STATE['runs'] = self.input['global_runs']
             self.cache.update(**self._GLOBAL_STATE['runs'][self.state['clientId']])
+
             self.cache.update(cursor=0)
             self.cache[Key.TRAIN_SERIALIZABLE] = []
 
@@ -159,8 +159,6 @@ class COINNLocal:
 
             """Initialize Learner and assign trainer"""
             self._set_learner(learner_cls, trainer=trainer, **kw)
-
-            """ Reducer must issue update signal for the network to update"""
             if self.input.get('update'):
                 self.out.update(**self.learner.step())
 
@@ -208,11 +206,3 @@ class COINNLocal:
     def __call__(self, *args, **kwargs):
         self.compute(*args, **kwargs)
         return {'output': self.out}
-
-    def send(self):
-        output = {'output': self.out, 'cache': self.cache}
-        try:
-            output = _json.dumps(output)
-            _sys.stdout.write(output)
-        except Exception as e:
-            raise Exception(f"Error parsing Json at {self.state['clientId']} {e}:\n", output)

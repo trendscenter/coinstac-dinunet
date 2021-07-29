@@ -4,10 +4,8 @@
 """
 
 import datetime as _datetime
-import json as _json
 import os as _os
 import shutil as _shutil
-import sys as _sys
 
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.metrics as _metric
@@ -179,7 +177,7 @@ class COINNRemote:
             self._init_runs()
             self.out['global_runs'] = self._next_run()
             self.cache['verbose'] = False
-            self.out['phase'] = Phase.INIT_NN
+            self.out['phase'] = Phase.NEXT_RUN
 
         if check(all, 'phase', Phase.PRE_COMPUTATION, self.input):
             self.out.update(**self._pre_compute())
@@ -219,7 +217,7 @@ class COINNRemote:
             if len(self.cache['folds']) > 0:
                 self.out['distrib'] = {}
                 self.out['global_runs'] = self._next_run()
-                self.out['phase'] = Phase.INIT_NN
+                self.out['phase'] = Phase.NEXT_RUN
             else:
                 self.out.update(**self._send_global_scores())
                 self.out['phase'] = Phase.SUCCESS
@@ -259,13 +257,3 @@ class COINNRemote:
     def __call__(self, *args, **kwargs):
         self.compute(*args, **kwargs)
         return {'output': self.out, 'success': check(all, 'phase', Phase.SUCCESS, self.input)}
-
-    def send(self):
-        """For legacy coinstac"""
-        output = {'output': self.out, 'cache': self.cache,
-                  'success': check(all, 'phase', Phase.SUCCESS, self.input)}
-        try:
-            output = _json.dumps(output)
-            _sys.stdout.write(output)
-        except Exception as e:
-            raise Exception(f'Error parsing Json at remote {e}:\n', output)
