@@ -18,10 +18,10 @@ from coinstac_dinunet.utils.logger import *
 
 
 class NNTrainer:
-    def __init__(self, cache: dict = None, input: dict = None, state: dict = None, data_handle=None, **kw):
-        self.cache = cache
-        self.input = _utils.FrozenDict(input)
-        self.state = _utils.FrozenDict(state)
+    def __init__(self, data_handle=None, **kw):
+        self.cache = data_handle.cache
+        self.input = _utils.FrozenDict(data_handle.input)
+        self.state = _utils.FrozenDict(data_handle.state)
         self.nn = _ODict()
         self.device = _ODict()
         self.optimizer = _ODict()

@@ -2,22 +2,18 @@
 @author: Aashis Khanal
 @email: sraashis@gmail.com
 """
-
+from abc import ABC
 from os import sep as _sep
 
 import coinstac_dinunet.config as _conf
-import coinstac_dinunet.utils as _utils
 from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.utils.utils import performance_improved_
 from .nn import NNTrainer as _NNTrainer
 
 
-class COINNTrainer(_NNTrainer):
-    def __init__(self, cache: dict = None, input: dict = None, state: dict = None, **kw):
-        super().__init__(cache, input, state, **kw)
-        self.cache = cache
-        self.input = _utils.FrozenDict(input)
-        self.state = _utils.FrozenDict(state)
+class COINNTrainer(_NNTrainer, ABC):
+    def __init__(self, **kw):
+        super().__init__(**kw)
         self.nn = self.cache.get('nn', {})
         self.device = self.cache.get('device', {})
         self.optimizer = self.cache.get('optimizer', {})

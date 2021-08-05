@@ -48,7 +48,7 @@ class DADLearner(COINNLearner):
         self.log_dir = self.state['outputDirectory'] + _os.sep + DADLearner.DATA_PATH
         self.grads_dir = self.state['outputDirectory'] + _os.sep + DADLearner.GRADS_PATH
 
-        if self.global_state['modes'][self.state['clientId']] == Mode.TRAIN:
+        if self.global_modes[self.state['clientId']] == Mode.TRAIN:
             for model_key in self.trainer.nn.keys():
                 for layer, ch in list(self.trainer.nn[model_key].named_children()):
                     ch.register_forward_hook(hook_wrapper(self.state['clientId'], 'forward', layer, self.log_dir))

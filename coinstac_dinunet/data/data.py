@@ -91,7 +91,6 @@ class COINNDataHandle:
         self.input = input
         self.state = state
         self.dataset = self.cache.get('dataset', {})
-        self.dataloader = self.cache.get('dataloader', {})
         self.dataloader_args = _utils.FrozenDict(dataloader_args)
 
     def get_dataset(self, handle_key, files, dataset_cls=None):

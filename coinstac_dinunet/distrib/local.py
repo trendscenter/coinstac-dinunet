@@ -66,16 +66,15 @@ class COINNLocal:
         self._args = _FrozenDict(self._args)
         self._pretrain_args = pretrain_args if pretrain_args else {}
         self._dataloader_args = dataloader_args if dataloader_args else {}
-        self._GLOBAL_STATE = {}
-        self.learner = None
 
     def _check_args(self):
         assert self.cache['computation_id'] is not None, self._PROMPT_TASK_
         assert self.cache['mode'] in [Mode.TRAIN, Mode.TEST], self._PROMPT_MODE_
 
-    def _init_runs(self, trainer):
+    def _init_runs(self, learner):
         out = {}
-        out.update(trainer.datahandle.prepare_data())
+        """Data related initializations."""
+        out.update(learner.trainer.data_handle.prepare_data())
         out['data_size'] = {}
         for k, sp in self.cache['splits'].items():
             sp = _json.loads(open(self.cache['split_dir'] + _os.sep + sp).read())
@@ -84,15 +83,18 @@ class COINNLocal:
             out[k] = self.cache.get(k)
         return out
 
-    def _attach_nn_state(self, trainer):
+    def _attach_global(self, learner):
+        self.cache['nn'] = learner.trainer.nn
+        self.cache['device'] = learner.trainer.device
+        self.cache['optimizer'] = learner.trainer.optimizer
+        self.cache['dataset'] = learner.trainer.data_handle.dataset
+
+    def _next_run(self, learner):
         out = {}
-        trainer.init_nn(init_weights=True)
-        self.cache['nn'] = trainer.nn
-        self.cache['device'] = trainer.device
-        self.cache['optimizer'] = trainer.optimizer
-        self.cache['dataset'] = trainer.data_handle.dataset
+        learner.trainer.init_nn(init_weights=True)
         self.cache['best_nn_state'] = f"best.{self.cache['computation_id']}-{self.cache['split_ix']}.pt"
         out['phase'] = Phase.COMPUTATION
+        self._attach_global(learner)
         return out
 
     def _pretrain_local(self, trainer_cls, train_dataset, validation_dataset):
@@ -107,35 +109,39 @@ class COINNLocal:
             out.update(**trainer.train_local(train_dataset, validation_dataset))
             out['phase'] = Phase.PRE_COMPUTATION
 
-        if self._pretrain_args.get('epochs') and any([r['pretrain'] for r in self._GLOBAL_STATE['runs'].values()]):
+        if self._pretrain_args.get('epochs') and any([r['pretrain'] for r in self.input['global_runs'].values()]):
             out['phase'] = Phase.PRE_COMPUTATION
         return out
 
-    def compute(self, dataset_cls, trainer_cls, learner_cls: callable = None, **kw):
-        self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
-        trainer = trainer_cls(
-            cache=self.cache, input=self.input, state=self.state,
-            data_handle=_DataHandle(
-                cache=self.cache, input=self.input, state=self.state,
-                dataloader_args=self._dataloader_args
+    def compute(self, trainer_cls,
+                dataset_cls=None,
+                datahandle_cls=_DataHandle,
+                learner_cls=_learner.COINNLearner,
+                **kw):
+
+        learner = learner_cls(
+            trainer=trainer_cls(
+                data_handle=datahandle_cls(
+                    cache=self.cache, input=self.input, state=self.state,
+                    dataloader_args=self._dataloader_args
+                )
             )
         )
 
+        self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
         if self.out['phase'] == Phase.INIT_RUNS:
             """ Generate folds as specified.   """
             self.cache.update(**self.input)
             for k in self._args:
                 if self.cache.get(k) is None:
                     self.cache[k] = self._args[k]
-            self.out.update(**self._init_runs(trainer))
+            self.out.update(**self._init_runs(learner))
             self.cache['args'] = _FrozenDict({**self.cache})
             self.cache['verbose'] = False
             self._check_args()
 
         elif self.out['phase'] == Phase.NEXT_RUN:
-            self._GLOBAL_STATE['runs'] = self.input['global_runs']
-            self.cache.update(**self._GLOBAL_STATE['runs'][self.state['clientId']])
-
+            self.cache.update(**self.input['global_runs'][self.state['clientId']])
             self.cache.update(cursor=0)
             self.cache[Key.TRAIN_SERIALIZABLE] = []
 
@@ -144,50 +150,50 @@ class COINNLocal:
                 'computation_id'] + _sep + f"fold_{self.cache['split_ix']}"
             _os.makedirs(self.cache['log_dir'], exist_ok=True)
 
-            self.out.update(**self._attach_nn_state(trainer))
+            self.out.update(**self._next_run(learner))
             self.out.update(
                 **self._pretrain_local(
                     trainer_cls,
-                    trainer.data_handle.get_train_dataset(dataset_cls),
-                    trainer.data_handle.get_validation_dataset(dataset_cls))
+                    learner.trainer.data_handle.get_train_dataset(dataset_cls),
+                    learner.trainer.data_handle.get_validation_dataset(dataset_cls))
             )
 
         elif self.out['phase'] == Phase.PRE_COMPUTATION and self.input.get('pretrained_weights'):
-            trainer.load_checkpoint(
+            learner.trainer.load_checkpoint(
                 file_path=self.state['baseDirectory'] + _sep + self.input['pretrained_weights']
             )
             self.out['phase'] = Phase.COMPUTATION
 
-        """################################### Computation ##########################################"""
-        self._GLOBAL_STATE['modes'] = self.input.get('global_modes', {})
-        self.out['mode'] = self._GLOBAL_STATE['modes'].get(self.state['clientId'], self.cache['mode'])
+        """Track global state among sites."""
+        self.out['mode'] = learner.global_modes.get(self.state['clientId'], self.cache['mode'])
 
+        """Computation begins..."""
         if self.out['phase'] == Phase.COMPUTATION:
+
             """ Train/validation and test phases """
             if self.input.get('save_current_as_best'):
-                trainer.save_checkpoint(
+                learner.trainer.save_checkpoint(
                     file_path=self.cache['log_dir'] + _sep + self.cache['best_nn_state']
                 )
 
             """Initialize Learner and assign trainer"""
-            self._set_learner(learner_cls, trainer=trainer, **kw)
             if self.input.get('update'):
-                self.out.update(**self.learner.step())
+                self.out.update(**learner.step())
 
-            if any(m == Mode.TRAIN for m in self._GLOBAL_STATE['modes'].values()):
+            if any(m == Mode.TRAIN for m in learner.global_modes.values()):
                 """
                 All sites must begin/resume the training the same time.
                 To enforce this, we have a 'val_waiting' status. Lagged sites will go to this status, 
                    and reshuffle the data,
                 take part in the training with everybody until all sites go to 'val_waiting' status.
                 """
-                it, out = self.learner.to_reduce()
+                it, out = learner.to_reduce()
                 self.out.update(**out)
                 if it.get('averages') and it.get('metrics'):
                     self.cache[Key.TRAIN_SERIALIZABLE].append([vars(it['averages']), vars(it['metrics'])])
-                    self.out.update(**trainer.on_iteration_end(0, 0, it))
+                    self.out.update(**learner.trainer.on_iteration_end(0, 0, it))
 
-            if all(m == Mode.VALIDATION for m in self._GLOBAL_STATE['modes'].values()):
+            if all(m == Mode.VALIDATION for m in learner.global_modes.values()):
                 """
                 Once all sites are in 'val_waiting' status, remote issues 'validation' signal.
                 Once all sites run validation phase, they go to 'train_waiting' status.
@@ -195,25 +201,19 @@ class COINNLocal:
                  and all sites reshuffle the indices and r esume training.
                 We send the confusion matrix to the remote to accumulate global score for model selection.
                 """
-                self.out.update(**trainer.validation_distributed(dataset_cls))
+                self.out.update(**learner.trainer.validation_distributed(dataset_cls))
                 self.out['mode'] = Mode.TRAIN_WAITING
 
-            if all(m == Mode.TEST for m in self._GLOBAL_STATE['modes'].values()):
-                self.out.update(**trainer.test_distributed(dataset_cls))
+            if all(m == Mode.TEST for m in learner.global_modes.values()):
+                self.out.update(**learner.trainer.test_distributed(dataset_cls))
                 self.out['mode'] = self.cache['args']['mode']
                 self.out['phase'] = Phase.NEXT_RUN_WAITING
 
         elif self.out['phase'] == Phase.SUCCESS:
             """ This phase receives global scores from the aggregator."""
             _shutil.copy(f"{self.state['baseDirectory']}{_sep}{self.input['results_zip']}.zip",
-                         f"{self.state['outputDirectory'] + _sep + self.cache['computation_id']}{_sep}{self.input['results_zip']}.zip")
-
-    def _set_learner(self, learner_cls: _learner.COINNLearner = None, trainer=None, **kw):
-
-        if learner_cls is None:
-            learner_cls = _learner.COINNLearner
-
-        self.learner = learner_cls(trainer=trainer, global_state=self._GLOBAL_STATE, **kw)
+                         f"{self.state['outputDirectory'] + _sep + self.cache['computation_id']}{_sep}"
+                         f"{self.input['results_zip']}.zip")
 
     def __call__(self, *args, **kwargs):
         self.compute(*args, **kwargs)
