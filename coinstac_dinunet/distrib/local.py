@@ -74,9 +74,9 @@ class COINNLocal:
         assert self.cache['computation_id'] is not None, self._PROMPT_TASK_
         assert self.cache['mode'] in [Mode.TRAIN, Mode.TEST], self._PROMPT_MODE_
 
-    def _init_runs(self):
+    def _init_runs(self, trainer):
         out = {}
-        out.update(_du.init_k_folds(self.cache, self.state))
+        out.update(trainer.datahandle.prepare_data())
         out['data_size'] = {}
         for k, sp in self.cache['splits'].items():
             sp = _json.loads(open(self.cache['split_dir'] + _os.sep + sp).read())
@@ -128,7 +128,7 @@ class COINNLocal:
             for k in self._args:
                 if self.cache.get(k) is None:
                     self.cache[k] = self._args[k]
-            self.out.update(**self._init_runs())
+            self.out.update(**self._init_runs(trainer))
             self.cache['args'] = _FrozenDict({**self.cache})
             self.cache['verbose'] = False
             self._check_args()

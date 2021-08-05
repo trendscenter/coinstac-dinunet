@@ -13,6 +13,7 @@ import coinstac_dinunet.config as _conf
 import coinstac_dinunet.utils as _utils
 from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.utils.logger import *
+from .datautils import init_k_folds as _kfolds
 
 _sep = _os.sep
 import torch as _torch
@@ -174,3 +175,9 @@ class COINNDataHandle:
             self.cache['cursor'] = 0
 
         return batch, out
+
+    def prepare_data(self):
+        files = []
+        if self.cache.get('data_dir'):
+            files = _os.listdir(self.state['baseDirectory'] + _os.sep + self.cache['data_dir'])
+        return _kfolds(files, self.cache, self.state)
