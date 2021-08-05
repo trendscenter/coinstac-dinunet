@@ -3,7 +3,6 @@
 @email: sraashis@gmail.com
 """
 
-import random as _rd
 from os import sep as _sep
 
 import coinstac_dinunet.config as _conf

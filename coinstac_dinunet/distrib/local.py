@@ -10,7 +10,6 @@ from os import sep as _sep
 from typing import List as _List
 
 import coinstac_dinunet.config as _conf
-import coinstac_dinunet.data.datautils as _du
 from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.data import COINNDataHandle as _DataHandle
 from coinstac_dinunet.distrib import learner as _learner
