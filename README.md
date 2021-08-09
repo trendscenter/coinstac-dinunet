@@ -28,11 +28,7 @@ torchvision==0.6.1+cu92
 
 
 <hr />
-
-#### Pipeline for reducing gradients across sites. The default is averaging gradients but one can extend reducer and learner to incorporate any reduction scheme.
-
 ![DINUNET](assets/dinunet.png)
-
 
 ### Full working examples
 1. **[FreeSurfer volumes classification.](https://github.com/trendscenter/dinunet_fsv/)**
