@@ -162,9 +162,8 @@ server.start()
 * ***num_folds***: int = None, Number of k-folds. 
 * ***split_ratio***: _List[float] = (0.6, 0.2, 0.2), Exclusive to num_folds. 
   
-**Directly passed parameters in coinstac_dinunet.nodes.COINNLocal, args passed through inputspec will override the defaults in the same order.**
-
-**Custom data splits can be provided in the path specified by split_dir for each sites in their respective inputspecs file. This is mutually exclusive to both num_folds and split_ratio.**
+- Directly passed parameters in coinstac_dinunet.nodes.COINNLocal, args passed through inputspec will override the defaults in the same order.
+- Custom data splits can be provided in the path specified by split_dir for each sites in their respective inputspecs file. This is mutually exclusive to both num_folds and split_ratio.
 
 <hr >
 
