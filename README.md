@@ -28,7 +28,9 @@ torchvision==0.6.1+cu92
 
 
 <hr />
+
 ![DINUNET](assets/dinunet.png)
+
 
 ### Full working examples
 1. **[FreeSurfer volumes classification.](https://github.com/trendscenter/dinunet_fsv/)**
