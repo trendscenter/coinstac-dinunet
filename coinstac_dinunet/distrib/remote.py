@@ -4,10 +4,8 @@
 """
 
 import datetime as _datetime
-import json as _json
 import os as _os
 import shutil as _shutil
-import sys as _sys
 
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.metrics as _metric
@@ -18,7 +16,6 @@ from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.utils import performance_improved_, stop_training_
 from coinstac_dinunet.distrib.utils import check
 from coinstac_dinunet.vision import plotter as _plot
-from coinstac_dinunet.profiler import Profile
 
 
 class COINNRemote:
@@ -169,7 +166,6 @@ class COINNRemote:
             _shutil.copy(pt_path, self.state['transferDirectory'] + _os.sep + out['pretrained_weights'])
         return out
 
-    @Profile()
     def compute(self, reducer_cls: callable = None, **kw):
 
         self._set_reducer(reducer_cls)
@@ -181,7 +177,7 @@ class COINNRemote:
             self._init_runs()
             self.out['global_runs'] = self._next_run()
             self.cache['verbose'] = False
-            self.out['phase'] = Phase.INIT_NN
+            self.out['phase'] = Phase.NEXT_RUN
 
         if check(all, 'phase', Phase.PRE_COMPUTATION, self.input):
             self.out.update(**self._pre_compute())
@@ -221,7 +217,7 @@ class COINNRemote:
             if len(self.cache['folds']) > 0:
                 self.out['distrib'] = {}
                 self.out['global_runs'] = self._next_run()
-                self.out['phase'] = Phase.INIT_NN
+                self.out['phase'] = Phase.NEXT_RUN
             else:
                 self.out.update(**self._send_global_scores())
                 self.out['phase'] = Phase.SUCCESS
@@ -258,11 +254,6 @@ class COINNRemote:
 
         self.reducer = reducer_cls(cache=self.cache, input=self.input, state=self.state, **kw)
 
-    def send(self):
-        output = {'output': self.out, 'cache': self.cache,
-                  'success': check(all, 'phase', Phase.SUCCESS, self.input)}
-        try:
-            output = _json.dumps(output)
-            _sys.stdout.write(output)
-        except Exception as e:
-            raise Exception(f'Error parsing Json at remote {e}:\n', output)
+    def __call__(self, *args, **kwargs):
+        self.compute(*args, **kwargs)
+        return {'output': self.out, 'success': check(all, 'phase', Phase.SUCCESS, self.input)}

@@ -6,8 +6,7 @@ import shutil as _shutil
 import numpy as _np
 
 
-def create_ratio_split(cache, state, shuffle_files=True, name='SPLIT'):
-    files = _os.listdir(state['baseDirectory'] + _os.sep + cache['data_dir'])
+def create_ratio_split(files, cache, shuffle_files=True, name='SPLIT'):
     save_to_dir = cache['split_dir']
     ratio = cache.get('split_ratio', (0.6, 0.2, 0.2))
     first_key = cache.get('first_key', 'train')
@@ -35,8 +34,7 @@ def create_ratio_split(cache, state, shuffle_files=True, name='SPLIT'):
         return splits
 
 
-def create_k_fold_splits(cache, state, shuffle_files=True, name='SPLIT'):
-    files = _os.listdir(state['baseDirectory'] + _os.sep + cache['data_dir'])
+def create_k_fold_splits(files, cache, shuffle_files=True, name='SPLIT'):
     k = cache['num_folds']
     save_to_dir = cache['split_dir']
     if shuffle_files:
@@ -59,14 +57,14 @@ def create_k_fold_splits(cache, state, shuffle_files=True, name='SPLIT'):
             return splits
 
 
-def split_place_holder(cache, state):
+def split_place_holder(files, cache):
     save_to_dir = cache['split_dir']
     splits = {'train': [], 'validation': [], 'test': []}
     f = open(save_to_dir + _os.sep + f'empty_split.json', "w")
     f.write(_json.dumps(splits))
 
 
-def init_k_folds(cache, state):
+def init_k_folds(files, cache, state):
     """
     If one wants to use custom splits:- Populate splits_dir as specified in inputs spec with split files(.json)
         with list of file names on each train, validation, and test keys.
@@ -92,7 +90,7 @@ def init_k_folds(cache, state):
         [_shutil.copy(split_dir + _os.sep + f, cache['split_dir'] + _os.sep + f) for f in _os.listdir(split_dir)]
 
     elif len(_os.listdir(cache['split_dir'])) == 0:
-        data_splitter(cache, state)
+        data_splitter(files, cache)
 
     splits = sorted(_os.listdir(cache['split_dir']))
     cache['splits'] = dict(zip([str(i) for i in range(len(splits))], splits))
