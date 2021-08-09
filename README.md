@@ -1,5 +1,7 @@
 ## coinstac-dinunet
-### <font style="color:red"> This branch is deprecated and is kept only for future references. </font>
+```diff
+- This branch is deprecated and is kept only for future references.
+```
 #### Distributed Neural Network implementation  on COINSTAC.
 
 ![PyPi version](https://img.shields.io/pypi/v/coinstac-dinunet)
