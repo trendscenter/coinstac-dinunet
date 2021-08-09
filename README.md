@@ -89,34 +89,55 @@ class MyTrainer(COINNTrainer):
         return {'out': out, 'loss': loss, 'averages': val,
                 'metrics': score, 'prediction': predicted}
 ```
-#### 3. Supply to local node in local.py
-```python
-if __name__ == "__main__":
-    local = COINNLocal(cache=RECV['cache'], input=RECV['input'], state=RECV['state'])
-    local.compute(MyDataset, MyTrainer)
-    local.send()
-```
-#### 4. Define remote node in remote.py
+
+#### 3. Define remote node in remote.py
 
 ```python
-from coinstac_dinunet import COINNRemote
-from coinstac_dinunet.io import RECV
+from coinstac_dinunet.metrics import Prf1a
+from  coinstac_dinunet import COINNRemote
 class MyRemote(COINNRemote):
+    def _set_monitor_metric(self):
+        self.cache['monitor_metric'] = 'f1', 'maximize'
 
-    def _new_metrics(self):  #
-        return coinstac_dinunet.metrics.Prf1a()
+    def _set_log_headers(self):
+        self.cache['log_header'] = 'Loss|Accuracy,F1'
 
-    def _new_averages(self):
-        return coinstac_dinunet.metrics.COINNAverages()
+    def _new_metrics(self):
+        return Prf1a()
+```
+#### 4. Define the entry point
+```python
+from coinstac_dinunet import COINNLocal
+from coinstac_dinunet.io import COINPyService
 
-    def _monitor_metric(self):
-        return 'f1', 'maximize'
+
+class Server(COINPyService):
+
+    def get_local(self, msg) -> callable:
+        pretrain_args = {'epochs': 51, 'batch_size': 16}
+        local = COINNLocal(cache=self.cache, input=msg['data']['input'],
+                           pretrain_args=None, batch_size=16,
+                           state=msg['data']['state'], epochs=21, patience=21, computation_id='fsv_quick')
+        return local
+
+    def get_remote(self, msg) -> callable:
+        remote = MyRemote(cache=self.cache, input=msg['data']['input'],
+                          state=msg['data']['state'])
+        return remote
+
+    def get_local_compute_args(self, msg) -> list:
+        """
+        MyDataHandle and MyLearner are optional
+            - MyDataHandle: Can have any custom data loading logic.
+            - MyLearner: Can have any custom learning technique 
+                when paired with MyReducer argument in get_local_compute_args.
+        """
+        return [MyTrainer, MyDataset, MyDataHandle, MyLearner]
 
 
-if __name__ == "__main__":
-    remote = MyRemote(cache=RECV['cache'], input=RECV['input'], state=RECV['state'])
-    remote.compute()
-    remote.send()
+server = Server(verbose=False)
+server.start()
+
 ```
 
 #### Define custom metrics
