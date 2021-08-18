@@ -66,7 +66,12 @@ def clean_recursive(obj):
 
 def save_cache(cache, log_dir):
     with open(log_dir + _os.sep + f"logs.json", 'w') as fp:
-        log = _copy.deepcopy(cache)
+        log = {}.fromkeys(cache.keys())
+        for k in log:
+            try:
+                log[k] = _copy.deepcopy(cache[k])
+            except:
+                log[k] = ''
         clean_recursive(log)
         _json.dump(log, fp)
 
