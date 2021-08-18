@@ -62,9 +62,10 @@ class COINNLocal:
         self._args['patience'] = patience if patience else epochs
         self._args['num_folds'] = num_folds
         self._args['split_ratio'] = split_ratio
+
         self._args.update(**kw)
         self._args = _FrozenDict(self._args)
-        self._pretrain_args = pretrain_args if pretrain_args else {}
+        self._pretrain_args = pretrain_args if pretrain_args else self.cache.get('pretrain_args', {})
         self._dataloader_args = dataloader_args if dataloader_args else {}
 
     def _check_args(self):

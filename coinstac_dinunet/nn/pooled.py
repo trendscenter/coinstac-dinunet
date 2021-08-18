@@ -14,6 +14,7 @@ from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.utils.utils import performance_improved_
 from .basetrainer import NNTrainer as _NNTrainer
+from coinstac_dinunet.data import COINNDataHandle as _DataHandle
 
 
 def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
@@ -28,7 +29,13 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
                   num_workers: int = 0,
                   load_limit: int = _conf.max_size,
                   pretrained_path: str = None,
-                  patience: int = None, **kw):
+                  patience: int = None,
+                  dataloader_args=None,
+                  datahandle_cls=_DataHandle,
+                  **kw):
+    if dataloader_args is None:
+        dataloader_args = {}
+
     class PooledTrainer(base, COINNLocal):
         def __init__(self, dataset_dir=None, log_dir=None, **kwargs):
             self.dataset_dir = dataset_dir
@@ -38,7 +45,12 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
             cache['seed'] = _conf.current_seed
             cache.update(**kwargs)
             state = {'clientId': 'LocalMachine', 'outputDirectory': log_dir}
-            super().__init__(cache=cache, input={}, state=state, **kw)
+
+            data_handle = datahandle_cls(
+                cache=cache, input={}, state=state,
+                dataloader_args=dataloader_args
+            )
+            super().__init__(data_handle=data_handle, **kw)
 
         def _init_folds(self):
             folds = {}
