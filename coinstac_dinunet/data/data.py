@@ -67,8 +67,8 @@ class COINNDataset(_Dataset):
     def transforms(self, **kw):
         return None
 
-    def path(self, site, inputspec_key, root_dir='baseDirectory'):
-        return self.state[site][root_dir] + _os.sep + self.inputspecs[site][inputspec_key]
+    def path(self, site, root_dir='baseDirectory', inputspec_key='_N/A_'):
+        return _os.path.join(self.state[site][root_dir], self.inputspecs[site].get(inputspec_key, ''))
 
     def add(self, files, cache: dict = None, state: dict = None):
         self.state[state['clientId']] = state

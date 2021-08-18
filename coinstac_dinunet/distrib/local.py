@@ -21,7 +21,7 @@ class COINNLocal:
     _PROMPT_MODE_ = f"Mode must be provided and should be one of {[Mode.TRAIN, Mode.TEST]}."
 
     def __init__(self, cache: dict = None, input: dict = None, state: dict = None,
-                 computation_id=None,
+                 computation_id='nn_computation',
                  mode: str = None,
                  batch_size: int = 16,
                  local_iterations: int = 1,
@@ -62,6 +62,7 @@ class COINNLocal:
         self._args['patience'] = patience if patience else epochs
         self._args['num_folds'] = num_folds
         self._args['split_ratio'] = split_ratio
+
         self._args.update(**kw)
         self._args = _FrozenDict(self._args)
         self._pretrain_args = pretrain_args if pretrain_args else {}
@@ -102,6 +103,7 @@ class COINNLocal:
         if self._pretrain_args.get('epochs') and self.cache['pretrain']:
             cache = {**self.cache}
             cache.update(**self._pretrain_args)
+            cache.update(cache.get('pretrain_args', {}))
             trainer = trainer_cls(cache=cache, input=self.input, state=self.state)
             trainer.init_nn()
 
