@@ -80,6 +80,13 @@ class COINNLocal:
         for k, sp in self.cache['splits'].items():
             sp = _json.loads(open(self.cache['split_dir'] + _os.sep + sp).read())
             out['data_size'][k] = dict((key, len(sp[key])) for key in sp)
+
+        self.cache['verbose'] = False
+        frozen_args = {}.fromkeys(self._args)
+        for k in frozen_args:
+            frozen_args[k] = self.cache[k]
+        self.cache['frozen_args'] = _FrozenDict(frozen_args)
+
         for k in SHARED_CACHE:
             out[k] = self.cache.get(k)
         return out
@@ -141,8 +148,6 @@ class COINNLocal:
                 if self.cache.get(k) is None:
                     self.cache[k] = self._args[k]
             self.out.update(**self._init_runs(learner))
-            self.cache['args'] = _FrozenDict({**self.cache})
-            self.cache['verbose'] = False
             self._check_args()
 
         elif self.out['phase'] == Phase.NEXT_RUN:
@@ -212,7 +217,7 @@ class COINNLocal:
 
             if all(m == Mode.TEST for m in learner.global_modes.values()):
                 self.out.update(**learner.trainer.test_distributed(dataset_cls))
-                self.out['mode'] = self.cache['args']['mode']
+                self.out['mode'] = self.cache['frozen_args']['mode']
                 self.out['phase'] = Phase.NEXT_RUN_WAITING
 
         elif self.out['phase'] == Phase.SUCCESS:
