@@ -85,7 +85,7 @@ class COINNDataHandle:
 
     def __init__(self, cache=None, input=None, state=None, dataloader_args=None, **kw):
         if dataloader_args is None:
-            dataloader_args = {}
+            dataloader_args = cache.get('dataloader_args', {})
 
         self.cache = cache
         self.input = input
