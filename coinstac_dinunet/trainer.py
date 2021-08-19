@@ -31,16 +31,18 @@ class COINNTrainer(_NNTrainer, ABC):
 
     def validation_distributed(self, dataset_cls):
         out = {}
-        validation_dataset = self.data_handle.dataset['validation']
-        if not isinstance(validation_dataset, list):
+        validation_dataset = self.data_handle.dataset.get('validation')
+        if validation_dataset and not isinstance(validation_dataset, list):
             validation_dataset = [validation_dataset]
 
-        avg, metrics = self.evaluation(
-            mode='validation',
-            save_pred=False,
-            dataset_list=validation_dataset
-        )
-        out[Key.VALIDATION_SERIALIZABLE] = [vars(avg), vars(metrics)]
+        if validation_dataset:
+            avg, metrics = self.evaluation(
+                mode='validation',
+                save_pred=False,
+                dataset_list=validation_dataset
+            )
+            out[Key.VALIDATION_SERIALIZABLE] = [vars(avg), vars(metrics)]
+
         out[Key.TRAIN_SERIALIZABLE] = self.cache[Key.TRAIN_SERIALIZABLE]
         self.cache[Key.TRAIN_SERIALIZABLE] = []
         self.cache['cursor'] = 0
@@ -50,10 +52,11 @@ class COINNTrainer(_NNTrainer, ABC):
         out = {}
         self.load_checkpoint(self.cache['log_dir'] + _sep + self.cache['best_nn_state'])
         test_dataset = self.data_handle.get_test_dataset(dataset_cls)
-        if not isinstance(test_dataset, list):
+        if test_dataset and not isinstance(test_dataset, list):
             test_dataset = [test_dataset]
 
-        avg, metrics = self.evaluation(mode='test', save_pred=True,
-                                       dataset_list=test_dataset)
-        out[Key.TEST_SERIALIZABLE] = [vars(avg), vars(metrics)]
+        if test_dataset:
+            avg, metrics = self.evaluation(mode='test', save_pred=True,
+                                           dataset_list=test_dataset)
+            out[Key.TEST_SERIALIZABLE] = [vars(avg), vars(metrics)]
         return out

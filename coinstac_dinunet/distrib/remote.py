@@ -97,12 +97,15 @@ class COINNRemote:
         for site, site_vars in self.input.items():
             for ta, tm in site_vars[Key.TRAIN_SERIALIZABLE]:
                 train_averages.update(**ta), train_metrics.update(**tm)
-            va, vm = site_vars[Key.VALIDATION_SERIALIZABLE]
-            val_averages.update(**va), val_metrics.update(**vm)
+
+            if site_vars.get(Key.VALIDATION_SERIALIZABLE):
+                va, vm = site_vars[Key.VALIDATION_SERIALIZABLE]
+                val_averages.update(**va), val_metrics.update(**vm)
         out['train_averages'] = train_averages
         out['train_metrics'] = train_metrics
-        out['val_averages'] = val_averages
-        out['val_metrics'] = val_metrics
+        if site_vars.get(Key.VALIDATION_SERIALIZABLE):
+            out['val_averages'] = val_averages
+            out['val_metrics'] = val_metrics
         return out
 
     def _on_run_end(self):
@@ -115,11 +118,13 @@ class COINNRemote:
         """
         test_averages, test_metrics = self._new_averages(), self._new_metrics()
         for site, site_vars in self.input.items():
-            ta, tm = site_vars[Key.TEST_SERIALIZABLE]
-            test_averages.update(**ta), test_metrics.update(**tm)
+            if site_vars.get(Key.TEST_SERIALIZABLE):
+                ta, tm = site_vars[Key.TEST_SERIALIZABLE]
+                test_averages.update(**ta), test_metrics.update(**tm)
 
-        self.cache[Key.TEST_METRICS].append([*test_averages.get(), *test_metrics.get()])
-        self.cache[Key.GLOBAL_TEST_SERIALIZABLE].append([vars(test_averages), vars(test_metrics)])
+        if site_vars.get(Key.TEST_SERIALIZABLE):
+            self.cache[Key.TEST_METRICS].append([*test_averages.get(), *test_metrics.get()])
+            self.cache[Key.GLOBAL_TEST_SERIALIZABLE].append([vars(test_averages), vars(test_metrics)])
 
         _plot.plot_progress(self.cache, self.cache['log_dir'], plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG])
         _utils.save_scores(self.cache, self.cache['log_dir'], file_keys=[Key.TEST_METRICS])
@@ -231,16 +236,19 @@ class COINNRemote:
 
     def _on_epoch_end(self):
         epoch_info = self._accumulate_epoch_info()
-        self._save_if_better(**epoch_info)
         self.cache[Key.TRAIN_LOG].append([*epoch_info['train_averages'].get(), *epoch_info['train_metrics'].get()])
-        self.cache[Key.VALIDATION_LOG].append([*epoch_info['val_averages'].get(), *epoch_info['val_metrics'].get()])
+        self._save_if_better(**epoch_info)
+        if epoch_info.get('val_averages'):
+            self.cache[Key.VALIDATION_LOG].append([*epoch_info['val_averages'].get(), *epoch_info['val_metrics'].get()])
+
         if lazy_debug(self.cache['epoch']):
             _plot.plot_progress(self.cache, self.cache['log_dir'], plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG])
         return epoch_info
 
     def _save_if_better(self, **kw):
-        val_score = kw['val_metrics'].extract(self.cache['monitor_metric'][0])
-        self.out['save_current_as_best'] = performance_improved_(self.cache['epoch'], val_score, self.cache)
+        if kw.get('val_metrics'):
+            val_score = kw['val_metrics'].extract(self.cache['monitor_metric'][0])
+            self.out['save_current_as_best'] = performance_improved_(self.cache['epoch'], val_score, self.cache)
 
     def _stop_early(self, **kw):
         return stop_training_(self.cache['epoch'], self.cache)

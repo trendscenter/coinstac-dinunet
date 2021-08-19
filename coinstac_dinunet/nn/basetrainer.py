@@ -127,27 +127,44 @@ class NNTrainer:
                 self.data_handle.get_loader(handle_key=mode, batch_size=bz, dataset=d, shuffle=False)
             )
 
+        def _update_scores(_out, _it, _avg, _metrics):
+            if _out is None:
+                _out = {}
+            _avg.accumulate(_out.get('averages', _it['averages']))
+            _metrics.accumulate(_out.get('metrics', _it['metrics']))
+
         with _torch.no_grad():
             for loader in eval_loaders:
                 its = []
                 metrics = self.new_metrics()
                 avg = self.new_averages()
+
                 for i, batch in enumerate(loader, 1):
                     it = self.iteration(batch)
-                    metrics.accumulate(it['metrics']), avg.accumulate(it['averages'])
 
                     if save_pred:
-                        its.append(it)
+                        if self.cache['load_sparse']:
+                            its.append(it)
+                        else:
+                            _update_scores(self.save_predictions(loader.dataset, it), it, avg, metrics)
+                    else:
+                        _update_scores(None, it, avg, metrics)
 
-                    if self.cache.get('verbose') and len(dataset_list) <= 1 and lazy_debug(i):
-                        info(f" Itr:{i}/{len(loader)}, {it['averages'].get()}, {it['metrics'].get()}")
+                    if self.cache['verbose'] and len(eval_loaders) <= 1 and lazy_debug(i):
+                        info(
+                            f" Itr:{i}/{len(loader)}, "
+                            f"Averages:{it.get('averages').get()}, Metrics:{it.get('metrics').get()}"
+                        )
+
+                if save_pred and self.cache['load_sparse']:
+                    its = self.reduce_iteration(its)
+                    _update_scores(self.save_predictions(loader.dataset, its), its, avg, metrics)
+
+                if self.cache['verbose'] and len(eval_loaders) > 1:
+                    info(f" {mode}, {avg.get()}, {metrics.get()}")
 
                 eval_metrics.accumulate(metrics)
                 eval_avg.accumulate(avg)
-                if self.cache.get('verbose') and len(dataset_list) > 1:
-                    info(f"{mode} metrics: {avg.get()}, {metrics.get()}")
-                if save_pred:
-                    self.save_predictions(loader.dataset, self.reduce_iteration(its))
 
             info(f"{mode} metrics: {eval_avg.get()}, {eval_metrics.get()}", self.cache.get('verbose'))
             return eval_avg, eval_metrics
@@ -180,7 +197,7 @@ class NNTrainer:
         if not isinstance(val_dataset, list):
             val_dataset = [val_dataset]
 
-        if self.data_handle.dataloader_args.get('drop_last') or self.cache.get('drop_last'):
+        if self.data_handle.dataloader_args.get('train', {}).get('drop_last') or self.cache.get('drop_last'):
             bz = self.cache['batch_size']
         else:
             bz = _tu.get_safe_batch_size(self.cache['batch_size'], len(train_dataset))
@@ -211,7 +228,7 @@ class NNTrainer:
                         _metrics.reset(), _avg.reset()
                     self.on_iteration_end(i=_i, ep=ep, it=it)
 
-            if ep % self.cache.get('validation_epochs', 1) == 0:
+            if val_dataset and ep % self.cache.get('validation_epochs', 1) == 0:
                 val_averages, val_metric = self.evaluation(mode='validation', dataset_list=val_dataset)
                 self.cache[Key.VALIDATION_LOG].append([*val_averages.get(), *val_metric.get()])
                 out.update(**self._save_if_better(ep, val_metric))

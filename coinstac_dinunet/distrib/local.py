@@ -103,6 +103,7 @@ class COINNLocal:
         out = {}
         learner.trainer.init_nn(init_weights=True)
         self.cache['best_nn_state'] = f"best.{self.cache['computation_id']}-{self.cache['split_ix']}.pt"
+        self.cache['latest_nn_state'] = f"latest.{self.cache['computation_id']}-{self.cache['split_ix']}.pt"
         out['phase'] = Phase.COMPUTATION
         self._attach_global(learner)
         return out
@@ -221,6 +222,7 @@ class COINNLocal:
                 self.out.update(**learner.trainer.test_distributed(dataset_cls))
                 self.out['mode'] = self.cache['frozen_args']['mode']
                 self.out['phase'] = Phase.NEXT_RUN_WAITING
+                learner.trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['latest_nn_state'])
 
         elif self.out['phase'] == Phase.SUCCESS:
             """ This phase receives global scores from the aggregator."""
