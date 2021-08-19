@@ -98,13 +98,16 @@ class COINNLocal:
         self._attach_global(learner)
         return out
 
-    def _pretrain_local(self, trainer_cls, train_dataset, validation_dataset):
+    def _pretrain_local(self, trainer_cls, datahandle_cls, train_dataset, validation_dataset):
         out = {'phase': Phase.COMPUTATION}
         if self._pretrain_args.get('epochs') and self.cache['pretrain']:
             cache = {**self.cache}
             cache.update(**self._pretrain_args)
             cache.update(cache.get('pretrain_args', {}))
-            trainer = trainer_cls(cache=cache, input=self.input, state=self.state)
+            trainer = trainer_cls(data_handle=datahandle_cls(
+                cache=self.cache, input=self.input, state=self.state,
+                dataloader_args=self._dataloader_args
+            ))
             trainer.init_nn()
 
             trainer.init_training_cache()
@@ -156,6 +159,7 @@ class COINNLocal:
             self.out.update(
                 **self._pretrain_local(
                     trainer_cls,
+                    datahandle_cls,
                     learner.trainer.data_handle.get_train_dataset(dataset_cls),
                     learner.trainer.data_handle.get_validation_dataset(dataset_cls))
             )
