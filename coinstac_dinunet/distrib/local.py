@@ -80,8 +80,17 @@ class COINNLocal:
         for k, sp in self.cache['splits'].items():
             sp = _json.loads(open(self.cache['split_dir'] + _os.sep + sp).read())
             out['data_size'][k] = dict((key, len(sp[key])) for key in sp)
-        for k in SHARED_CACHE:
-            out[k] = self.cache.get(k)
+
+        self.cache['verbose'] = False
+
+        """Keep a copy of default args"""
+        frozen_args = {}.fromkeys(self._args)
+        for k in frozen_args:
+            frozen_args[k] = self.cache[k]
+
+        """Share default args to remote and freeze"""
+        out['shared_args'] = frozen_args
+        self.cache['frozen_args'] = _FrozenDict(frozen_args)
         return out
 
     def _attach_global(self, learner):
@@ -135,14 +144,12 @@ class COINNLocal:
 
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
         if self.out['phase'] == Phase.INIT_RUNS:
-            """ Generate folds as specified.   """
+            """ Prepare: setup parameters, generate data folds..."""
             self.cache.update(**self.input)
             for k in self._args:
                 if self.cache.get(k) is None:
                     self.cache[k] = self._args[k]
             self.out.update(**self._init_runs(learner))
-            self.cache['args'] = _FrozenDict({**self.cache})
-            self.cache['verbose'] = False
             self._check_args()
 
         elif self.out['phase'] == Phase.NEXT_RUN:
@@ -204,7 +211,7 @@ class COINNLocal:
                 Once all sites are in 'val_waiting' status, remote issues 'validation' signal.
                 Once all sites run validation phase, they go to 'train_waiting' status.
                 Once all sites are in this status, remote issues 'train' signal
-                 and all sites reshuffle the indices and r esume training.
+                 and all sites reshuffle the indices and resume training.
                 We send the confusion matrix to the remote to accumulate global score for model selection.
                 """
                 self.out.update(**learner.trainer.validation_distributed(dataset_cls))
@@ -212,7 +219,7 @@ class COINNLocal:
 
             if all(m == Mode.TEST for m in learner.global_modes.values()):
                 self.out.update(**learner.trainer.test_distributed(dataset_cls))
-                self.out['mode'] = self.cache['args']['mode']
+                self.out['mode'] = self.cache['frozen_args']['mode']
                 self.out['phase'] = Phase.NEXT_RUN_WAITING
 
         elif self.out['phase'] == Phase.SUCCESS:

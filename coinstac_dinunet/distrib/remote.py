@@ -31,9 +31,7 @@ class COINNRemote:
 
     def _init_runs(self):
         site = list(self.input.values())[0]
-        for k in SHARED_CACHE:
-            if site.get(k) is not None:
-                self.cache[k] = site[k]
+        self.cache.update(site['shared_args'])
 
         self.cache.update(seed=_conf.current_seed)
         self.cache[Key.GLOBAL_TEST_SERIALIZABLE] = []
