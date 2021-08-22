@@ -83,7 +83,7 @@ def init_k_folds(files, cache, state):
     cache['split_dir'] = cache.get('split_dir', 'splits')
     split_dir = state['baseDirectory'] + _os.sep + cache['split_dir']
 
-    cache['split_dir'] = state['outputDirectory'] + _os.sep + cache['computation_id'] + _os.sep + cache['split_dir']
+    cache['split_dir'] = state['outputDirectory'] + _os.sep + cache['task_id'] + _os.sep + cache['split_dir']
     _os.makedirs(cache['split_dir'], exist_ok=True)
 
     if _os.path.exists(split_dir) and len(_os.listdir(split_dir)) > 0:
@@ -94,6 +94,4 @@ def init_k_folds(files, cache, state):
 
     splits = sorted(_os.listdir(cache['split_dir']))
     cache['splits'] = dict(zip([str(i) for i in range(len(splits))], splits))
-    cache['num_folds'] = len(splits)
-    out['num_folds'] = len(splits)
     return out

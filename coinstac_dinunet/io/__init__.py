@@ -7,7 +7,6 @@ Forked from https://pypi.org/project/coinstac/
 import asyncio as _asyncio
 import json as _json
 import time as _time
-
 import websockets as _ws
 
 from coinstac_dinunet.utils import duration as _duration
@@ -20,17 +19,13 @@ class COINPyService:
         self.verbose = kw.get('verbose', False)
         self.profile = kw.get('profile', False)
 
-    def get_local(self, msg) -> callable:
+    def get_local(self, msg):
+        r"""Should return a callable module and arguments to the compute function of that module"""
         return ...
 
-    def get_remote(self, msg) -> callable:
+    def get_remote(self, msg):
+        r"""Should return a callable module and arguments to the compute function of that module"""
         return ...
-
-    def get_local_compute_args(self, msg) -> list:
-        return []
-
-    def get_remote_compute_args(self, msg) -> list:
-        return []
 
     async def _run(self, websocket, path):
         message = await websocket.recv()
@@ -49,11 +44,10 @@ class COINPyService:
                     info(f"[*** REMOTE input ***] : {message['data']['input']}")
 
                 start = _time.time()
-                output = await _asyncio.get_event_loop().run_in_executor(
-                    None,
-                    self.get_remote(message),
-                    *self.get_remote_compute_args(message)
-                )
+                remote, remote_args = self.get_remote(msg=message), []
+                if isinstance(remote, tuple) or isinstance(remote, list):
+                    remote_args = remote[1:]
+                output = await _asyncio.get_event_loop().run_in_executor(None, remote[0], *remote_args)
 
                 if self.profile:
                     _duration(self.cache, start, 'remote_iter_duration')
@@ -81,11 +75,10 @@ class COINPyService:
                     info(f"[*** {message['data']['state']['clientId']} input ***]: {message['data']['input']}")
 
                 start = _time.time()
-                output = await _asyncio.get_event_loop().run_in_executor(
-                    None,
-                    self.get_local(message),
-                    *self.get_local_compute_args(message)
-                )
+                local, local_args = self.get_local(msg=message), []
+                if isinstance(local, tuple) or isinstance(local, list):
+                    local_args = local[1:]
+                output = await _asyncio.get_event_loop().run_in_executor(None, local[0], *local_args)
 
                 if self.profile:
                     _duration(self.cache, start, 'local_iter_duration')

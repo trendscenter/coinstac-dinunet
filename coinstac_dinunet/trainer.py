@@ -23,7 +23,7 @@ class COINNTrainer(_NNTrainer, ABC):
         Save the current model as best if it has better validation scores in pretraining step.
         """
         out = {}
-        val_score = val_metrics.extract(self.cache['monitor_metric'][0])
+        val_score = val_metrics.extract(self.cache['monitor_metric'])
         if performance_improved_(epoch, val_score, self.cache):
             out['weights_file'] = _conf.weights_file
             self.save_checkpoint(file_path=self.state['transferDirectory'] + _sep + out['weights_file'])
@@ -60,3 +60,11 @@ class COINNTrainer(_NNTrainer, ABC):
                                            dataset_list=test_dataset)
             out[Key.TEST_SERIALIZABLE] = [vars(avg), vars(metrics)]
         return out
+    
+    def set_monitor_metric(self):
+        """Must be set from COINNLocal's constructor"""
+        pass
+
+    def set_log_headers(self):
+        """Must be set from COINNLocal's constructor"""
+        pass

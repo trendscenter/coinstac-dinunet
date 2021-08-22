@@ -8,18 +8,24 @@ import os as _os
 import shutil as _shutil
 
 import coinstac_dinunet.config as _conf
-import coinstac_dinunet.metrics as _metric
 import coinstac_dinunet.utils as _utils
-from coinstac_dinunet.distrib import reducer as _reducer
 from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.utils import performance_improved_, stop_training_
 from coinstac_dinunet.distrib.utils import check
 from coinstac_dinunet.vision import plotter as _plot
+from coinstac_dinunet.distrib.reducer import COINNReducer as _dSGDReducer
+
+
+class EmptyDataHandle:
+    def __init__(self, cache, input, state):
+        self.cache = cache
+        self.input = input
+        self.state = state
 
 
 class COINNRemote:
-    def __init__(self, cache: dict = None, input: dict = None, state: dict = None, **kw):
+    def __init__(self, cache: dict = None, input: dict = None, state: dict = None, verbose=False, **kw):
         self.out = {}
 
         self.cache = cache
@@ -27,12 +33,14 @@ class COINNRemote:
 
         self.input = _utils.FrozenDict(input)
         self.state = _utils.FrozenDict(state)
-        self.reducer = None
+
+        self.cache['verbose'] = verbose
+        if not self.cache.get(Key.ARGS_CACHED):
+            site = list(self.input.values())[0]
+            self.cache.update(**site['shared_args'])
+            self.cache[Key.ARGS_CACHED] = True
 
     def _init_runs(self):
-        site = list(self.input.values())[0]
-        self.cache.update(site['shared_args'])
-
         self.cache.update(seed=_conf.current_seed)
         self.cache[Key.GLOBAL_TEST_SERIALIZABLE] = []
 
@@ -51,16 +59,12 @@ class COINNRemote:
         This function pops a new fold, lock parameters, and forward init_nn signal to all sites
         """
         self.cache['fold'] = self.cache['folds'].pop()
-
-        self._set_log_headers()
-        self._set_monitor_metric()
-
         self.cache.update(
             log_dir=self.state['outputDirectory'] + _os.sep + self.cache[
-                'computation_id'] + _os.sep + f"fold_{self.cache['fold']['split_ix']}")
+                'task_id'] + _os.sep + f"fold_{self.cache['fold']['split_ix']}")
         _os.makedirs(self.cache['log_dir'], exist_ok=True)
 
-        metric_direction = self.cache['monitor_metric'][1]
+        metric_direction = self.cache['metric_direction']
         self.cache.update(epoch=0, best_val_epoch=0)
         self.cache.update(best_val_score=0 if metric_direction == 'maximize' else _conf.max_size)
         self.cache[Key.TRAIN_LOG] = []
@@ -78,22 +82,10 @@ class COINNRemote:
             out[site] = fold
         return out
 
-    def _new_metrics(self):
-        return _metric.COINNMetrics()
-
-    def _new_averages(self):
-        return _metric.COINNAverages()
-
-    def _set_log_headers(self):
-        self.cache['log_header'] = 'Loss,Accuracy'
-
-    def _set_monitor_metric(self):
-        self.cache['monitor_metric'] = 'time', 'maximize'
-
-    def _accumulate_epoch_info(self):
+    def _accumulate_epoch_info(self, reducer):
         out = {}
-        val_averages, val_metrics = self._new_averages(), self._new_metrics()
-        train_averages, train_metrics = self._new_averages(), self._new_metrics()
+        val_averages, val_metrics = reducer.trainer.new_averages(), reducer.trainer.new_metrics()
+        train_averages, train_metrics = reducer.trainer.new_averages(), reducer.trainer.new_metrics()
         for site, site_vars in self.input.items():
             for ta, tm in site_vars[Key.TRAIN_SERIALIZABLE]:
                 train_averages.update(**ta), train_metrics.update(**tm)
@@ -108,7 +100,7 @@ class COINNRemote:
             out['val_metrics'] = val_metrics
         return out
 
-    def _on_run_end(self):
+    def _on_run_end(self, reducer):
         """
         ########################
         Entry: phase "next_run_waiting"
@@ -116,7 +108,7 @@ class COINNRemote:
         #######################
         This function saves test score of last fold.
         """
-        test_averages, test_metrics = self._new_averages(), self._new_metrics()
+        test_averages, test_metrics = reducer.trainer.new_averages(), reducer.trainer.new_metrics()
         for site, site_vars in self.input.items():
             if site_vars.get(Key.TEST_SERIALIZABLE):
                 ta, tm = site_vars[Key.TEST_SERIALIZABLE]
@@ -134,21 +126,21 @@ class COINNRemote:
         _cache[Key.GLOBAL_TEST_SERIALIZABLE] = _cache[Key.GLOBAL_TEST_SERIALIZABLE][-1]
         _utils.save_cache(_cache, self.cache['log_dir'])
 
-    def _send_global_scores(self):
+    def _send_global_scores(self, reducer):
         out = {}
-        averages = self._new_averages()
-        metrics = self._new_metrics()
+        averages = reducer.trainer.new_averages()
+        metrics = reducer.trainer.new_metrics()
         for avg, sc in self.cache[Key.GLOBAL_TEST_SERIALIZABLE]:
             averages.update(**avg)
             metrics.update(**sc)
 
         self.cache[Key.GLOBAL_TEST_METRICS] = [[*averages.get(), *metrics.get()]]
-        _utils.save_scores(self.cache, self.state['outputDirectory'] + _os.sep + self.cache['computation_id'],
+        _utils.save_scores(self.cache, self.state['outputDirectory'] + _os.sep + self.cache['task_id'],
                            file_keys=[Key.GLOBAL_TEST_METRICS])
 
-        out['results_zip'] = f"{self.cache['computation_id']}_" + '_'.join(str(_datetime.datetime.now()).split(' '))
+        out['results_zip'] = f"{self.cache['task_id']}_" + '_'.join(str(_datetime.datetime.now()).split(' '))
         _shutil.make_archive(f"{self.state['transferDirectory']}{_os.sep}{out['results_zip']}",
-                             'zip', self.state['outputDirectory'] + _os.sep + self.cache['computation_id'])
+                             'zip', self.state['outputDirectory'] + _os.sep + self.cache['task_id'])
         return out
 
     def _set_mode(self, mode=None):
@@ -169,9 +161,12 @@ class COINNRemote:
             _shutil.copy(pt_path, self.state['transferDirectory'] + _os.sep + out['pretrained_weights'])
         return out
 
-    def compute(self, reducer_cls: callable = None, **kw):
-
-        self._set_reducer(reducer_cls)
+    def compute(self, trainer_cls=None, reducer_cls: callable = _dSGDReducer, **kw):
+        reducer = self._get_reducer_cls(reducer_cls)(
+            trainer=trainer_cls(
+                data_handle=EmptyDataHandle(cache=self.cache, input=self.input, state=self.state)
+            )
+        )
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
         if check(all, 'phase', Phase.INIT_RUNS, self.input):
             """
@@ -179,7 +174,6 @@ class COINNRemote:
             """
             self._init_runs()
             self.out['global_runs'] = self._next_run()
-            self.cache['verbose'] = False
             self.out['phase'] = Phase.NEXT_RUN
 
         if check(all, 'phase', Phase.PRE_COMPUTATION, self.input):
@@ -196,7 +190,7 @@ class COINNRemote:
 
             self.out['phase'] = Phase.COMPUTATION
             if check(all, 'reduce', True, self.input):
-                self.out.update(**self.reducer.reduce(**kw))
+                self.out.update(**reducer.reduce())
 
             if check(all, 'mode', Mode.VALIDATION_WAITING, self.input):
                 self.cache['epoch'] += 1
@@ -206,7 +200,7 @@ class COINNRemote:
                     self.out['global_modes'] = self._set_mode(mode=Mode.TRAIN)
 
             if check(all, 'mode', Mode.TRAIN_WAITING, self.input):
-                epoch_info = self._on_epoch_end()
+                epoch_info = self._on_epoch_end(reducer)
                 nxt_epoch = self._next_epoch(**epoch_info)
                 self.out['global_modes'] = self._set_mode(mode=nxt_epoch['mode'])
 
@@ -216,13 +210,12 @@ class COINNRemote:
             We save all the scores and plot the results.
             We transition to new fold if there is any left, else we stop with a success signal.
             """
-            self._on_run_end()
+            self._on_run_end(reducer)
             if len(self.cache['folds']) > 0:
-                self.out['distrib'] = {}
                 self.out['global_runs'] = self._next_run()
                 self.out['phase'] = Phase.NEXT_RUN
             else:
-                self.out.update(**self._send_global_scores())
+                self.out.update(**self._send_global_scores(reducer))
                 self.out['phase'] = Phase.SUCCESS
 
     def _next_epoch(self, **kw):
@@ -234,8 +227,8 @@ class COINNRemote:
             out['mode'] = Mode.TRAIN
         return out
 
-    def _on_epoch_end(self):
-        epoch_info = self._accumulate_epoch_info()
+    def _on_epoch_end(self, reducer):
+        epoch_info = self._accumulate_epoch_info(reducer)
         self.cache[Key.TRAIN_LOG].append([*epoch_info['train_averages'].get(), *epoch_info['train_metrics'].get()])
         self._save_if_better(**epoch_info)
         if epoch_info.get('val_averages'):
@@ -247,18 +240,17 @@ class COINNRemote:
 
     def _save_if_better(self, **kw):
         if kw.get('val_metrics'):
-            val_score = kw['val_metrics'].extract(self.cache['monitor_metric'][0])
+            val_score = kw['val_metrics'].extract(self.cache['monitor_metric'])
             self.out['save_current_as_best'] = performance_improved_(self.cache['epoch'], val_score, self.cache)
 
     def _stop_early(self, **kw):
         return stop_training_(self.cache['epoch'], self.cache)
 
-    def _set_reducer(self, reducer_cls: _reducer.COINNReducer = None, **kw):
+    def _get_reducer_cls(self, reducer_cls):
+        if self.cache.get('agg_engine') == AGG_Engine.dSGD:
+            return _dSGDReducer
 
-        if reducer_cls is None:
-            reducer_cls = _reducer.COINNReducer
-
-        self.reducer = reducer_cls(cache=self.cache, input=self.input, state=self.state, **kw)
+        return reducer_cls
 
     def __call__(self, *args, **kwargs):
         self.compute(*args, **kwargs)

@@ -183,13 +183,12 @@ class NNTrainer:
         return it
 
     def init_training_cache(self):
-        self._set_monitor_metric()
-        self._set_log_headers()
+        self.set_monitor_metric()
+        self.set_log_headers()
         self.cache[Key.TRAIN_LOG] = []
         self.cache[Key.VALIDATION_LOG] = []
-        metric_direction = self.cache['monitor_metric'][1]
         self.cache['best_val_epoch'] = 0
-        self.cache.update(best_val_score=0.0 if metric_direction == 'maximize' else _conf.max_size)
+        self.cache.update(best_val_score=0.0 if self.cache['metric_direction'] == 'maximize' else _conf.max_size)
 
     def train_local(self, train_dataset, val_dataset):
         out = {}
@@ -301,9 +300,6 @@ class NNTrainer:
 
         return reduced
 
-    def _set_monitor_metric(self):
-        self.cache['monitor_metric'] = 'time', 'maximize'
-
     def _save_if_better(self, epoch, val_metrics):
         return {}
 
@@ -312,6 +308,13 @@ class NNTrainer:
 
     def new_averages(self):
         return _base_metrics.COINNAverages(num_averages=1)
+
+    def set_monitor_metric(self):
+        self.cache['monitor_metric'] = 'time'
+        self.cache['metric_direction'] = 'maximize'
+
+    def set_log_headers(self):
+        self.cache['log_header'] = 'Loss'
 
     def _on_epoch_end(self, ep, **kw):
         r"""
@@ -332,6 +335,3 @@ class NNTrainer:
 
     def _stop_early(self, epoch, val_metrics=None, **kw):
         return stop_training_(epoch, self.cache)
-
-    def _set_log_headers(self):
-        self.cache['log_header'] = 'Loss,Accuracy'

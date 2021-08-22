@@ -5,10 +5,11 @@ import numpy as _np
 
 
 class COINNReducer:
-    def __init__(self, cache: dict = None, input: dict = None, state: dict = None, **kw):
-        self.cache = cache
-        self.input = input
-        self.state = state
+    def __init__(self, trainer, **kw):
+        self.cache = trainer.cache
+        self.input = trainer.input
+        self.state = trainer.state
+        self.trainer = trainer
 
     def reduce(self):
         """ Average each sites gradients and pass it to all sites. """

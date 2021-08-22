@@ -20,6 +20,7 @@ class Mode(str, _Enum):
 
 
 class Key(str, _Enum):
+    ARGS_CACHED = '_args_cached_'
     TRAIN_LOG = 'train_log'
     TRAIN_METRICS = 'train_metrics'
     TRAIN_SERIALIZABLE = 'serializable_train_scores'
@@ -35,3 +36,9 @@ class Key(str, _Enum):
     GLOBAL_TEST_LOG = 'global_test_log'
     GLOBAL_TEST_METRICS = 'global_test_metrics'
     GLOBAL_TEST_SERIALIZABLE = 'serializable_global_test_scores'
+
+
+class AGG_Engine(str, _Enum):
+    dSGD = 'dSGD'
+    powerSGD = 'powerSGD'
+    rankDAD = 'rankDAD'
