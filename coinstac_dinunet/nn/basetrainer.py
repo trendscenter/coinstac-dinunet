@@ -122,9 +122,8 @@ class NNTrainer:
         eval_loaders = []
 
         for d in dataset_list:
-            bz = _tu.get_safe_batch_size(self.cache['batch_size'], len(d))
             eval_loaders.append(
-                self.data_handle.get_loader(handle_key=mode, batch_size=bz, dataset=d, shuffle=False)
+                self.data_handle.get_loader(handle_key=mode, dataset=d, shuffle=False)
             )
 
         def _update_scores(_out, _it, _avg, _metrics):
@@ -196,12 +195,7 @@ class NNTrainer:
         if not isinstance(val_dataset, list):
             val_dataset = [val_dataset]
 
-        if self.data_handle.dataloader_args.get('train', {}).get('drop_last') or self.cache.get('drop_last'):
-            bz = self.cache['batch_size']
-        else:
-            bz = _tu.get_safe_batch_size(self.cache['batch_size'], len(train_dataset))
-
-        loader = self.data_handle.get_loader('train', dataset=train_dataset, shuffle=True, batch_size=bz)
+        loader = self.data_handle.get_loader('train', dataset=train_dataset, shuffle=True)
         local_iter = self.cache.get('local_iterations', 1)
         tot_iter = len(loader) // local_iter
         for ep in range(1, self.cache['epochs'] + 1):

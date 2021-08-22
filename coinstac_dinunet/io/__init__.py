@@ -92,7 +92,7 @@ class COINPyService:
 
             except Exception as e:
                 error(e)
-                error('Local data:')
+                error(f'{message["data"]["state"]["clientId"]} data:')
                 error(message['data'])
                 await websocket.send(_json.dumps({'type': 'stderr', 'data': e, 'end': True}))
         else:
