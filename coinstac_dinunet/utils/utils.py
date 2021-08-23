@@ -4,12 +4,11 @@ import time as _t
 
 
 def performance_improved_(epoch, score, cache):
-    monitor_metric, direction = cache['monitor_metric']
     delta = cache.get('score_delta', _conf.score_delta)
     improved = False
-    if direction == 'maximize':
+    if cache['metric_direction'] == 'maximize':
         improved = score > cache['best_val_score'] + delta
-    elif direction == 'minimize':
+    elif cache['metric_direction'] == 'minimize':
         improved = score < cache['best_val_score'] - delta
 
     if improved:
@@ -19,13 +18,12 @@ def performance_improved_(epoch, score, cache):
 
 
 def stop_training_(epoch, cache):
-    monitor_metric, _ = cache['monitor_metric']
     if epoch - cache['best_val_epoch'] > cache.get('patience', cache['epochs']):
         return True
 
-    if cache['monitor_metric'][1] == 'maximize':
+    if cache['metric_direction'] == 'maximize':
         return cache['best_val_score'] == _conf.score_high
-    elif cache['monitor_metric'][1] == 'minimize':
+    elif cache['metric_direction'] == 'minimize':
         return cache['best_val_score'] == _conf.score_low
     return False
 

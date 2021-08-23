@@ -12,18 +12,18 @@ from typing import List as _List
 import coinstac_dinunet.config as _conf
 from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.data import COINNDataHandle as _DataHandle
-from coinstac_dinunet.distrib import learner as _learner
 from coinstac_dinunet.utils import FrozenDict as _FrozenDict
+from coinstac_dinunet.distrib.learner import COINNLearner as _dSGDLearner
 
 
 class COINNLocal:
-    _PROMPT_TASK_ = "Task name must be given."
+    _PROMPT_TASK_ = "Task id must be given."
     _PROMPT_MODE_ = f"Mode must be provided and should be one of {[Mode.TRAIN, Mode.TEST]}."
 
     def __init__(self, cache: dict = None, input: dict = None, state: dict = None,
-                 computation_id='nn_computation',
+                 task_id='nn_task',
                  mode: str = None,
-                 batch_size: int = 16,
+                 batch_size: int = 8,
                  local_iterations: int = 1,
                  epochs: int = 31,
                  validation_epochs: int = 1,
@@ -36,17 +36,22 @@ class COINNLocal:
                  pretrained_path: str = None,
                  patience: int = None,
                  num_folds: int = None,
-                 split_ratio: _List[float] = None,
+                 split_ratio=None,
                  pretrain_args: dict = None,
                  dataloader_args: dict = None,
+                 verbose=False,
+                 monitor_metric='f1',
+                 metric_direction='maximize',
+                 log_header='Loss|Accuracy,F1',
                  **kw):
 
         self.out = {}
         self.cache = cache
         self.input = _FrozenDict(input)
         self.state = _FrozenDict(state)
+
         self._args = {}
-        self._args['computation_id'] = computation_id  #
+        self._args['task_id'] = task_id  #
         self._args['mode'] = mode  # test/train
         self._args['batch_size'] = batch_size
         self._args['local_iterations'] = local_iterations
@@ -60,37 +65,43 @@ class COINNLocal:
         self._args['load_sparse'] = load_sparse
         self._args['pretrained_path'] = pretrained_path
         self._args['patience'] = patience if patience else epochs
-        self._args['num_folds'] = num_folds
         self._args['split_ratio'] = split_ratio
+        self._args['num_folds'] = num_folds
+        self._args['verbose'] = verbose
+        self._args['monitor_metric'] = monitor_metric
+        self._args['metric_direction'] = metric_direction
+        self._args['log_header'] = log_header
 
         self._args.update(**kw)
         self._args = _FrozenDict(self._args)
         self._pretrain_args = pretrain_args if pretrain_args else {}
         self._dataloader_args = dataloader_args if dataloader_args else {}
 
-    def _check_args(self):
-        assert self.cache['computation_id'] is not None, self._PROMPT_TASK_
-        assert self.cache['mode'] in [Mode.TRAIN, Mode.TEST], self._PROMPT_MODE_
+        """Cache args from input specifications"""
+        if not self.cache.get(Key.ARGS_CACHED):
+            self.cache.update(**self.input)
+            for k in self._args:
+                if self.cache.get(k) is None:
+                    self.cache[k] = self._args[k]
+
+            assert self.cache['task_id'] is not None, self._PROMPT_TASK_
+            assert self.cache['mode'] in [Mode.TRAIN, Mode.TEST], self._PROMPT_MODE_
+
+            if self.cache['mode'] == Mode.TRAIN:
+                assert self.cache['split_ratio'] or self.cache["num_folds"], "Split ratio or K(num k-folds) is needed."
+            self.cache[Key.ARGS_CACHED] = True
+        """######################################"""
 
     def _init_runs(self, learner):
         out = {}
         """Data related initializations."""
         out.update(learner.trainer.data_handle.prepare_data())
+        self.cache['num_folds'] = len(self.cache['splits'])
+
         out['data_size'] = {}
         for k, sp in self.cache['splits'].items():
             sp = _json.loads(open(self.cache['split_dir'] + _os.sep + sp).read())
-            out['data_size'][k] = dict((key, len(sp[key])) for key in sp)
-
-        self.cache['verbose'] = False
-
-        """Keep a copy of default args"""
-        frozen_args = {}.fromkeys(self._args)
-        for k in frozen_args:
-            frozen_args[k] = self.cache[k]
-
-        """Share default args to remote and freeze"""
-        out['shared_args'] = frozen_args
-        self.cache['frozen_args'] = _FrozenDict(frozen_args)
+            out['data_size'][k] = dict((key, len(sp.get(key, []))) for key in sp)
         return out
 
     def _attach_global(self, learner):
@@ -101,9 +112,15 @@ class COINNLocal:
 
     def _next_run(self, learner):
         out = {}
+        self.cache.update(cursor=0)
+        self.cache[Key.TRAIN_SERIALIZABLE] = []
+        self.cache['split_file'] = self.cache['splits'][self.cache['split_ix']]
+        self.cache['log_dir'] = self.state['outputDirectory'] + _sep + self.cache[
+            'task_id'] + _sep + f"fold_{self.cache['split_ix']}"
+        _os.makedirs(self.cache['log_dir'], exist_ok=True)
         learner.trainer.init_nn(init_weights=True)
-        self.cache['best_nn_state'] = f"best.{self.cache['computation_id']}-{self.cache['split_ix']}.pt"
-        self.cache['latest_nn_state'] = f"latest.{self.cache['computation_id']}-{self.cache['split_ix']}.pt"
+        self.cache['best_nn_state'] = f"best.{self.cache['task_id']}-{self.cache['split_ix']}.pt"
+        self.cache['latest_nn_state'] = f"latest.{self.cache['task_id']}-{self.cache['split_ix']}.pt"
         out['phase'] = Phase.COMPUTATION
         self._attach_global(learner)
         return out
@@ -131,10 +148,10 @@ class COINNLocal:
     def compute(self, trainer_cls,
                 dataset_cls=None,
                 datahandle_cls=_DataHandle,
-                learner_cls=_learner.COINNLearner,
+                learner_cls=_dSGDLearner,
                 **kw):
 
-        learner = learner_cls(
+        learner = self._get_learner_cls(learner_cls)(
             trainer=trainer_cls(
                 data_handle=datahandle_cls(
                     cache=self.cache, input=self.input, state=self.state,
@@ -145,24 +162,16 @@ class COINNLocal:
 
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
         if self.out['phase'] == Phase.INIT_RUNS:
-            """ Prepare: setup parameters, generate data folds..."""
-            self.cache.update(**self.input)
-            for k in self._args:
-                if self.cache.get(k) is None:
-                    self.cache[k] = self._args[k]
             self.out.update(**self._init_runs(learner))
-            self._check_args()
+            """Share default args to remote and freeze"""
+            frozen_args = {}.fromkeys(self._args)
+            for k in frozen_args:
+                frozen_args[k] = self.cache[k]
+            self.cache['frozen_args'] = _FrozenDict(frozen_args)
+            self.out['shared_args'] = self.cache['frozen_args']
 
         elif self.out['phase'] == Phase.NEXT_RUN:
             self.cache.update(**self.input['global_runs'][self.state['clientId']])
-            self.cache.update(cursor=0)
-            self.cache[Key.TRAIN_SERIALIZABLE] = []
-
-            self.cache['split_file'] = self.cache['splits'][self.cache['split_ix']]
-            self.cache['log_dir'] = self.state['outputDirectory'] + _sep + self.cache[
-                'computation_id'] + _sep + f"fold_{self.cache['split_ix']}"
-            _os.makedirs(self.cache['log_dir'], exist_ok=True)
-
             self.out.update(**self._next_run(learner))
             self.out.update(
                 **self._pretrain_local(
@@ -183,7 +192,6 @@ class COINNLocal:
 
         """Computation begins..."""
         if self.out['phase'] == Phase.COMPUTATION:
-
             """ Train/validation and test phases """
             if self.input.get('save_current_as_best'):
                 learner.trainer.save_checkpoint(
@@ -227,8 +235,15 @@ class COINNLocal:
         elif self.out['phase'] == Phase.SUCCESS:
             """ This phase receives global scores from the aggregator."""
             _shutil.copy(f"{self.state['baseDirectory']}{_sep}{self.input['results_zip']}.zip",
-                         f"{self.state['outputDirectory'] + _sep + self.cache['computation_id']}{_sep}"
+                         f"{self.state['outputDirectory'] + _sep + self.cache['task_id']}{_sep}"
                          f"{self.input['results_zip']}.zip")
+
+    def _get_learner_cls(self, learner_cls):
+
+        if self.cache.get('agg_engine') == AGG_Engine.dSGD:
+            return _dSGDLearner
+
+        return learner_cls
 
     def __call__(self, *args, **kwargs):
         self.compute(*args, **kwargs)

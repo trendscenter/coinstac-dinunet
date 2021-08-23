@@ -93,7 +93,7 @@ def PooledTrainer(base=_NNTrainer, dataset_dir='test', log_dir='net_logs',
             return self._load_dataset(dataset_cls, split_key='test')
 
         def _save_if_better(self, epoch, val_metrics):
-            val_score = val_metrics.extract(self.cache['monitor_metric'][0])
+            val_score = val_metrics.extract(self.cache['monitor_metric'])
             if performance_improved_(epoch, val_score, self.cache):
                 self.save_checkpoint(file_path=self.cache['log_dir'] + _os.sep + _conf.weights_file)
                 success(f"--- ### Best Model Saved!!! --- : {self.cache['best_val_score']}",

@@ -89,7 +89,7 @@ class COINNMetrics(SerializableMetrics):
         return _time.time()
 
     def extract(self, name):
-        sc = getattr(self, name)
+        sc = getattr(self, name.lower())
         if callable(sc):
             sc = sc()
         return sc

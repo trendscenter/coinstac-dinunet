@@ -115,7 +115,7 @@ class Server(COINPyService):
         pretrain_args = {'epochs': 51, 'batch_size': 16}
         local = COINNLocal(cache=self.cache, input=msg['data']['input'],
                            pretrain_args=None, batch_size=16,
-                           state=msg['data']['state'], epochs=21, patience=21, computation_id='fsv_quick')
+                           state=msg['data']['state'], epochs=21, patience=21, task_id='fsv_quick')
         return local
 
     def get_remote(self, msg) -> callable:
