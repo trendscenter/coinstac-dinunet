@@ -1,6 +1,4 @@
 from os import sep as _sep
-from typing import Tuple as _Tuple
-
 import torch as _torch
 
 from coinstac_dinunet import config as _conf
@@ -31,7 +29,7 @@ class COINNLearner:
         self.trainer.optimizer[first_optim].step()
         return out
 
-    def backward(self) -> _Tuple[dict, dict]:
+    def backward(self):
         out = {}
         first_model = list(self.trainer.nn.keys())[0]
         first_optim = list(self.trainer.optimizer.keys())[0]
@@ -48,7 +46,7 @@ class COINNLearner:
             out.update(**nxt_iter_out)
         return out, self.trainer.reduce_iteration(its)
 
-    def to_reduce(self) -> _Tuple[dict, dict]:
+    def to_reduce(self):
         out, it = self.backward()
         first_model = list(self.trainer.nn.keys())[0]
         out['grads_file'] = _conf.grads_file

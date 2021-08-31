@@ -15,6 +15,7 @@ from coinstac_dinunet.utils import performance_improved_, stop_training_
 from coinstac_dinunet.distrib.utils import check
 from coinstac_dinunet.vision import plotter as _plot
 from coinstac_dinunet.distrib.reducer import COINNReducer as _dSGDReducer
+import coinstac_dinunet.distrib.utils as _dist
 
 
 class EmptyDataHandle:
@@ -249,6 +250,8 @@ class COINNRemote:
     def _get_reducer_cls(self, reducer_cls):
         if self.cache.get('agg_engine') == AGG_Engine.dSGD:
             return _dSGDReducer
+        elif self.cache.get('agg_engine') == AGG_Engine.rankDAD:
+            return _dist.DADReducer
 
         return reducer_cls
 

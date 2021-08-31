@@ -14,6 +14,7 @@ from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.data import COINNDataHandle as _DataHandle
 from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 from coinstac_dinunet.distrib.learner import COINNLearner as _dSGDLearner
+import coinstac_dinunet.distrib.utils as _dist
 
 
 class COINNLocal:
@@ -242,6 +243,8 @@ class COINNLocal:
 
         if self.cache.get('agg_engine') == AGG_Engine.dSGD:
             return _dSGDLearner
+        elif self.cache.get('agg_engine') == AGG_Engine.rankDAD:
+            return _dist.DADLearner
 
         return learner_cls
 
