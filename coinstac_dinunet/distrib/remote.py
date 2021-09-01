@@ -12,10 +12,9 @@ import coinstac_dinunet.utils as _utils
 from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.utils import performance_improved_, stop_training_
-from coinstac_dinunet.distrib.utils import check
 from coinstac_dinunet.vision import plotter as _plot
-from coinstac_dinunet.distrib.reducer import COINNReducer as _dSGDReducer
-import coinstac_dinunet.distrib.utils as _dist
+from .reducer import COINNReducer as _dSGDReducer
+from .utils import DADReducer as _DADReducer, check as _check
 
 
 class EmptyDataHandle:
@@ -169,7 +168,7 @@ class COINNRemote:
             )
         )
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
-        if check(all, 'phase', Phase.INIT_RUNS, self.input):
+        if _check(all, 'phase', Phase.INIT_RUNS, self.input):
             """
             Initialize all folds and loggers
             """
@@ -177,12 +176,12 @@ class COINNRemote:
             self.out['global_runs'] = self._next_run()
             self.out['phase'] = Phase.NEXT_RUN
 
-        if check(all, 'phase', Phase.PRE_COMPUTATION, self.input):
+        if _check(all, 'phase', Phase.PRE_COMPUTATION, self.input):
             self.out.update(**self._pre_compute())
             self.out['phase'] = Phase.PRE_COMPUTATION
 
         self.out['global_modes'] = self._set_mode()
-        if check(all, 'phase', Phase.COMPUTATION, self.input):
+        if _check(all, 'phase', Phase.COMPUTATION, self.input):
             """
             Main computation phase where we aggregate sites information
             We also handle train/validation/test stages of local sites by sending corresponding signals from here
@@ -190,22 +189,22 @@ class COINNRemote:
             """
 
             self.out['phase'] = Phase.COMPUTATION
-            if check(all, 'reduce', True, self.input):
+            if _check(all, 'reduce', True, self.input):
                 self.out.update(**reducer.reduce())
 
-            if check(all, 'mode', Mode.VALIDATION_WAITING, self.input):
+            if _check(all, 'mode', Mode.VALIDATION_WAITING, self.input):
                 self.cache['epoch'] += 1
                 if self.cache['epoch'] % self.cache['validation_epochs'] == 0:
                     self.out['global_modes'] = self._set_mode(mode=Mode.VALIDATION)
                 else:
                     self.out['global_modes'] = self._set_mode(mode=Mode.TRAIN)
 
-            if check(all, 'mode', Mode.TRAIN_WAITING, self.input):
+            if _check(all, 'mode', Mode.TRAIN_WAITING, self.input):
                 epoch_info = self._on_epoch_end(reducer)
                 nxt_epoch = self._next_epoch(**epoch_info)
                 self.out['global_modes'] = self._set_mode(mode=nxt_epoch['mode'])
 
-        if check(all, 'phase', Phase.NEXT_RUN_WAITING, self.input):
+        if _check(all, 'phase', Phase.NEXT_RUN_WAITING, self.input):
             """
             This block runs when a fold has completed all train, test, validation phase.
             We save all the scores and plot the results.
@@ -251,10 +250,10 @@ class COINNRemote:
         if self.cache.get('agg_engine') == AGG_Engine.dSGD:
             return _dSGDReducer
         elif self.cache.get('agg_engine') == AGG_Engine.rankDAD:
-            return _dist.DADReducer
+            return _DADReducer
 
         return reducer_cls
 
     def __call__(self, *args, **kwargs):
         self.compute(*args, **kwargs)
-        return {'output': self.out, 'success': check(all, 'phase', Phase.SUCCESS, self.input)}
+        return {'output': self.out, 'success': _check(all, 'phase', Phase.SUCCESS, self.input)}

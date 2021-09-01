@@ -1,11 +1,7 @@
-import glob as _glob
 import os as _os
-import shutil as _shu
-# from typing import Tuple as _Tuple
 
 import numpy as _np
 import torch as _torch
-from coinstac_dinunet.config.keys import Mode
 
 from coinstac_dinunet.distrib.learner import COINNLearner
 from coinstac_dinunet.distrib.reducer import COINNReducer
@@ -79,10 +75,9 @@ def power_iteration_BC(B, C, rank=10, numiterations=20, device='cuda', tol=0.0):
 
 
 class DADParallel(_torch.nn.Module):
-    def __init__(self, module, reduction_rank=5, num_pow_iters=1, **kw):
+    def __init__(self, module, reduction_rank=5, num_pow_iters=1):
         super(DADParallel, self).__init__()
         self.module = module
-        self.cache = kw.get('cache', {})
         self.reduction_rank = reduction_rank
         self.num_pow_iters = num_pow_iters
         self._reset()
@@ -142,11 +137,6 @@ class DADParallel(_torch.nn.Module):
 
 
 class DADLearner(COINNLearner):
-    def __init__(self, **kw):
-        super().__init__(**kw)
-        for mk in self.trainer.nn:
-            if not isinstance(self.cache['nn'][mk], DADParallel):
-                self.cache['nn'][mk] = DADParallel(self.trainer.nn[mk])
 
     def step(self) -> dict:
         out = {}
@@ -181,7 +171,6 @@ class DADLearner(COINNLearner):
         self.trainer.optimizer[first_optim].zero_grad()
 
         its = []
-        """Cannot use grad accumulation with DAD at the moment"""
         # for _ in range(self.cache['local_iterations']):
         its = []
         for _ in range(self.cache['local_iterations']):
@@ -190,11 +179,15 @@ class DADLearner(COINNLearner):
             it['loss'].backward()
             its.append(it)
             out.update(**nxt_iter_out)
+            """Cannot use grad accumulation with DAD at the moment"""
+            break
         return out, self.trainer.reduce_iteration(its)
 
     def to_reduce(self):
         out, it = {}, {}
         fk = list(self.trainer.nn.keys())[0]
+        self.trainer.nn[fk] = DADParallel(self.trainer.nn[fk])
+
         if len(self.cache.get('dad_layers', [])) == 0:
             out, it = self.forward()
             self.cache['dad_layers'] = [k for k, v in self.trainer.nn[fk].module.named_children()]
@@ -202,14 +195,14 @@ class DADLearner(COINNLearner):
 
         if len(self.cache['dad_layers']) > 0:
             self.cache['dad_layer'] = self.cache['dad_layers'].pop()
-            out['activation_file'] = f"{self.cache['layer']}-act.npy"
-            out['local_grads_file'] = f"{self.cache['layer']}-local_grads.npy"
+            out['activation_file'] = f"{self.cache['dad_layer']}-act.npy"
+            out['local_grads_file'] = f"{self.cache['dad_layer']}-local_grads.npy"
 
             local_grad, act = power_iteration_BC(
-                self.trainer.nn[fk].local_grad_ctx[self.cache['dad_layer']].T,
+                self.trainer.nn[fk].local_grads_ctx[self.cache['dad_layer']].T,
                 self.trainer.nn[fk].activation_ctx[self.cache['dad_layer']].T,
-                rank=self.cache.get('dad_reduction_rank', 8),
-                numiterations=self.cache.get('dad_num_pow_iters', 16),
+                rank=self.cache.get('dad_reduction_rank', 10),
+                numiterations=self.cache.get('dad_num_pow_iters', 20),
                 device=self.trainer.device['gpu']
             )
 
