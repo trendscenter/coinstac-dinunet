@@ -6,6 +6,17 @@ import torch as _torch
 from coinstac_dinunet.distrib.learner import COINNLearner
 from coinstac_dinunet.distrib.reducer import COINNReducer
 
+_SKIP_NORM_Layers = [_torch.nn.BatchNorm1d, _torch.nn.LayerNorm, _torch.nn.GroupNorm]
+
+
+def _dad_trainable_module(module):
+    a_norm_layer = any([isinstance(module, k) for k in _SKIP_NORM_Layers])
+    if a_norm_layer:
+        return False
+
+    """Has trainable parameters"""
+    return len(list(module.parameters())) > 0
+
 
 def check(logic, k, v, kw):
     phases = []
@@ -80,6 +91,7 @@ class DADParallel(_torch.nn.Module):
         self.module = module
         self.reduction_rank = reduction_rank
         self.num_pow_iters = num_pow_iters
+        self.is_dad_module = {}
         self._reset()
 
     def _reset(self):
@@ -104,14 +116,28 @@ class DADParallel(_torch.nn.Module):
         return get
 
     def _hook(self):
-        if self.training:
-            for layer, ch in list(self.module.named_children()):
+        def _hook_recursive(module_name, module):
+            children = list(module.named_children())
+            self._is_dad_module[module_name] = False
+            if len(children) > 0:
+                for children_name, child in children:
+                    _hook_recursive(
+                        self._hierarchy_key(module_name, children_name),
+                        child
+                    )
+
+            elif _dad_trainable_module(module):
+                self._is_dad_module[module_name] = True
                 self.fw_hooks_handle.append(
-                    ch.register_forward_hook(self._hook_fn('forward', layer))
+                    module.register_forward_hook(self._hook_fn('forward', module_name))
                 )
                 self.bk_hooks_handle.append(
-                    ch.register_backward_hook(self._hook_fn('backward', layer))
+                    module.register_backward_hook(self._hook_fn('backward', module_name))
                 )
+
+        if self.training:
+            for ch_name, ch in list(self.module.named_children()):
+                _hook_recursive(ch_name, ch)
 
     def _unhook(self):
         for hk in self.fw_hooks_handle:
@@ -136,29 +162,27 @@ class DADParallel(_torch.nn.Module):
         return output
 
 
+
 class DADLearner(COINNLearner):
 
     def step(self) -> dict:
         out = {}
-        out['save_state'] = False
-        if self.input.get('dad_step'):
-            fk = list(self.trainer.nn.keys())[0]
-            dad_params = dict([(k, v) for k, v in self.trainer.nn[fk].module.named_parameters()])
-            dad_children = dict([(k, v) for k, v in self.trainer.nn[fk].module.named_children()])
-            for layer in list(dad_children.keys())[::-1]:
-                act_tall = _torch.FloatTensor(
-                    _np.load(self.state['baseDirectory'] + _os.sep + f"{layer}_activation.npy"),
-                    device=self.trainer.device['gpu'])
-                local_grad_tall = _torch.FloatTensor(
-                    _np.load(self.state['baseDirectory'] + _os.sep + f"{layer}_local_grads.npy"),
-                    device=self.trainer.device['gpu'])
-                dad_params[f"{layer}.weight"].grad.data = (act_tall.T.mm(local_grad_tall)).T.contiguous()
-                if dad_params.get(f"{layer}.bias") is not None:
-                    dad_params[f"{layer}.bias"].grad.data = local_grad_tall.sum(0)
+        fk = list(self.trainer.nn.keys())[0]
+        dad_params = dict([(k, v) for k, v in self.trainer.nn[fk].module.named_parameters()])
+        dad_children = dict([(k, v) for k, v in self.trainer.nn[fk].module.named_children()])
+        for layer in list(dad_children.keys())[::-1]:
+            act_tall = _torch.FloatTensor(
+                _np.load(self.state['baseDirectory'] + _os.sep + self.input['tall_activation_file'][layer]),
+                device=self.trainer.device['gpu'])
+            local_grad_tall = _torch.FloatTensor(
+                _np.load(self.state['baseDirectory'] + _os.sep + self.input['tall_grads_file'][layer]),
+                device=self.trainer.device['gpu'])
+            dad_params[f"{layer}.weight"].grad.data = (act_tall.T.mm(local_grad_tall)).T.contiguous()
+            if dad_params.get(f"{layer}.bias") is not None:
+                dad_params[f"{layer}.bias"].grad.data = local_grad_tall.sum(0)
 
         first_optim = list(self.trainer.optimizer.keys())[0]
         self.trainer.optimizer[first_optim].step()
-        out['save_state'] = True
         return out
 
     def forward(self):
@@ -171,8 +195,6 @@ class DADLearner(COINNLearner):
         self.trainer.optimizer[first_optim].zero_grad()
 
         its = []
-        # for _ in range(self.cache['local_iterations']):
-        its = []
         for _ in range(self.cache['local_iterations']):
             batch, nxt_iter_out = self.trainer.data_handle.next_iter()
             it = self.trainer.iteration(batch)
@@ -181,63 +203,90 @@ class DADLearner(COINNLearner):
             out.update(**nxt_iter_out)
             """Cannot use grad accumulation with DAD at the moment"""
             break
-        return out, self.trainer.reduce_iteration(its)
+        return self.trainer.reduce_iteration(its), out
 
     def to_reduce(self):
-        out, it = {}, {}
+        it, out = {}, {}
         fk = list(self.trainer.nn.keys())[0]
-        self.trainer.nn[fk] = DADParallel(self.trainer.nn[fk])
+        if not isinstance(self.trainer.nn[fk], DADParallel):
+            self.trainer.nn[fk] = DADParallel(self.trainer.nn[fk])
 
-        if len(self.cache.get('dad_layers', [])) == 0:
-            out, it = self.forward()
-            self.cache['dad_layers'] = [k for k, v in self.trainer.nn[fk].module.named_children()]
-            out['last_layer'] = True
+        it, fw_out = self.forward()
+        out.update(**fw_out)
 
-        if len(self.cache['dad_layers']) > 0:
-            self.cache['dad_layer'] = self.cache['dad_layers'].pop()
-            out['activation_file'] = f"{self.cache['dad_layer']}-act.npy"
-            out['local_grads_file'] = f"{self.cache['dad_layer']}-local_grads.npy"
+        def _backward(module_name, module):
+            dad_params = dict(list(module.named_parameters())[::-1])
+            dad_children = dict(list(module.named_children())[::-1])
 
-            local_grad, act = power_iteration_BC(
-                self.trainer.nn[fk].local_grads_ctx[self.cache['dad_layer']].T,
-                self.trainer.nn[fk].activation_ctx[self.cache['dad_layer']].T,
-                rank=self.cache.get('dad_reduction_rank', 10),
-                numiterations=self.cache.get('dad_num_pow_iters', 20),
-                device=self.trainer.device['gpu']
-            )
+            if len(dad_children) > 0:
+                for child_name, child in dad_children.items():
+                    _backward(self._hierarchy_key(module_name, child_name), child)
 
-            _np.save(f"{self.state['transferDirectory']}{_os.sep}{out['activation_file']}", act.T.numpy())
-            _np.save(f"{self.state['transferDirectory']}{_os.sep}{out['local_grads_file']}", local_grad.T.numpy())
+            elif self.trainer.nn[fk].is_dad_module.get(module_name):
+                """ Update and sync weights """
+                dad_params = dict(list(module.named_parameters())[::-1])
+                dad_children = dict(list(module.named_children())[::-1])
+                out['dad_layers'] = dict([(k, dict()) for k in dad_children.keys()][::-1])
 
-            out['dad_layer'] = self.cache['dad_layer']
-        out['to_step'] = len(self.cache['dad_layers']) == 0
+                for layer_name in out['dad_layers']:
+                    out['dad_layers'][layer_name]['activation_file'] = f"{layer_name}-act.npy"
+                    out['dad_layers'][layer_name]['grads_file'] = f"{layer_name}-grads.npy"
+
+                    _np.save(f"{self.state['transferDirectory']}{_os.sep}{out['dad_layers'][layer_name]['activation_file']}",
+                             self.trainer.nn[fk].activation_ctx[layer_name].detach().numpy())
+                    _np.save(f"{self.state['transferDirectory']}{_os.sep}{out['dad_layers'][layer_name]['grads_file']}",
+                             self.trainer.nn[fk].local_grads_ctx[layer_name].detach().numpy())
+
+        out['dad_layers'] = {}
+        for ch_name, ch in list(self.trainer.nn[fk].module.named_children())[::-1]:
+            _backward(ch_name, ch)
+
+        # def _backward(module):
+        #     dad_params = dict(list(module.named_parameters())[::-1])
+        #     dad_children = dict(list(module.named_children())[::-1])
+        #     out['dad_layers'] = dict([(k, dict()) for k in dad_children.keys()][::-1])
+        #
+        #     for layer_name in out['dad_layers']:
+        #         out['dad_layers'][layer_name]['activation_file'] = f"{layer_name}-act.npy"
+        #         out['dad_layers'][layer_name]['grads_file'] = f"{layer_name}-grads.npy"
+        #
+        #         _np.save(f"{self.state['transferDirectory']}{_os.sep}{out['dad_layers'][layer_name]['activation_file']}",
+        #                  self.trainer.nn[fk].activation_ctx[layer_name].detach().numpy())
+        #         _np.save(f"{self.state['transferDirectory']}{_os.sep}{out['dad_layers'][layer_name]['grads_file']}",
+        #                  self.trainer.nn[fk].local_grads_ctx[layer_name].detach().numpy())
+
+
         out['reduce'] = True
-        return out, it
+        return it, out
+
+    def _hierarchy_key(self, *args):
+        return ".".join([f"{a}" for a in args])
 
 
 class DADReducer(COINNReducer):
     def __init__(self, **kw):
         super().__init__(**kw)
 
-    def reduce_VGG(self):
-        out = {}
-        h, grad_prev = [], []
-        for site, site_vars in self.input.items():
-            h.append(
-                _np.load(self.state['baseDirectory'] + _os.sep + site + _os.sep + site_vars['activation_file'])
-            )
-            grad_prev.append(
-                _np.load(self.state['baseDirectory'] + _os.sep + site + _os.sep + site_vars['local_grads_file'])
-            )
-
-        _np.save(self.state['transferDirectory'] + _os.sep + site_vars['dad_layer'] + "_activation.npy",
-                 _np.concatenate(h))
-        _np.save(self.state['transferDirectory'] + _os.sep + site_vars['dad_layer'] + "_local_grads.npy",
-                 _np.concatenate(grad_prev))
-
-        out['update'] = True
-        out['dad_step'] = check(all, 'to_step', True, self.input)
-        return out
-
     def reduce(self):
-        return self.reduce_VGG()
+        out = {}
+        out['tall_grads_file'] = {}
+        out['tall_activation_file'] = {}
+        site_var = list(self.input.values())[0]
+        for layer_name, layer in site_var['dad_layers'].items():
+            h, delta = [], []
+            out['tall_activation_file'][layer_name] = f"{layer_name}_activation_tall.npy"
+            out['tall_grads_file'][layer_name] = f"{layer_name}_grads_tall.npy"
+            for site, site_var in self.input.items():
+                _layer = site_var['dad_layers'][layer_name]
+                h.append(
+                    _np.load(self.state['baseDirectory'] + _os.sep + site + _os.sep + _layer['activation_file'])
+                )
+                delta.append(
+                    _np.load(self.state['baseDirectory'] + _os.sep + site + _os.sep + _layer['grads_file'])
+                )
+            _np.save(self.state['transferDirectory'] + _os.sep + out['tall_activation_file'][layer_name],
+                     _np.concatenate(h))
+            _np.save(self.state['transferDirectory'] + _os.sep + out['tall_grads_file'][layer_name],
+                     _np.concatenate(delta))
+        out['update'] = True
+        return out
