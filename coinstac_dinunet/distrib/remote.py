@@ -10,8 +10,8 @@ import shutil as _shutil
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.utils as _utils
 from coinstac_dinunet.config.keys import *
-from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.utils import performance_improved_, stop_training_
+from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.vision import plotter as _plot
 from .reducer import COINNReducer as _dSGDReducer
 from .utils import DADReducer as _DADReducer, check as _check
@@ -162,11 +162,6 @@ class COINNRemote:
         return out
 
     def compute(self, trainer_cls=None, reducer_cls: callable = _dSGDReducer, **kw):
-        reducer = self._get_reducer_cls(reducer_cls)(
-            trainer=trainer_cls(
-                data_handle=EmptyDataHandle(cache=self.cache, input=self.input, state=self.state)
-            )
-        )
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
         if _check(all, 'phase', Phase.INIT_RUNS, self.input):
             """
@@ -187,8 +182,12 @@ class COINNRemote:
             We also handle train/validation/test stages of local sites by sending corresponding signals from here
             Learner's method send_to_reduce(...) must issue a 'reduce' signal.
             """
-
             self.out['phase'] = Phase.COMPUTATION
+            reducer = self._get_reducer_cls(reducer_cls)(
+                trainer=trainer_cls(
+                    data_handle=EmptyDataHandle(cache=self.cache, input=self.input, state=self.state)
+                )
+            )
             if _check(all, 'reduce', True, self.input):
                 self.out.update(**reducer.reduce())
 

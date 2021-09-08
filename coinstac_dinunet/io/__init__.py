@@ -54,8 +54,9 @@ class COINPyService:
                     info(f"Remote Iter: {self.cache.get('remote_iter_duration', ['undef'])[-1]}", self.verbose)
 
                 if self.verbose:
-                    info(f"[*** REMOTE cache ***]: {self.cache}")
-                    info(f"[*** REMOTE output ***]: {output}")
+                    info(f"[***** REMOTE cache *****]: {self.cache}")
+                    info(f"[***** REMOTE output *****]: {output}")
+                    info("==========================================================================================")
 
                 await websocket.send(_json.dumps({'type': 'stdout', 'data': output, 'end': True}))
 
@@ -72,7 +73,7 @@ class COINPyService:
                         f"ITERATION-{message['data']['state']['iteration']}"
                         f"---------------------------------------------------------------------------------------"
                     )
-                    info(f"[*** {message['data']['state']['clientId']} input ***]: {message['data']['input']}")
+                    info(f"[***** {message['data']['state']['clientId']} input *****]: {message['data']['input']}")
 
                 start = _time.time()
                 local, local_args = self.get_local(msg=message), []
@@ -85,8 +86,9 @@ class COINPyService:
                     info(f"Local Iter: {self.cache.get('local_iter_duration', ['undef'])[-1]}", self.verbose)
 
                 if self.verbose:
-                    info(f"[*** {message['data']['state']['clientId']} cache ***]: {self.cache}")
-                    info(f"[*** {message['data']['state']['clientId']} output ***]: {output}")
+                    info(f"[***** {message['data']['state']['clientId']} cache *****]: {self.cache}")
+                    info(f"[***** {message['data']['state']['clientId']} output *****]: {output}")
+                    info("==========================================================================================")
 
                 await websocket.send(_json.dumps({'type': 'stdout', 'data': output, 'end': True}))
 

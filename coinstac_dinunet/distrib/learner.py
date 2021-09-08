@@ -44,10 +44,10 @@ class COINNLearner:
             it['loss'].backward()
             its.append(it)
             out.update(**nxt_iter_out)
-        return out, self.trainer.reduce_iteration(its)
+        return self.trainer.reduce_iteration(its), out
 
     def to_reduce(self):
-        out, it = self.backward()
+        it, out = self.backward()
         first_model = list(self.trainer.nn.keys())[0]
         out['grads_file'] = _conf.grads_file
         grads = _tu.extract_grads(self.trainer.nn[first_model])
