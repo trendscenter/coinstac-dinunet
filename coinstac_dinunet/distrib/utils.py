@@ -4,6 +4,7 @@ import numpy as _np
 
 from coinstac_dinunet.distrib.learner import COINNLearner as _COINNLearner
 from coinstac_dinunet.distrib.reducer import COINNReducer as _COINNReducer
+from coinstac_dinunet.utils import tensorutils as _tu
 from .dad import DADParallel as _DADParallel
 
 
@@ -72,26 +73,16 @@ class DADReducer(_COINNReducer):
 
     def reduce(self):
         out = {}
-        out['tall_grads_file'] = {}
-        out['tall_activation_file'] = {}
-        site_var = list(self.input.values())[0]
-        for layer_name, layer in site_var['dad_layers'].items():
-            h_delta = []
-            out['tall_activation_file'][layer_name] = f"{layer_name}_activation_tall.npy"
-            out['tall_grads_file'][layer_name] = f"{layer_name}_grads_tall.npy"
-            for site, site_var in self.input.items():
-                _layer = site_var['dad_layers'][layer_name]
-                h = _np.load(self.state['baseDirectory'] + _os.sep + site + _os.sep + _layer['activation_file'])
-                d = _np.load(self.state['baseDirectory'] + _os.sep + site + _os.sep + _layer['grads_file'])
-                h_delta.append([site, h, d])
+        data = []
+        for site, site_vars in self.input.items():
+            data.append(_tu.load_arrays(self.state['baseDirectory'] + _os.sep + site + _os.sep + site_vars['dad_data']))
 
-            h, d = [], []
-            for site, _h, _d in h_delta:
-                h.append(_h.T)
-                d.append(_d.T)
+        reduced_data = []
+        for _data in zip(*data):
+            act, grad = list(zip(*_data))
+            reduced_data.append([_np.concatenate(act), _np.concatenate(grad)])
 
-            _h, _d = _np.concatenate(h, 0), _np.concatenate(d, 0)
-            _np.save(self.state['transferDirectory'] + _os.sep + out['tall_activation_file'][layer_name], _h)
-            _np.save(self.state['transferDirectory'] + _os.sep + out['tall_grads_file'][layer_name], _d)
+        out['reduced_dad_data'] = 'reduced_dad_data.npy'
+        _tu.save_arrays(self.state['transferDirectory'] + _os.sep + out['reduced_dad_data'], reduced_data)
         out['update'] = True
         return out

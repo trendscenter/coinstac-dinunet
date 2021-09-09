@@ -1,7 +1,8 @@
 import os as _os
 
-import numpy as _np
 import torch as _torch
+
+from coinstac_dinunet.utils import tensorutils as _tu
 
 _SKIP_NORM_Layers = [_torch.nn.BatchNorm1d, _torch.nn.LayerNorm, _torch.nn.GroupNorm]
 
@@ -178,40 +179,32 @@ class DADParallel(_torch.nn.Module):
         return ".".join([f"{a}" for a in args])
 
     def synced_param_update(self):
-        def _sync(module_name, module):
+        def _sync(module_name, module, data):
             dad_params = dict(list(module.named_parameters())[::-1])
             dad_children = dict(list(module.named_children())[::-1])
             if len(dad_children) > 0:
                 for child_name, child in dad_children.items():
-                    _sync(self._hierarchy_key(module_name, child_name), child)
+                    _sync(self._hierarchy_key(module_name, child_name), child, data)
             elif self._is_dad_module.get(module_name):
-                act_tall = _torch.FloatTensor(
-                    _np.load(self.state['baseDirectory'] + _os.sep + self.input['tall_activation_file'][module_name]),
-                    device=self.device)
-                local_grad_tall = _torch.FloatTensor(
-                    _np.load(self.state['baseDirectory'] + _os.sep + self.input['tall_grads_file'][module_name]),
-                    device=self.device)
+                act_tall, local_grad_tall = data.pop()
                 dad_params["weight"].grad.data = (act_tall.T.mm(local_grad_tall)).T.contiguous()
                 if dad_params.get("bias") is not None:
                     dad_params[f"bias"].grad.data = local_grad_tall.sum(0)
 
+        reduced_data = _tu.load_arrays(self.state['baseDirectory'] + _os.sep + self.input['reduced_dad_data'])
         for ch_name, ch in list(self.module.named_children())[::-1]:
-            _sync(ch_name, ch)
+            _sync(ch_name, ch, reduced_data)
 
     def dad_backward(self):
 
-        def _backward(module_name, module, out):
+        def _backward(module_name, module, data):
             dad_children = dict(list(module.named_children())[::-1])
 
             if len(dad_children) > 0:
                 for child_name, child in dad_children.items():
-                    _backward(self._hierarchy_key(module_name, child_name), child, out)
+                    _backward(self._hierarchy_key(module_name, child_name), child, data)
 
             elif self._is_dad_module.get(module_name):
-                out['dad_layers'][module_name] = {}
-                out['dad_layers'][module_name]['activation_file'] = f"{module_name}-act.npy"
-                out['dad_layers'][module_name]['grads_file'] = f"{module_name}-grads.npy"
-
                 delta, act = power_iteration_BC(
                     self._local_grads[module_name].T,
                     self._activations[module_name].T,
@@ -219,17 +212,12 @@ class DADParallel(_torch.nn.Module):
                     numiterations=self.cache.get('dad_num_pow_iters', 5),
                     device=self.device
                 )
+                data.append([act.T.detach().numpy(), delta.T.detach().numpy()])
 
-                _np.save(
-                    f"{self.state['transferDirectory']}{_os.sep}{out['dad_layers'][module_name]['activation_file']}",
-                    act.detach().numpy()
-                )
-                _np.save(
-                    f"{self.state['transferDirectory']}{_os.sep}{out['dad_layers'][module_name]['grads_file']}",
-                    delta.detach().numpy()
-                )
-
-        out = {'dad_layers': {}}
+        out, data = {}, []
         for ch_name, ch in list(self.module.named_children())[::-1]:
-            _backward(ch_name, ch, out)
+            _backward(ch_name, ch, data)
+
+        out['dad_data'] = 'dad_data.npy'
+        _tu.save_arrays(self.state['transferDirectory'] + _os.sep + out['dad_data'], data)
         return out

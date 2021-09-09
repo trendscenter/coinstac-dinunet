@@ -10,7 +10,7 @@ from functools import partial as _partial
 
 def _load(state, site, site_vars):
     grads_file = state['baseDirectory'] + _os.sep + site + _os.sep + site_vars['grads_file']
-    return _tu.load_grads(grads_file)
+    return _tu.load_arrays(grads_file)
 
 
 def _mean(*data):
@@ -34,7 +34,7 @@ class COINNReducer:
 
         with mp.Pool(processes=self.num_workers) as pool:
             avg_grads = list(pool.starmap(_mean, list(zip(*grads))))
-            _tu.save_grads(self.state['transferDirectory'] + _os.sep + out['avg_grads_file'], avg_grads)
+            _tu.save_arrays(self.state['transferDirectory'] + _os.sep + out['avg_grads_file'], avg_grads)
             out['update'] = True
 
         return out
