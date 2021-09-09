@@ -6,9 +6,14 @@ import torch as _torch
 _SKIP_NORM_Layers = [_torch.nn.BatchNorm1d, _torch.nn.LayerNorm, _torch.nn.GroupNorm]
 
 
-def power_iteration_BC(B, C, rank=10, numiterations=20, device='cuda', tol=0.0):
-    CC = _torch.mm(C.T, C)
-    BCC = _torch.mm(B, CC)
+def power_iteration_BC(B, C, rank=10, numiterations=20, device='cuda', tol=1e-3):
+    [cm, cn] = C.shape
+    if cm > cn:
+        CC = _torch.mm(C.T, C)
+        BCC = _torch.mm(B, CC)
+    else:
+        BCT = _torch.mm(B, C.T)
+        BCC = _torch.mm(BCT, BCT.T)
 
     def zero_result():
         sigma = _torch.tensor(0.0, device=device)
@@ -19,6 +24,10 @@ def power_iteration_BC(B, C, rank=10, numiterations=20, device='cuda', tol=0.0):
     def eigenvalue(B, v):
         Bv = _torch.mv(B.T, v)
         return _torch.sqrt(Bv.dot(_torch.mv(CC, Bv)))
+
+    def eigenvalue2(B, v):
+        Bv = _torch.mv(_torch.mm(C, B.T), v)
+        return _torch.sqrt(Bv.T.dot(Bv))
 
     def past_values(computed_eigs):
         bb = _torch.stack([x['b'] for x in computed_eigs], 0)
@@ -37,15 +46,24 @@ def power_iteration_BC(B, C, rank=10, numiterations=20, device='cuda', tol=0.0):
             if computed_eigs:
                 adjuster = _torch.mv(vv.T, _torch.mv(bb, b_k))
             # calculate the matrix-by-vector product (BC'CB' - adjusting_matrix)b
-            b_k1 = _torch.mv(BCC, _torch.mv(B.T, b_k)) - adjuster
+            if cm > cn:
+                b_k1 = _torch.mv(BCC, _torch.mv(B.T, b_k)) - adjuster
+            else:
+                b_k1 = _torch.mv(BCC, b_k) - adjuster
             # calculate the norm of b
             b_k1_norm = _torch.norm(b_k1)
             # re normalize the vector
             b_k = b_k1 / b_k1_norm
 
-        sigma = eigenvalue(B, b_k)
+        if cm > cn:
+            sigma = eigenvalue(B, b_k)
+        else:
+            sigma = eigenvalue2(B, b_k)
         if _torch.isnan(sigma): return zero_result()
-        c_k = _torch.mv(C, _torch.mv(B.T, b_k)) / sigma
+        if cm > cn:
+            c_k = _torch.mv(C, _torch.mv(B.T, b_k)) / sigma
+        else:
+            c_k = _torch.mv(BCT.T, b_k) / sigma
         if len(computed_eigs) > 1 and _torch.norm(b_k - computed_eigs[-1]['b']) / _torch.norm(
                 computed_eigs[-1]['b']) < tol:
             r = zero_result()
@@ -60,7 +78,7 @@ def power_iteration_BC(B, C, rank=10, numiterations=20, device='cuda', tol=0.0):
         eigs += [iterations(computed_eigs=eigs[1:], is_sigma=eigs[-1]["sigma"])]
         if eigs[-1]["sigma"] == 0.0:
             break
-    eigs = eigs[1:-2]
+    eigs = eigs[1:-1]
     return (
         _torch.stack([x["sigma"] * x["b"] for x in eigs], 1),
         _torch.stack([x["c"] for x in eigs], 1),)
@@ -194,21 +212,22 @@ class DADParallel(_torch.nn.Module):
                 out['dad_layers'][module_name]['activation_file'] = f"{module_name}-act.npy"
                 out['dad_layers'][module_name]['grads_file'] = f"{module_name}-grads.npy"
 
-                # print("*************", self._local_grads[module_name])
-                # print("*************", self._activations[module_name])
                 delta, act = power_iteration_BC(
                     self._local_grads[module_name].T,
                     self._activations[module_name].T,
                     rank=self.cache.get('dad_reduction_rank', 10),
-                    numiterations=self.cache.get('dad_num_pow_iters', 10),
+                    numiterations=self.cache.get('dad_num_pow_iters', 5),
                     device=self.device
                 )
 
                 _np.save(
                     f"{self.state['transferDirectory']}{_os.sep}{out['dad_layers'][module_name]['activation_file']}",
-                    act.T.detach().numpy())
-                _np.save(f"{self.state['transferDirectory']}{_os.sep}{out['dad_layers'][module_name]['grads_file']}",
-                         delta.T.detach().numpy())
+                    act.detach().numpy()
+                )
+                _np.save(
+                    f"{self.state['transferDirectory']}{_os.sep}{out['dad_layers'][module_name]['grads_file']}",
+                    delta.detach().numpy()
+                )
 
         out = {'dad_layers': {}}
         for ch_name, ch in list(self.module.named_children())[::-1]:

@@ -76,20 +76,22 @@ class DADReducer(_COINNReducer):
         out['tall_activation_file'] = {}
         site_var = list(self.input.values())[0]
         for layer_name, layer in site_var['dad_layers'].items():
-            h, delta = [], []
+            h_delta = []
             out['tall_activation_file'][layer_name] = f"{layer_name}_activation_tall.npy"
             out['tall_grads_file'][layer_name] = f"{layer_name}_grads_tall.npy"
             for site, site_var in self.input.items():
                 _layer = site_var['dad_layers'][layer_name]
-                h.append(
-                    _np.load(self.state['baseDirectory'] + _os.sep + site + _os.sep + _layer['activation_file'])
-                )
-                delta.append(
-                    _np.load(self.state['baseDirectory'] + _os.sep + site + _os.sep + _layer['grads_file'])
-                )
-            _np.save(self.state['transferDirectory'] + _os.sep + out['tall_activation_file'][layer_name],
-                     _np.concatenate(h))
-            _np.save(self.state['transferDirectory'] + _os.sep + out['tall_grads_file'][layer_name],
-                     _np.concatenate(delta))
+                h = _np.load(self.state['baseDirectory'] + _os.sep + site + _os.sep + _layer['activation_file'])
+                d = _np.load(self.state['baseDirectory'] + _os.sep + site + _os.sep + _layer['grads_file'])
+                h_delta.append([site, h, d])
+
+            h, d = [], []
+            for site, _h, _d in h_delta:
+                h.append(_h.T)
+                d.append(_d.T)
+
+            _h, _d = _np.concatenate(h, 0), _np.concatenate(d, 0)
+            _np.save(self.state['transferDirectory'] + _os.sep + out['tall_activation_file'][layer_name], _h)
+            _np.save(self.state['transferDirectory'] + _os.sep + out['tall_grads_file'][layer_name], _d)
         out['update'] = True
         return out

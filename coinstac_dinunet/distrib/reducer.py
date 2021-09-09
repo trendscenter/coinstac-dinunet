@@ -1,7 +1,20 @@
-import coinstac_dinunet.config as _conf
+import multiprocessing as mp
 import os as _os
-import coinstac_dinunet.utils.tensorutils as _tu
+
 import numpy as _np
+
+import coinstac_dinunet.config as _conf
+import coinstac_dinunet.utils.tensorutils as _tu
+from functools import partial as _partial
+
+
+def _load(state, site, site_vars):
+    grads_file = state['baseDirectory'] + _os.sep + site + _os.sep + site_vars['grads_file']
+    return _tu.load_grads(grads_file)
+
+
+def _mean(*data):
+    return _np.array(data).mean(0)
 
 
 class COINNReducer:
@@ -10,18 +23,18 @@ class COINNReducer:
         self.input = trainer.input
         self.state = trainer.state
         self.trainer = trainer
+        self.num_workers = min(4, len(self.input)-1)
 
     def reduce(self):
         """ Average each sites gradients and pass it to all sites. """
         out = {'avg_grads_file': _conf.avg_grads_file}
-        grads = []
-        for site, site_vars in self.input.items():
-            grads_file = self.state['baseDirectory'] + _os.sep + site + _os.sep + site_vars['grads_file']
-            grads.append(_tu.load_grads(grads_file))
 
-        avg_grads = []
-        for layer_grad in zip(*grads):
-            avg_grads.append(_np.array(layer_grad).mean(0))
-        _tu.save_grads(self.state['transferDirectory'] + _os.sep + out['avg_grads_file'], avg_grads)
-        out['update'] = True
+        with mp.Pool(processes=self.num_workers) as pool:
+            grads = list(pool.starmap(_partial(_load, self.state), self.input.items()))
+
+        with mp.Pool(processes=self.num_workers) as pool:
+            avg_grads = list(pool.starmap(_mean, list(zip(*grads))))
+            _tu.save_grads(self.state['transferDirectory'] + _os.sep + out['avg_grads_file'], avg_grads)
+            out['update'] = True
+
         return out

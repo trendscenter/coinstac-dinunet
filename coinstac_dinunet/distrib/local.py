@@ -152,15 +152,6 @@ class COINNLocal:
                 learner_cls=_dSGDLearner,
                 **kw):
 
-        # learner = self._get_learner_cls(learner_cls)(
-        #     trainer=trainer_cls(
-        #         data_handle=datahandle_cls(
-        #             cache=self.cache, input=self.input, state=self.state,
-        #             dataloader_args=self._dataloader_args
-        #         )
-        #     )
-        # )
-
         trainer = trainer_cls(
             data_handle=datahandle_cls(
                 cache=self.cache, input=self.input, state=self.state,
@@ -195,6 +186,7 @@ class COINNLocal:
             )
             self.out['phase'] = Phase.COMPUTATION
 
+        """Initialize learner"""
         learner = self._get_learner_cls(learner_cls)(trainer=trainer)
 
         """Track global state among sites."""
@@ -223,7 +215,7 @@ class COINNLocal:
                 self.out.update(**out)
                 if it.get('averages') and it.get('metrics'):
                     self.cache[Key.TRAIN_SERIALIZABLE].append([vars(it['averages']), vars(it['metrics'])])
-                    self.out.update(**learner.trainer.on_iteration_end(0, 0, it))
+                    self.out.update(**trainer.on_iteration_end(0, 0, it))
 
             if all(m == Mode.VALIDATION for m in learner.global_modes.values()):
                 """
@@ -233,14 +225,14 @@ class COINNLocal:
                  and all sites reshuffle the indices and resume training.
                 We send the confusion matrix to the remote to accumulate global score for model selection.
                 """
-                self.out.update(**learner.trainer.validation_distributed(dataset_cls))
+                self.out.update(**trainer.validation_distributed(dataset_cls))
                 self.out['mode'] = Mode.TRAIN_WAITING
 
             if all(m == Mode.TEST for m in learner.global_modes.values()):
-                self.out.update(**learner.trainer.test_distributed(dataset_cls))
+                self.out.update(**trainer.test_distributed(dataset_cls))
                 self.out['mode'] = self.cache['frozen_args']['mode']
                 self.out['phase'] = Phase.NEXT_RUN_WAITING
-                learner.trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['latest_nn_state'])
+                trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['latest_nn_state'])
 
         elif self.out['phase'] == Phase.SUCCESS:
             """ This phase receives global scores from the aggregator."""
