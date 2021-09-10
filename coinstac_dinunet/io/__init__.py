@@ -51,7 +51,7 @@ class COINPyService:
 
                 if self.profile:
                     _duration(self.cache, start, 'remote_iter_duration')
-                    info(f"Remote Iter: {self.cache.get('remote_iter_duration', ['undef'])[-1]}", self.verbose)
+                    info(f"Remote Iter: {self.cache.get('remote_iter_duration', ['undef'])[-1]}")
 
                 if self.verbose:
                     info(f"[***** REMOTE cache *****]: {self.cache}")
@@ -83,7 +83,7 @@ class COINPyService:
 
                 if self.profile:
                     _duration(self.cache, start, 'local_iter_duration')
-                    info(f"Local Iter: {self.cache.get('local_iter_duration', ['undef'])[-1]}", self.verbose)
+                    info(f"Local Iter: {self.cache.get('local_iter_duration', ['undef'])[-1]}")
 
                 if self.verbose:
                     info(f"[***** {message['data']['state']['clientId']} cache *****]: {self.cache}")

@@ -122,7 +122,6 @@ class COINNRemote:
         _utils.save_scores(self.cache, self.cache['log_dir'], file_keys=[Key.TEST_METRICS])
 
         _cache = {**self.cache}
-        _cache.update(data_size=[])
         _cache[Key.GLOBAL_TEST_SERIALIZABLE] = _cache[Key.GLOBAL_TEST_SERIALIZABLE][-1]
         _utils.save_cache(_cache, self.cache['log_dir'])
 

@@ -15,6 +15,7 @@ from coinstac_dinunet.data import COINNDataHandle as _DataHandle
 from coinstac_dinunet.distrib.learner import COINNLearner as _dSGDLearner
 from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 from .utils import DADLearner as _DADLearner
+import coinstac_dinunet.utils as _utils
 
 
 class COINNLocal:
@@ -233,6 +234,7 @@ class COINNLocal:
                 self.out['mode'] = self.cache['frozen_args']['mode']
                 self.out['phase'] = Phase.NEXT_RUN_WAITING
                 trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['latest_nn_state'])
+                _utils.save_cache(self.cache, self.cache['log_dir'])
 
         elif self.out['phase'] == Phase.SUCCESS:
             """ This phase receives global scores from the aggregator."""
