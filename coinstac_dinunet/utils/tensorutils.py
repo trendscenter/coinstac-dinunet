@@ -47,9 +47,9 @@ def extract_grads(model):
     return [caste_ndarray(p.grad.detach().cpu().numpy()) for p in model.parameters()]
 
 
-def save_grads(file_path, grads):
-    _np.save(file_path, grads)
+def save_arrays(file_path, arrays):
+    _np.save(file_path, arrays)
 
 
-def load_grads(file_path):
+def load_arrays(file_path):
     return _np.load(file_path, allow_pickle=True)

@@ -10,11 +10,11 @@ import shutil as _shutil
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.utils as _utils
 from coinstac_dinunet.config.keys import *
-from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.utils import performance_improved_, stop_training_
-from coinstac_dinunet.distrib.utils import check
+from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.vision import plotter as _plot
-from coinstac_dinunet.distrib.reducer import COINNReducer as _dSGDReducer
+from .reducer import COINNReducer as _dSGDReducer
+from .utils import DADReducer as _DADReducer, check as _check
 
 
 class EmptyDataHandle:
@@ -100,7 +100,7 @@ class COINNRemote:
             out['val_metrics'] = val_metrics
         return out
 
-    def _on_run_end(self, reducer):
+    def _on_run_end(self, trainer):
         """
         ########################
         Entry: phase "next_run_waiting"
@@ -108,7 +108,7 @@ class COINNRemote:
         #######################
         This function saves test score of last fold.
         """
-        test_averages, test_metrics = reducer.trainer.new_averages(), reducer.trainer.new_metrics()
+        test_averages, test_metrics = trainer.new_averages(), trainer.new_metrics()
         for site, site_vars in self.input.items():
             if site_vars.get(Key.TEST_SERIALIZABLE):
                 ta, tm = site_vars[Key.TEST_SERIALIZABLE]
@@ -122,14 +122,13 @@ class COINNRemote:
         _utils.save_scores(self.cache, self.cache['log_dir'], file_keys=[Key.TEST_METRICS])
 
         _cache = {**self.cache}
-        _cache.update(data_size=[])
         _cache[Key.GLOBAL_TEST_SERIALIZABLE] = _cache[Key.GLOBAL_TEST_SERIALIZABLE][-1]
         _utils.save_cache(_cache, self.cache['log_dir'])
 
-    def _send_global_scores(self, reducer):
+    def _send_global_scores(self, trainer):
         out = {}
-        averages = reducer.trainer.new_averages()
-        metrics = reducer.trainer.new_metrics()
+        averages = trainer.new_averages()
+        metrics = trainer.new_metrics()
         for avg, sc in self.cache[Key.GLOBAL_TEST_SERIALIZABLE]:
             averages.update(**avg)
             metrics.update(**sc)
@@ -162,13 +161,11 @@ class COINNRemote:
         return out
 
     def compute(self, trainer_cls=None, reducer_cls: callable = _dSGDReducer, **kw):
-        reducer = self._get_reducer_cls(reducer_cls)(
-            trainer=trainer_cls(
-                data_handle=EmptyDataHandle(cache=self.cache, input=self.input, state=self.state)
-            )
+        trainer = trainer_cls(
+            data_handle=EmptyDataHandle(cache=self.cache, input=self.input, state=self.state)
         )
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
-        if check(all, 'phase', Phase.INIT_RUNS, self.input):
+        if _check(all, 'phase', Phase.INIT_RUNS, self.input):
             """
             Initialize all folds and loggers
             """
@@ -176,46 +173,43 @@ class COINNRemote:
             self.out['global_runs'] = self._next_run()
             self.out['phase'] = Phase.NEXT_RUN
 
-        if check(all, 'phase', Phase.PRE_COMPUTATION, self.input):
+        if _check(all, 'phase', Phase.PRE_COMPUTATION, self.input):
             self.out.update(**self._pre_compute())
             self.out['phase'] = Phase.PRE_COMPUTATION
 
         self.out['global_modes'] = self._set_mode()
-        if check(all, 'phase', Phase.COMPUTATION, self.input):
-            """
-            Main computation phase where we aggregate sites information
-            We also handle train/validation/test stages of local sites by sending corresponding signals from here
-            Learner's method send_to_reduce(...) must issue a 'reduce' signal.
-            """
+        if _check(all, 'phase', Phase.COMPUTATION, self.input):
+            """Initialize reducer"""
+            reducer = self._get_reducer_cls(reducer_cls)(trainer=trainer)
 
             self.out['phase'] = Phase.COMPUTATION
-            if check(all, 'reduce', True, self.input):
+            if _check(all, 'reduce', True, self.input):
                 self.out.update(**reducer.reduce())
 
-            if check(all, 'mode', Mode.VALIDATION_WAITING, self.input):
+            if _check(all, 'mode', Mode.VALIDATION_WAITING, self.input):
                 self.cache['epoch'] += 1
                 if self.cache['epoch'] % self.cache['validation_epochs'] == 0:
                     self.out['global_modes'] = self._set_mode(mode=Mode.VALIDATION)
                 else:
                     self.out['global_modes'] = self._set_mode(mode=Mode.TRAIN)
 
-            if check(all, 'mode', Mode.TRAIN_WAITING, self.input):
+            if _check(all, 'mode', Mode.TRAIN_WAITING, self.input):
                 epoch_info = self._on_epoch_end(reducer)
                 nxt_epoch = self._next_epoch(**epoch_info)
                 self.out['global_modes'] = self._set_mode(mode=nxt_epoch['mode'])
 
-        if check(all, 'phase', Phase.NEXT_RUN_WAITING, self.input):
+        if _check(all, 'phase', Phase.NEXT_RUN_WAITING, self.input):
             """
             This block runs when a fold has completed all train, test, validation phase.
             We save all the scores and plot the results.
             We transition to new fold if there is any left, else we stop with a success signal.
             """
-            self._on_run_end(reducer)
+            self._on_run_end(trainer)
             if len(self.cache['folds']) > 0:
                 self.out['global_runs'] = self._next_run()
                 self.out['phase'] = Phase.NEXT_RUN
             else:
-                self.out.update(**self._send_global_scores(reducer))
+                self.out.update(**self._send_global_scores(trainer))
                 self.out['phase'] = Phase.SUCCESS
 
     def _next_epoch(self, **kw):
@@ -249,9 +243,11 @@ class COINNRemote:
     def _get_reducer_cls(self, reducer_cls):
         if self.cache.get('agg_engine') == AGG_Engine.dSGD:
             return _dSGDReducer
+        elif self.cache.get('agg_engine') == AGG_Engine.rankDAD:
+            return _DADReducer
 
         return reducer_cls
 
     def __call__(self, *args, **kwargs):
         self.compute(*args, **kwargs)
-        return {'output': self.out, 'success': check(all, 'phase', Phase.SUCCESS, self.input)}
+        return {'output': self.out, 'success': _check(all, 'phase', Phase.SUCCESS, self.input)}

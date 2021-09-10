@@ -1,6 +1,4 @@
 from os import sep as _sep
-from typing import Tuple as _Tuple
-
 import torch as _torch
 
 from coinstac_dinunet import config as _conf
@@ -21,7 +19,7 @@ class COINNLearner:
         If condition checks if it is first learning step, where there is no averaged_gradient[
         available from the remote
         """
-        grads = _tu.load_grads(self.state['baseDirectory'] + _sep + self.input['avg_grads_file'])
+        grads = _tu.load_arrays(self.state['baseDirectory'] + _sep + self.input['avg_grads_file'])
 
         first_model = list(self.trainer.nn.keys())[0]
         for i, param in enumerate(self.trainer.nn[first_model].parameters()):
@@ -31,7 +29,7 @@ class COINNLearner:
         self.trainer.optimizer[first_optim].step()
         return out
 
-    def backward(self) -> _Tuple[dict, dict]:
+    def backward(self):
         out = {}
         first_model = list(self.trainer.nn.keys())[0]
         first_optim = list(self.trainer.optimizer.keys())[0]
@@ -46,13 +44,13 @@ class COINNLearner:
             it['loss'].backward()
             its.append(it)
             out.update(**nxt_iter_out)
-        return out, self.trainer.reduce_iteration(its)
+        return self.trainer.reduce_iteration(its), out
 
-    def to_reduce(self) -> _Tuple[dict, dict]:
-        out, it = self.backward()
+    def to_reduce(self):
+        it, out = self.backward()
         first_model = list(self.trainer.nn.keys())[0]
         out['grads_file'] = _conf.grads_file
         grads = _tu.extract_grads(self.trainer.nn[first_model])
-        _tu.save_grads(self.state['transferDirectory'] + _sep + out['grads_file'], grads)
+        _tu.save_arrays(self.state['transferDirectory'] + _sep + out['grads_file'], grads)
         out['reduce'] = True
         return it, out

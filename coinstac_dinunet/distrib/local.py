@@ -12,8 +12,10 @@ from typing import List as _List
 import coinstac_dinunet.config as _conf
 from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.data import COINNDataHandle as _DataHandle
-from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 from coinstac_dinunet.distrib.learner import COINNLearner as _dSGDLearner
+from coinstac_dinunet.utils import FrozenDict as _FrozenDict
+from .utils import DADLearner as _DADLearner
+import coinstac_dinunet.utils as _utils
 
 
 class COINNLocal:
@@ -92,10 +94,10 @@ class COINNLocal:
             self.cache[Key.ARGS_CACHED] = True
         """######################################"""
 
-    def _init_runs(self, learner):
+    def _init_runs(self, trainer):
         out = {}
         """Data related initializations."""
-        out.update(learner.trainer.data_handle.prepare_data())
+        out.update(trainer.data_handle.prepare_data())
         self.cache['num_folds'] = len(self.cache['splits'])
 
         out['data_size'] = {}
@@ -104,13 +106,13 @@ class COINNLocal:
             out['data_size'][k] = dict((key, len(sp.get(key, []))) for key in sp)
         return out
 
-    def _attach_global(self, learner):
-        self.cache['nn'] = learner.trainer.nn
-        self.cache['device'] = learner.trainer.device
-        self.cache['optimizer'] = learner.trainer.optimizer
-        self.cache['dataset'] = learner.trainer.data_handle.dataset
+    def _attach_global(self, trainer):
+        self.cache['nn'] = trainer.nn
+        self.cache['device'] = trainer.device
+        self.cache['optimizer'] = trainer.optimizer
+        self.cache['dataset'] = trainer.data_handle.dataset
 
-    def _next_run(self, learner):
+    def _next_run(self, trainer):
         out = {}
         self.cache.update(cursor=0)
         self.cache[Key.TRAIN_SERIALIZABLE] = []
@@ -118,11 +120,11 @@ class COINNLocal:
         self.cache['log_dir'] = self.state['outputDirectory'] + _sep + self.cache[
             'task_id'] + _sep + f"fold_{self.cache['split_ix']}"
         _os.makedirs(self.cache['log_dir'], exist_ok=True)
-        learner.trainer.init_nn(init_weights=True)
+        trainer.init_nn(init_weights=True)
         self.cache['best_nn_state'] = f"best.{self.cache['task_id']}-{self.cache['split_ix']}.pt"
         self.cache['latest_nn_state'] = f"latest.{self.cache['task_id']}-{self.cache['split_ix']}.pt"
         out['phase'] = Phase.COMPUTATION
-        self._attach_global(learner)
+        self._attach_global(trainer)
         return out
 
     def _pretrain_local(self, trainer_cls, datahandle_cls, train_dataset, validation_dataset):
@@ -151,18 +153,16 @@ class COINNLocal:
                 learner_cls=_dSGDLearner,
                 **kw):
 
-        learner = self._get_learner_cls(learner_cls)(
-            trainer=trainer_cls(
-                data_handle=datahandle_cls(
-                    cache=self.cache, input=self.input, state=self.state,
-                    dataloader_args=self._dataloader_args
-                )
+        trainer = trainer_cls(
+            data_handle=datahandle_cls(
+                cache=self.cache, input=self.input, state=self.state,
+                dataloader_args=self._dataloader_args
             )
         )
 
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
         if self.out['phase'] == Phase.INIT_RUNS:
-            self.out.update(**self._init_runs(learner))
+            self.out.update(**self._init_runs(trainer))
             """Share default args to remote and freeze"""
             frozen_args = {}.fromkeys(self._args)
             for k in frozen_args:
@@ -172,20 +172,23 @@ class COINNLocal:
 
         elif self.out['phase'] == Phase.NEXT_RUN:
             self.cache.update(**self.input['global_runs'][self.state['clientId']])
-            self.out.update(**self._next_run(learner))
+            self.out.update(**self._next_run(trainer))
             self.out.update(
                 **self._pretrain_local(
                     trainer_cls,
                     datahandle_cls,
-                    learner.trainer.data_handle.get_train_dataset(dataset_cls),
-                    learner.trainer.data_handle.get_validation_dataset(dataset_cls))
+                    trainer.data_handle.get_train_dataset(dataset_cls),
+                    trainer.data_handle.get_validation_dataset(dataset_cls))
             )
 
         elif self.out['phase'] == Phase.PRE_COMPUTATION and self.input.get('pretrained_weights'):
-            learner.trainer.load_checkpoint(
+            trainer.load_checkpoint(
                 file_path=self.state['baseDirectory'] + _sep + self.input['pretrained_weights']
             )
             self.out['phase'] = Phase.COMPUTATION
+
+        """Initialize learner"""
+        learner = self._get_learner_cls(learner_cls)(trainer=trainer)
 
         """Track global state among sites."""
         self.out['mode'] = learner.global_modes.get(self.state['clientId'], self.cache['mode'])
@@ -213,7 +216,7 @@ class COINNLocal:
                 self.out.update(**out)
                 if it.get('averages') and it.get('metrics'):
                     self.cache[Key.TRAIN_SERIALIZABLE].append([vars(it['averages']), vars(it['metrics'])])
-                    self.out.update(**learner.trainer.on_iteration_end(0, 0, it))
+                    self.out.update(**trainer.on_iteration_end(0, 0, it))
 
             if all(m == Mode.VALIDATION for m in learner.global_modes.values()):
                 """
@@ -223,14 +226,15 @@ class COINNLocal:
                  and all sites reshuffle the indices and resume training.
                 We send the confusion matrix to the remote to accumulate global score for model selection.
                 """
-                self.out.update(**learner.trainer.validation_distributed(dataset_cls))
+                self.out.update(**trainer.validation_distributed(dataset_cls))
                 self.out['mode'] = Mode.TRAIN_WAITING
 
             if all(m == Mode.TEST for m in learner.global_modes.values()):
-                self.out.update(**learner.trainer.test_distributed(dataset_cls))
+                self.out.update(**trainer.test_distributed(dataset_cls))
                 self.out['mode'] = self.cache['frozen_args']['mode']
                 self.out['phase'] = Phase.NEXT_RUN_WAITING
-                learner.trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['latest_nn_state'])
+                trainer.save_checkpoint(file_path=self.cache['log_dir'] + _sep + self.cache['latest_nn_state'])
+                _utils.save_cache(self.cache, self.cache['log_dir'])
 
         elif self.out['phase'] == Phase.SUCCESS:
             """ This phase receives global scores from the aggregator."""
@@ -242,6 +246,8 @@ class COINNLocal:
 
         if self.cache.get('agg_engine') == AGG_Engine.dSGD:
             return _dSGDLearner
+        elif self.cache.get('agg_engine') == AGG_Engine.rankDAD:
+            return _DADLearner
 
         return learner_cls
 
