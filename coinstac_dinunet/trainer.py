@@ -39,7 +39,8 @@ class COINNTrainer(_NNTrainer, ABC):
             avg, metrics = self.evaluation(
                 mode='validation',
                 save_pred=False,
-                dataset_list=validation_dataset
+                dataset_list=validation_dataset,
+                use_padded_sampler=True
             )
             out[Key.VALIDATION_SERIALIZABLE] = [vars(avg), vars(metrics)]
 

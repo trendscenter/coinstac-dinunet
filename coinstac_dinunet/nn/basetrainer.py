@@ -114,7 +114,7 @@ class NNTrainer:
                 checkpoint['optimizers'][k] = self.optimizer[k].state_dict()
         _torch.save(checkpoint, file_path)
 
-    def evaluation(self, mode='eval', dataset_list=None, save_pred=False):
+    def evaluation(self, mode='eval', dataset_list=None, save_pred=False, use_padded_sampler=False):
         for k in self.nn:
             self.nn[k].eval()
 
@@ -123,7 +123,8 @@ class NNTrainer:
 
         for d in dataset_list:
             eval_loaders.append(
-                self.data_handle.get_loader(handle_key=mode, dataset=d, shuffle=False)
+                self.data_handle.get_loader(handle_key=mode, dataset=d, shuffle=False,
+                                            use_padded_sampler=use_padded_sampler)
             )
 
         def _update_scores(_out, _it, _avg, _metrics):
@@ -222,7 +223,8 @@ class NNTrainer:
                     self.on_iteration_end(i=_i, ep=ep, it=it)
 
             if val_dataset and ep % self.cache.get('validation_epochs', 1) == 0:
-                val_averages, val_metric = self.evaluation(mode='validation', dataset_list=val_dataset)
+                val_averages, val_metric = self.evaluation(mode='validation', dataset_list=val_dataset,
+                                                           use_padded_sampler=True)
                 self.cache[Key.VALIDATION_LOG].append([*val_averages.get(), *val_metric.get()])
                 out.update(**self._save_if_better(ep, val_metric))
 
