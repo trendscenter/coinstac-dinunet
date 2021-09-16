@@ -175,8 +175,8 @@ class COINNDataHandle:
 
         if self.cache['cursor'] == 0:
             dataset = self.dataset[handle_key]
-            loader = self.get_loader(handle_key=handle_key, shuffle=shuffle, dataset=dataset)
-            self.cache['data_len'] = (len(dataset) // self.cache['batch_size']) * self.cache['batch_size']
+            loader = self.get_loader(handle_key=handle_key, shuffle=shuffle, dataset=dataset, use_padded_sampler=True)
+            self.cache['data_len'] = len(loader) * self.cache['batch_size']
             self.cache['train_loader_iter'] = iter(loader)
 
         batch = next(self.cache['train_loader_iter'])
