@@ -7,10 +7,13 @@ Forked from https://pypi.org/project/coinstac/
 import asyncio as _asyncio
 import json as _json
 import time as _time
+
 import websockets as _ws
 
 from coinstac_dinunet.utils import duration as _duration
 from coinstac_dinunet.utils.logger import *
+
+local, remote = None, None
 
 
 class COINPyService:
@@ -28,6 +31,8 @@ class COINPyService:
         return ...
 
     async def _run(self, websocket, path):
+        global local
+        global remote
         message = await websocket.recv()
         try:
             message = _json.loads(message)
