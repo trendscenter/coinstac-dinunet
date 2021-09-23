@@ -6,12 +6,13 @@ from coinstac_dinunet.utils import tensorutils as _tu
 
 
 class COINNLearner:
-    def __init__(self, trainer=None, **kw):
+    def __init__(self, trainer=None, pool=None, **kw):
         self.cache = trainer.cache
         self.input = trainer.input
         self.state = trainer.state
         self.trainer = trainer
         self.global_modes = self.input.get('global_modes', {})
+        self.pool = pool
 
     def step(self) -> dict:
         out = {}

@@ -10,12 +10,12 @@ from os import sep as _sep
 from typing import List as _List
 
 import coinstac_dinunet.config as _conf
+import coinstac_dinunet.utils as _utils
 from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.data import COINNDataHandle as _DataHandle
 from coinstac_dinunet.distrib.learner import COINNLearner as _dSGDLearner
 from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 from .utils import DADLearner as _DADLearner
-import coinstac_dinunet.utils as _utils
 
 
 class COINNLocal:
@@ -147,7 +147,8 @@ class COINNLocal:
             out['phase'] = Phase.PRE_COMPUTATION
         return out
 
-    def compute(self, trainer_cls,
+    def compute(self, pool,
+                trainer_cls,
                 dataset_cls=None,
                 datahandle_cls=_DataHandle,
                 learner_cls=_dSGDLearner,
@@ -188,7 +189,7 @@ class COINNLocal:
             self.out['phase'] = Phase.COMPUTATION
 
         """Initialize learner"""
-        learner = self._get_learner_cls(learner_cls)(trainer=trainer)
+        learner = self._get_learner_cls(learner_cls)(trainer=trainer, pool=pool)
 
         """Track global state among sites."""
         self.out['mode'] = learner.global_modes.get(self.state['clientId'], self.cache['mode'])

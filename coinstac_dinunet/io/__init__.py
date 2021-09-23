@@ -12,6 +12,7 @@ import websockets as _ws
 
 from coinstac_dinunet.utils import duration as _duration
 from coinstac_dinunet.utils.logger import *
+import multiprocessing as _mp
 
 local, remote = None, None
 
@@ -21,6 +22,7 @@ class COINPyService:
         self.cache = kw.get('cache', {})
         self.verbose = kw.get('verbose', False)
         self.profile = kw.get('profile', False)
+        self.pool = None
 
     def get_local(self, msg):
         r"""Should return a callable module and arguments to the compute function of that module"""
@@ -39,6 +41,9 @@ class COINPyService:
         except Exception as e:
             await websocket.close(1011, 'JSON data parse failed')
 
+        if self.pool is None:
+            self.pool = _mp.Pool(processes=message['data']['input'].get('num_reducers', 2))
+
         if message['mode'] == 'remote':
             try:
                 if self.verbose:
@@ -49,9 +54,9 @@ class COINPyService:
                     info(f"[*** REMOTE input ***] : {message['data']['input']}")
 
                 start = _time.time()
-                remote, remote_args = self.get_remote(msg=message), []
+                remote, remote_args = self.get_remote(msg=message), [self.pool]
                 if isinstance(remote, tuple) or isinstance(remote, list):
-                    remote_args = remote[1:]
+                    remote_args = [self.pool] + list(remote)[1:]
                 output = await _asyncio.get_event_loop().run_in_executor(None, remote[0], *remote_args)
 
                 if self.profile:
@@ -81,9 +86,9 @@ class COINPyService:
                     info(f"[***** {message['data']['state']['clientId']} input *****]: {message['data']['input']}")
 
                 start = _time.time()
-                local, local_args = self.get_local(msg=message), []
+                local, local_args = self.get_local(msg=message), [self.pool]
                 if isinstance(local, tuple) or isinstance(local, list):
-                    local_args = local[1:]
+                    local_args = [self.pool] + list(local)[1:]
                 output = await _asyncio.get_event_loop().run_in_executor(None, local[0], *local_args)
 
                 if self.profile:
