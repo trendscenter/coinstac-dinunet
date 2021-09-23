@@ -147,7 +147,7 @@ class COINNLocal:
             out['phase'] = Phase.PRE_COMPUTATION
         return out
 
-    def compute(self, pool,
+    def compute(self, mp_pool,
                 trainer_cls,
                 dataset_cls=None,
                 datahandle_cls=_DataHandle,
@@ -189,7 +189,7 @@ class COINNLocal:
             self.out['phase'] = Phase.COMPUTATION
 
         """Initialize learner"""
-        learner = self._get_learner_cls(learner_cls)(trainer=trainer, pool=pool)
+        learner = self._get_learner_cls(learner_cls)(trainer=trainer, pool=mp_pool)
 
         """Track global state among sites."""
         self.out['mode'] = learner.global_modes.get(self.state['clientId'], self.cache['mode'])
