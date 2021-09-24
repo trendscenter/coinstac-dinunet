@@ -160,7 +160,10 @@ class COINNRemote:
             _shutil.copy(pt_path, self.state['transferDirectory'] + _os.sep + out['pretrained_weights'])
         return out
 
-    def compute(self, trainer_cls=None, reducer_cls: callable = _dSGDReducer, **kw):
+    def compute(self, mp_pool,
+                trainer_cls,
+                reducer_cls: callable = _dSGDReducer,
+                **kw):
         trainer = trainer_cls(
             data_handle=EmptyDataHandle(cache=self.cache, input=self.input, state=self.state)
         )
@@ -180,7 +183,7 @@ class COINNRemote:
         self.out['global_modes'] = self._set_mode()
         if _check(all, 'phase', Phase.COMPUTATION, self.input):
             """Initialize reducer"""
-            reducer = self._get_reducer_cls(reducer_cls)(trainer=trainer)
+            reducer = self._get_reducer_cls(reducer_cls)(trainer=trainer, mp_pool=mp_pool)
 
             self.out['phase'] = Phase.COMPUTATION
             if _check(all, 'reduce', True, self.input):
