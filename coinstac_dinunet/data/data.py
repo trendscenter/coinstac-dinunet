@@ -3,6 +3,7 @@
 @email: sraashis@gmail.com
 """
 import json as _json
+import math as _math
 import os as _os
 
 import numpy as _np
@@ -135,7 +136,7 @@ class COINNDataHandle:
             if len(datasets) > 0 and sum([len(t) for t in datasets if t]) > 0:
                 return datasets
 
-    def get_loader(self, handle_key='', **kw):
+    def get_loader(self, handle_key='', use_padded_sampler=False, **kw):
         args = {**self.cache}
         args.update(self.dataloader_args.get(handle_key, {}))
         args.update(**kw)
@@ -152,6 +153,18 @@ class COINNDataHandle:
             'timeout': 0,
             'worker_init_fn': _seed_worker if args.get('seed_all') else None
         }
+
+        if use_padded_sampler:
+            loader_args['drop_last'] = False
+            loader_args['shuffle'] = False
+            loader_args['sampler'] = COINNPaddedDataSampler(
+                loader_args['dataset'],
+                loader_args['batch_size'],
+                seed=loader_args.get('seed', 0),
+                shuffle=loader_args['shuffle'],
+                drop_last=loader_args['drop_last']
+            )
+
         for k in loader_args.keys():
             loader_args[k] = args.get(k, loader_args.get(k))
 
@@ -162,8 +175,8 @@ class COINNDataHandle:
 
         if self.cache['cursor'] == 0:
             dataset = self.dataset[handle_key]
-            loader = self.get_loader(handle_key=handle_key, shuffle=shuffle, dataset=dataset)
-            self.cache['data_len'] = (len(dataset) // self.cache['batch_size']) * self.cache['batch_size']
+            loader = self.get_loader(handle_key=handle_key, shuffle=shuffle, dataset=dataset, use_padded_sampler=True)
+            self.cache['data_len'] = len(loader) * self.cache['batch_size']
             self.cache['train_loader_iter'] = iter(loader)
 
         batch = next(self.cache['train_loader_iter'])
@@ -180,3 +193,45 @@ class COINNDataHandle:
         if self.cache.get('data_dir'):
             files = _os.listdir(self.state['baseDirectory'] + _os.sep + self.cache['data_dir'])
         return _kfolds(files, self.cache, self.state)
+
+
+class COINNPaddedDataSampler:
+    def __init__(self, dataset, batch_size, seed=0, shuffle=False, drop_last=False):
+        self.dataset = dataset
+
+        if drop_last:
+            self.total_size = _math.floor(len(dataset) / batch_size) * batch_size
+        else:
+            self.total_size = _math.ceil(len(dataset) / batch_size) * batch_size
+
+        self.drop_last = drop_last
+        self.shuffle = shuffle
+        self.epoch = 0
+        self.seed = seed
+
+    def __iter__(self):
+
+        if self.shuffle:
+            g = _torch.Generator()
+            g.manual_seed(self.seed + self.epoch)
+            indices = _torch.randperm(len(self.dataset), generator=g).tolist()
+        else:
+            indices = list(range(len(self.dataset)))
+
+        if not self.drop_last:
+            padding_size = self.total_size - len(indices)
+            if padding_size <= len(indices):
+                indices += indices[:padding_size]
+            else:
+                indices += (indices * _math.ceil(padding_size / len(indices)))[:padding_size]
+        else:
+            indices = indices[:self.total_size]
+
+        assert len(indices) == self.total_size
+        return iter(indices)
+
+    def set_epoch(self, epoch):
+        self.epoch = epoch
+
+    def __len__(self):
+        return int(self.total_size)
