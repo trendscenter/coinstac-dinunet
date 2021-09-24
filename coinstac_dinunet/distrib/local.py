@@ -189,7 +189,7 @@ class COINNLocal:
             self.out['phase'] = Phase.COMPUTATION
 
         """Initialize learner"""
-        learner = self._get_learner_cls(learner_cls)(trainer=trainer, pool=mp_pool)
+        learner = self._get_learner_cls(learner_cls)(trainer=trainer, mp_pool=mp_pool)
 
         """Track global state among sites."""
         self.out['mode'] = learner.global_modes.get(self.state['clientId'], self.cache['mode'])

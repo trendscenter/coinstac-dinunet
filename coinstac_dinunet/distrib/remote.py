@@ -183,7 +183,7 @@ class COINNRemote:
         self.out['global_modes'] = self._set_mode()
         if _check(all, 'phase', Phase.COMPUTATION, self.input):
             """Initialize reducer"""
-            reducer = self._get_reducer_cls(reducer_cls)(trainer=trainer, pool=mp_pool)
+            reducer = self._get_reducer_cls(reducer_cls)(trainer=trainer, mp_pool=mp_pool)
 
             self.out['phase'] = Phase.COMPUTATION
             if _check(all, 'reduce', True, self.input):
