@@ -129,7 +129,7 @@ class COINNLocal:
 
     def _pretrain_local(self, trainer_cls, datahandle_cls, train_dataset, validation_dataset):
         out = {'phase': Phase.COMPUTATION}
-        if self._pretrain_args.get('epochs') and self.cache['pretrain']:
+        if self._pretrain_args.get('epochs', 0) > 0 and self.cache['pretrain']:
             cache = {**self.cache}
             cache.update(**self._pretrain_args)
             cache.update(cache.get('pretrain_args', {}))
@@ -143,7 +143,7 @@ class COINNLocal:
             out.update(**trainer.train_local(train_dataset, validation_dataset))
             out['phase'] = Phase.PRE_COMPUTATION
 
-        if self._pretrain_args.get('epochs') and any([r['pretrain'] for r in self.input['global_runs'].values()]):
+        if self._pretrain_args.get('epochs', 0) > 0 and any([r['pretrain'] for r in self.input['global_runs'].values()]):
             out['phase'] = Phase.PRE_COMPUTATION
         return out
 
