@@ -154,6 +154,9 @@ class COINNDataHandle:
             'worker_init_fn': _seed_worker if args.get('seed_all') else None
         }
 
+        for k in loader_args.keys():
+            loader_args[k] = args.get(k, loader_args.get(k))
+
         if use_padded_sampler:
             loader_args['drop_last'] = False
             loader_args['shuffle'] = False
@@ -164,9 +167,6 @@ class COINNDataHandle:
                 shuffle=loader_args['shuffle'],
                 drop_last=loader_args['drop_last']
             )
-
-        for k in loader_args.keys():
-            loader_args[k] = args.get(k, loader_args.get(k))
 
         return _DataLoader(collate_fn=safe_collate, **loader_args)
 
