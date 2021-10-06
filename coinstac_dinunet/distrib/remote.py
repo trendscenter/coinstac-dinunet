@@ -137,7 +137,8 @@ class COINNRemote:
         _utils.save_scores(self.cache, self.state['outputDirectory'] + _os.sep + self.cache['task_id'],
                            file_keys=[Key.GLOBAL_TEST_METRICS])
 
-        out['results_zip'] = f"{self.cache['task_id']}_" + '_'.join(str(_datetime.datetime.now()).split(' '))
+        out['results_zip'] = f"{self.cache['task_id']}_Global-Result_"
+        out['results_zip'] += '_'.join(str(_datetime.datetime.now()).split(' '))
         _shutil.make_archive(f"{self.state['transferDirectory']}{_os.sep}{out['results_zip']}",
                              'zip', self.state['outputDirectory'] + _os.sep + self.cache['task_id'])
         return out
