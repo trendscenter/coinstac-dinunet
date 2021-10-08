@@ -1,6 +1,7 @@
-from coinstac_dinunet import config as _conf
 import datetime as _dt
 import time as _t
+
+from coinstac_dinunet import config as _conf
 
 
 def performance_improved_(epoch, score, cache):
@@ -28,13 +29,5 @@ def stop_training_(epoch, cache):
     return False
 
 
-def duration(cache: dict, begin, key=None, t_del=None):
-    if t_del is None:
-        t_del = _dt.datetime.fromtimestamp(_t.time()) - _dt.datetime.fromtimestamp(begin)
-
-    if key is not None:
-        if cache.get(key) is None:
-            cache[key] = [t_del.total_seconds() * 1000]  # Millis
-        else:
-            cache[key].append(t_del.total_seconds() * 1000)  # Millis
-    return t_del
+def duration(begin):
+    return _dt.datetime.fromtimestamp(_t.time()) - _dt.datetime.fromtimestamp(begin)
