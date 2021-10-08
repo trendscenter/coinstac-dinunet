@@ -1,7 +1,15 @@
-from .data import COINNDataset, COINNDataHandle
-from .distrib import COINNLocal, COINNRemote
-from .trainer import COINNTrainer
-from .nn import PooledTrainer
-from .distrib import COINNLearner, COINNReducer
-from.io import COINPyService
+try:
+    import torch as _torch
+except Exception as e:
+    print(e)
+    raise ImportError(
+        '\n ******************* Pytorch not installed *********************.'
+        '\n Please install correct(compatible cuda for GPU) pytorch version.'
+        '\n *****************************************************************'
+    )
 
+from .data import COINNDataset, COINNDataHandle
+from .distrib import COINNLearner, COINNReducer
+from .distrib import COINNLocal, COINNRemote
+from .nn import PooledTrainer
+from .trainer import COINNTrainer

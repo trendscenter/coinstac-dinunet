@@ -1,4 +1,4 @@
-from .remote import COINNRemote
+from .learner import COINNLearner
 from .local import COINNLocal
 from .reducer import COINNReducer
-from .learner import COINNLearner
+from .remote import COINNRemote
