@@ -29,5 +29,10 @@ def stop_training_(epoch, cache):
     return False
 
 
-def duration(begin):
-    return _dt.datetime.fromtimestamp(_t.time()) - _dt.datetime.fromtimestamp(begin)
+def duration(cache: dict, begin, key):
+    t_del = _dt.datetime.fromtimestamp(_t.time()) - _dt.datetime.fromtimestamp(begin)
+    if cache.get(key) is None:
+        cache[key] = t_del
+    else:
+        cache[key] += t_del
+    return t_del
