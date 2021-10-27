@@ -6,6 +6,7 @@
 import json as _json
 import os as _os
 import shutil as _shutil
+import time as _time
 from os import sep as _sep
 from typing import List as _List
 
@@ -143,7 +144,8 @@ class COINNLocal:
             out.update(**trainer.train_local(train_dataset, validation_dataset))
             out['phase'] = Phase.PRE_COMPUTATION
 
-        if self._pretrain_args.get('epochs', 0) > 0 and any([r['pretrain'] for r in self.input['global_runs'].values()]):
+        if self._pretrain_args.get('epochs', 0) > 0 and any(
+                [r['pretrain'] for r in self.input['global_runs'].values()]):
             out['phase'] = Phase.PRE_COMPUTATION
         return out
 
@@ -239,9 +241,18 @@ class COINNLocal:
 
         elif self.out['phase'] == Phase.SUCCESS:
             """ This phase receives global scores from the aggregator."""
-            _shutil.copy(f"{self.state['baseDirectory']}{_sep}{self.input['results_zip']}.zip",
-                         f"{self.state['outputDirectory'] + _sep + self.cache['task_id']}{_sep}"
-                         f"{self.input['results_zip']}.zip")
+            done = False
+            zip_path = f"{self.state['baseDirectory']}{_sep}{self.input['results_zip']}.zip"
+            for i in range(3):
+                if done:
+                    break
+
+                _time.sleep(i)
+                if _os.path.exists(zip_path):
+                    _shutil.copy(zip_path,
+                                 f"{self.state['outputDirectory'] + _sep + self.cache['task_id']}{_sep}"
+                                 f"{self.input['results_zip']}.zip")
+                    done = True
 
     def _get_learner_cls(self, learner_cls):
 
