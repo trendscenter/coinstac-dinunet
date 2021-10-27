@@ -1,6 +1,6 @@
-import os as _os
-
 import numpy as _np
+import os as _os
+from functools import partial as _partial
 
 from coinstac_dinunet.distrib.learner import COINNLearner as _COINNLearner
 from coinstac_dinunet.distrib.reducer import COINNReducer as _COINNReducer
@@ -13,6 +13,16 @@ def check(logic, k, v, kw):
     for site_vars in kw.values():
         phases.append(site_vars.get(k) == v)
     return logic(phases)
+
+
+def _load(state, site, site_vars):
+    grads_file = state['baseDirectory'] + _os.sep + site + _os.sep + site_vars['dad_data']
+    return _tu.load_arrays(grads_file)
+
+
+def _cat(*data):
+    act, grad = list(zip(*data))
+    return [_np.concatenate(act), _np.concatenate(grad)]
 
 
 class DADLearner(_COINNLearner):
@@ -70,19 +80,17 @@ class DADLearner(_COINNLearner):
 class DADReducer(_COINNReducer):
     def __init__(self, **kw):
         super().__init__(**kw)
+        if not self.cache.get('reduction_chunk_size'):
+            self.cache['reduction_chunk_size'] = _math.ceil(len(self.input) / self.pool._processes)
 
     def reduce(self):
-        out = {}
-        data = []
-        for site, site_vars in self.input.items():
-            data.append(_tu.load_arrays(self.state['baseDirectory'] + _os.sep + site + _os.sep + site_vars['dad_data']))
+        out = {'reduced_dad_data': 'reduced_dad_data.npy'}
 
-        reduced_data = []
-        for _data in zip(*data):
-            act, grad = list(zip(*_data))
-            reduced_data.append([_np.concatenate(act), _np.concatenate(grad)])
+        site_data = list(self.pool.starmap(_partial(_load, self.state), self.input.items(),
+                                           chunksize=self.cache['reduction_chunk_size']))
 
-        out['reduced_dad_data'] = 'reduced_dad_data.npy'
+        reduced_data = list(
+            self.pool.starmap(_cat, list(zip(*site_data)), chunksize=self.cache['reduction_chunk_size']))
         _tu.save_arrays(self.state['transferDirectory'] + _os.sep + out['reduced_dad_data'], reduced_data)
         out['update'] = True
         return out
