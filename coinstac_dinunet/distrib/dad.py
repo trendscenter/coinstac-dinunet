@@ -1,5 +1,4 @@
 import os as _os
-
 import torch as _torch
 
 from coinstac_dinunet.utils import tensorutils as _tu
@@ -208,9 +207,10 @@ class DADParallel(_torch.nn.Module):
                 delta, act = power_iteration_BC(
                     self._local_grads[module_name].T,
                     self._activations[module_name].T,
-                    rank=self.cache.get('dad_reduction_rank', 10),
-                    numiterations=self.cache.get('dad_num_pow_iters', 5),
-                    device=self.device
+                    rank=self.cache.setdefault('dad_reduction_rank', 10),
+                    numiterations=self.cache.setdefault('dad_num_pow_iters', 5),
+                    device=self.device,
+                    tol=self.cache.setdefault('dad_tol', 1e-3)
                 )
                 data.append([act.T.detach().numpy(), delta.T.detach().numpy()])
 
