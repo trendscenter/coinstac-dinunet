@@ -32,7 +32,7 @@ def stop_training_(epoch, cache):
 def duration(cache: dict, begin, key):
     t_del = _dt.datetime.fromtimestamp(_t.time()) - _dt.datetime.fromtimestamp(begin)
     if cache.get(key) is None:
-        cache[key] = t_del
+        cache[key] = [t_del.total_seconds()]
     else:
-        cache[key] += t_del
+        cache[key].append(t_del.total_seconds())
     return t_del
