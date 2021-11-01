@@ -102,20 +102,7 @@ class MyTrainer(COINNTrainer):
 - **Extend [coinstac_dinunet.metrics.COINNMetrics](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py)**
 - **Example: [coinstac_dinunet.metrics.Prf1a](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py) for Precision, Recall, F1, and Accuracy**
 
-
-#### Default arguments:
-* ***task_name***: str = None, Name of the task. [Required]
-* ***mode***: str = None, Eg. train/test [Required]
-* ***batch_size***: int = 4 
-* ***epochs***: int = 21
-* ***learning_rate***: float = 0.001
-* ***gpus***: _List[int] = None, Eg. [0], [1], [0, 1]...
-* ***pin_memory***: bool = True, if cuda available
-* ***num_workers***: int = 0
-* ***patience***: int = 35, patience to end training by monitoring validation scores.
-* ***num_folds***: int = None, Number of k-folds. 
-* ***split_ratio***: _List[float] = (0.6, 0.2, 0.2), Exclusive to num_folds. 
-  
-- Directly passed parameters in coinstac_dinunet.nodes.COINNLocal, args passed through inputspec will override the defaults in the same order.
-- Custom data splits can be provided in the path specified by split_dir for each sites in their respective inputspecs file. This is mutually exclusive to both num_folds and split_ratio.
+#### Notes:
+* Directly passed parameters in coinstac_dinunet.nodes.COINNLocal, args passed through inputspec will override the defaults in the same order. 
+* Custom data splits can be provided in the path specified by split_dir for each sites in their respective inputspecs file. This is mutually exclusive to both num_folds and split_ratio.
 
