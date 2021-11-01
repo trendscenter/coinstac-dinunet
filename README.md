@@ -96,7 +96,7 @@ class MyTrainer(COINNTrainer):
 
 **Note: Computations can only be either CPU or GPU only.**
 
-#### Define custom metrics
+#### Define custom metrics if needed(Mostly not required)
 
 - **Extend [coinstac_dinunet.metrics.COINNMetrics](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py)**
 - **Example: [coinstac_dinunet.metrics.Prf1a](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py) for Precision, Recall, F1, and Accuracy**
