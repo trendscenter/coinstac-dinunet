@@ -98,11 +98,7 @@ class MyTrainer(COINNTrainer):
 <hr />
 
 #### Define custom metrics if needed(Mostly not required)
-
 - **Extend [coinstac_dinunet.metrics.COINNMetrics](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py)**
 - **Example: [coinstac_dinunet.metrics.Prf1a](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py) for Precision, Recall, F1, and Accuracy**
 
-#### Notes:
-* Directly passed parameters in coinstac_dinunet.nodes.COINNLocal, args passed through inputspec will override the defaults in the same order. 
-* Custom data splits can be provided in the path specified by split_dir for each sites in their respective inputspecs file. This is mutually exclusive to both num_folds and split_ratio.
-
+#### Define [custom DataHandle](https://github.com/trendscenter/dinunet_implementations/blob/8411bb95a0bef86bf6451b39f580f79c3c74eb94/comps/fs/__init__.py#L75) if necessary.
