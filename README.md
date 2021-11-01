@@ -95,8 +95,7 @@ class MyTrainer(COINNTrainer):
 * Add entries to the compspec file [CPU](https://github.com/trendscenter/dinunet_implementations/blob/master/compspec.json), [GPU](https://github.com/trendscenter/dinunet_implementations_gpu/blob/master/compspec.json)
 
 ```diff
- - Note: Computations can only be either CPU or GPU only.
-       - heterogeneous sites are not allowed.
+ - Note: Computations can only be either CPU or GPU only. 
 ```
 #### Define custom metrics
 
