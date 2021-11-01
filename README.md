@@ -32,10 +32,11 @@ torchvision==0.6.1+cu92
 ![DINUNET](assets/dinunet.png)
 
 
-### Full working examples
-1. **[FreeSurfer volumes classification.](https://github.com/trendscenter/dinunet_fsv/)**
-2. **[VBM 3D images classification.](https://github.com/trendscenter/dinunet_vbm)**
-### General use case:
+### Working examples:
+1. **[FreeSurfer volumes classification.](https://github.com/trendscenter/dinunet_implementations/)**
+2. **[VBM 3D images classification.](https://github.com/trendscenter/dinunet_implementations_gpu)**
+
+### Add a new NN computation to COINSTAC:
 #### imports
 ```python
 from coinstac_dinunet import COINNDataset, COINNTrainer, COINNLocal
@@ -88,63 +89,21 @@ class MyTrainer(COINNTrainer):
                 'metrics': score, 'prediction': predicted}
 ```
 
-#### 3. Define remote node in remote.py
+#### 3. Add entries to:
+* Local node entry point [CPU](https://github.com/trendscenter/dinunet_implementations/blob/master/local.py), [GPU](https://github.com/trendscenter/dinunet_implementations_gpu/blob/master/local.py)
+* Aggregator node point [CPU](https://github.com/trendscenter/dinunet_implementations/blob/master/remote.py), [GPU](https://github.com/trendscenter/dinunet_implementations_gpu/blob/master/local.py)
+* Add entries to the compspec file [CPU](https://github.com/trendscenter/dinunet_implementations/blob/master/compspec.json), [GPU](https://github.com/trendscenter/dinunet_implementations_gpu/blob/master/compspec.json)
 
-```python
-from coinstac_dinunet.metrics import Prf1a
-from  coinstac_dinunet import COINNRemote
-class MyRemote(COINNRemote):
-    def _set_monitor_metric(self):
-        self.cache['monitor_metric'] = 'f1', 'maximize'
-
-    def _set_log_headers(self):
-        self.cache['log_header'] = 'Loss|Accuracy,F1'
-
-    def _new_metrics(self):
-        return Prf1a()
+```diff
+-- Note: Computations can only be either CPU or GPU only, heterogeneous sites are not allowed. --
 ```
-#### 4. Define the entry point
-```python
-from coinstac_dinunet import COINNLocal
-from coinstac_dinunet.io import COINPyService
-
-
-class Server(COINPyService):
-
-    def get_local(self, msg) -> callable:
-        pretrain_args = {'epochs': 51, 'batch_size': 16}
-        local = COINNLocal(cache=self.cache, input=msg['data']['input'],
-                           pretrain_args=None, batch_size=16,
-                           state=msg['data']['state'], epochs=21, patience=21, task_id='fsv_quick')
-        return local
-
-    def get_remote(self, msg) -> callable:
-        remote = MyRemote(cache=self.cache, input=msg['data']['input'],
-                          state=msg['data']['state'])
-        return remote
-
-    def get_local_compute_args(self, msg) -> list:
-        """
-        MyDataHandle and MyLearner are optional
-            - MyDataHandle: Can have any custom data loading logic.
-            - MyLearner: Can have any custom learning technique 
-                when paired with MyReducer argument in get_local_compute_args.
-        """
-        return [MyTrainer, MyDataset, MyDataHandle, MyLearner]
-
-
-server = Server(verbose=False)
-server.start()
-
-```
-
 #### Define custom metrics
 
 - **Extend [coinstac_dinunet.metrics.COINNMetrics](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py)**
 - **Example: [coinstac_dinunet.metrics.Prf1a](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py) for Precision, Recall, F1, and Accuracy**
 
 
-### Default arguments:
+#### Default arguments:
 * ***task_name***: str = None, Name of the task. [Required]
 * ***mode***: str = None, Eg. train/test [Required]
 * ***batch_size***: int = 4 
@@ -153,10 +112,7 @@ server.start()
 * ***gpus***: _List[int] = None, Eg. [0], [1], [0, 1]...
 * ***pin_memory***: bool = True, if cuda available
 * ***num_workers***: int = 0
-* ***load_limit***: int = float('inf'), Limit on dataset to load for debugging purpose.
-* ***pretrained_path***: str = None, Path to pretrained weights
-* ***patience***: int = 5, patience to end training by monitoring validation scores.
-* ***load_sparse***: bool = False, Load each data item in separate loader to reconstruct images from patches, if needed.
+* ***patience***: int = 35, patience to end training by monitoring validation scores.
 * ***num_folds***: int = None, Number of k-folds. 
 * ***split_ratio***: _List[float] = (0.6, 0.2, 0.2), Exclusive to num_folds. 
   
