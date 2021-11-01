@@ -31,7 +31,8 @@ pip install coinstac-dinunet
 1. **[FreeSurfer volumes classification.](https://github.com/trendscenter/dinunet_implementations/)**
 2. **[VBM 3D images classification.](https://github.com/trendscenter/dinunet_implementations_gpu)**
 
-### Development guide - Add a new NN computation to COINSTAC:
+### [Running an analysis](https://github.com/trendscenter/coinstac-instructions/blob/master/coinstac-how-to-run-analysis.md) in the coinstac App.
+### Add a new NN computation to COINSTAC (Development guide):
 #### imports
 ```python
 from coinstac_dinunet import COINNDataset, COINNTrainer, COINNLocal
@@ -85,13 +86,16 @@ class MyTrainer(COINNTrainer):
 
 #### 3. Add entries to:
 * Local node entry point [CPU](https://github.com/trendscenter/dinunet_implementations/blob/master/local.py), [GPU](https://github.com/trendscenter/dinunet_implementations_gpu/blob/master/local.py)
-* Aggregator node point [CPU](https://github.com/trendscenter/dinunet_implementations/blob/master/remote.py), [GPU](https://github.com/trendscenter/dinunet_implementations_gpu/blob/master/local.py)
+* Aggregator node point [CPU](https://github.com/trendscenter/dinunet_implementations/blob/master/remote.py), [GPU](https://github.com/trendscenter/dinunet_implementations_gpu/blob/master/remote.py)
 * compspec.json file [CPU](https://github.com/trendscenter/dinunet_implementations/blob/master/compspec.json), [GPU](https://github.com/trendscenter/dinunet_implementations_gpu/blob/master/compspec.json)
 
 <hr />
 
-#### Define custom metrics:
-- **Extend [coinstac_dinunet.metrics.COINNMetrics](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py)**
-- **Example: [coinstac_dinunet.metrics.Prf1a](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py) for Precision, Recall, F1, and Accuracy**
+#### Advanced use cases:
 
-#### Define [custom DataHandle](https://github.com/trendscenter/dinunet_implementations/blob/8411bb95a0bef86bf6451b39f580f79c3c74eb94/comps/fs/__init__.py#L75)
+* **Define custom metrics:**
+  - Extend [coinstac_dinunet.metrics.COINNMetrics](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py)
+  - Example: [coinstac_dinunet.metrics.Prf1a](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py) for Precision, Recall, F1, and Accuracy
+
+* Define [custom DataHandle](https://github.com/trendscenter/dinunet_implementations/blob/8411bb95a0bef86bf6451b39f580f79c3c74eb94/comps/fs/__init__.py#L75)
+* Define [Custom Learner](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/distrib/learner.py) / [custom Aggregator](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/distrib/reducer.py) (Default is Distributed SGD)
