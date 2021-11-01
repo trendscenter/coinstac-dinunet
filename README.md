@@ -95,6 +95,8 @@ class MyTrainer(COINNTrainer):
 
 **Note: Computations can only be either CPU or GPU only.**
 
+<hr />
+
 #### Define custom metrics if needed(Mostly not required)
 
 - **Extend [coinstac_dinunet.metrics.COINNMetrics](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py)**
