@@ -36,14 +36,12 @@ torchvision==0.6.1+cu92
 1. **[FreeSurfer volumes classification.](https://github.com/trendscenter/dinunet_implementations/)**
 2. **[VBM 3D images classification.](https://github.com/trendscenter/dinunet_implementations_gpu)**
 
-### Add a new NN computation to COINSTAC:
+### Development guide - Add a new NN computation to COINSTAC:
 #### imports
 ```python
 from coinstac_dinunet import COINNDataset, COINNTrainer, COINNLocal
 from coinstac_dinunet.metrics import COINNAverages, Prf1a
 ```
-
-### Development guide
 
 #### 1. Define Data Loader
 ```python
