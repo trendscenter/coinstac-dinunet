@@ -119,6 +119,3 @@ class MyTrainer(COINNTrainer):
 - Directly passed parameters in coinstac_dinunet.nodes.COINNLocal, args passed through inputspec will override the defaults in the same order.
 - Custom data splits can be provided in the path specified by split_dir for each sites in their respective inputspecs file. This is mutually exclusive to both num_folds and split_ratio.
 
-<hr >
-
-
