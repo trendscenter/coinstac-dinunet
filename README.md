@@ -94,9 +94,8 @@ class MyTrainer(COINNTrainer):
 * Aggregator node point [CPU](https://github.com/trendscenter/dinunet_implementations/blob/master/remote.py), [GPU](https://github.com/trendscenter/dinunet_implementations_gpu/blob/master/local.py)
 * Add entries to the compspec file [CPU](https://github.com/trendscenter/dinunet_implementations/blob/master/compspec.json), [GPU](https://github.com/trendscenter/dinunet_implementations_gpu/blob/master/compspec.json)
 
-```diff
- -Note: Computations can only be either CPU or GPU only. 
-```
+<span style="color:red">some *Note: Computations can only be either CPU or GPU only.* text</span>.
+
 #### Define custom metrics
 
 - **Extend [coinstac_dinunet.metrics.COINNMetrics](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py)**
