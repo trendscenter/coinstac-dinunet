@@ -97,5 +97,5 @@ class MyTrainer(COINNTrainer):
   - Extend [coinstac_dinunet.metrics.COINNMetrics](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py)
   - Example: [coinstac_dinunet.metrics.Prf1a](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py) for Precision, Recall, F1, and Accuracy
 
-* Define [custom DataHandle](https://github.com/trendscenter/dinunet_implementations/blob/8411bb95a0bef86bf6451b39f580f79c3c74eb94/comps/fs/__init__.py#L75)
-* Define [Custom Learner](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/distrib/learner.py) / [custom Aggregator](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/distrib/reducer.py) (Default is Distributed SGD)
+* **Define [custom DataHandle](https://github.com/trendscenter/dinunet_implementations/blob/8411bb95a0bef86bf6451b39f580f79c3c74eb94/comps/fs/__init__.py#L75)**
+* **Define [Custom Learner](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/distrib/learner.py) / [custom Aggregator](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/distrib/reducer.py) (Default is Distributed SGD)**
