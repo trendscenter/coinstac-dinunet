@@ -8,12 +8,7 @@
 ```
 pip install coinstac-dinunet
 ```
-#### Install supported pytorch & torchvision binaries in your device/docker ecosystem:
-```
-torch==1.5.1+cu92
-torchvision==0.6.1+cu92
-```
-
+#### Specify supported packages like pytorch & torchvision in a requirements.txt file
 #### Highlights:
 ```
 1. Handles multi-network/complex training schemes.
@@ -93,12 +88,10 @@ class MyTrainer(COINNTrainer):
 * Aggregator node point [CPU](https://github.com/trendscenter/dinunet_implementations/blob/master/remote.py), [GPU](https://github.com/trendscenter/dinunet_implementations_gpu/blob/master/local.py)
 * compspec.json file [CPU](https://github.com/trendscenter/dinunet_implementations/blob/master/compspec.json), [GPU](https://github.com/trendscenter/dinunet_implementations_gpu/blob/master/compspec.json)
 
-**Note: Computations can only be either CPU or GPU only.**
-
 <hr />
 
-#### Define custom metrics if needed(Mostly not required)
+#### Define custom metrics:
 - **Extend [coinstac_dinunet.metrics.COINNMetrics](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py)**
 - **Example: [coinstac_dinunet.metrics.Prf1a](https://github.com/trendscenter/coinstac-dinunet/blob/main/coinstac_dinunet/metrics/metrics.py) for Precision, Recall, F1, and Accuracy**
 
-#### Define [custom DataHandle](https://github.com/trendscenter/dinunet_implementations/blob/8411bb95a0bef86bf6451b39f580f79c3c74eb94/comps/fs/__init__.py#L75) if necessary.
+#### Define [custom DataHandle](https://github.com/trendscenter/dinunet_implementations/blob/8411bb95a0bef86bf6451b39f580f79c3c74eb94/comps/fs/__init__.py#L75)
