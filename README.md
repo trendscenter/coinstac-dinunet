@@ -91,7 +91,7 @@ class MyTrainer(COINNTrainer):
 #### 3. Add entries to:
 * Local node entry point [CPU](https://github.com/trendscenter/dinunet_implementations/blob/master/local.py), [GPU](https://github.com/trendscenter/dinunet_implementations_gpu/blob/master/local.py)
 * Aggregator node point [CPU](https://github.com/trendscenter/dinunet_implementations/blob/master/remote.py), [GPU](https://github.com/trendscenter/dinunet_implementations_gpu/blob/master/local.py)
-* Add entries to the compspec file [CPU](https://github.com/trendscenter/dinunet_implementations/blob/master/compspec.json), [GPU](https://github.com/trendscenter/dinunet_implementations_gpu/blob/master/compspec.json)
+* compspec.json file [CPU](https://github.com/trendscenter/dinunet_implementations/blob/master/compspec.json), [GPU](https://github.com/trendscenter/dinunet_implementations_gpu/blob/master/compspec.json)
 
 **Note: Computations can only be either CPU or GPU only.**
 
