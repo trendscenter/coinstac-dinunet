@@ -26,7 +26,7 @@ class COINNReducer:
         self.pool = mp_pool
         self.dtype = f"float{self.cache.setdefault('precision_bits', _conf.grad_precision_bit)}"
 
-        self._chuck_size = self.cache.setdefault(
+        self._chunk_size = self.cache.setdefault(
             'reduction_chunk_size',
             _math.ceil(len(self.input) / mp_pool._processes)
         )
@@ -36,9 +36,9 @@ class COINNReducer:
         out = {'avg_grads_file': _conf.avg_grads_file}
 
         grads = list(self.pool.starmap(_partial(_load, self.state), self.input.items(),
-                                       chunksize=self._chuck_size))
+                                       chunksize=self._chunk_size))
 
-        avg_grads = list(self.pool.starmap(_mean, list(zip(*grads)), chunksize=self._chuck_size))
+        avg_grads = list(self.pool.starmap(_mean, list(zip(*grads)), chunksize=self._chunk_size))
         avg_grads = [arr.astype(self.dtype) for arr in avg_grads]
 
         _tu.save_arrays(
