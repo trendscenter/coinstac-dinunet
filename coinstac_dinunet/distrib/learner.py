@@ -52,7 +52,10 @@ class COINNLearner:
         it, out = self.backward()
         first_model = list(self.trainer.nn.keys())[0]
         out['grads_file'] = _conf.grads_file
-        grads = _tu.extract_grads(self.trainer.nn[first_model])
+        grads = _tu.extract_grads(
+            self.trainer.nn[first_model],
+            precision_bits=self.cache.setdefault('precision_bits', _conf.grad_precision_bit)
+        )
         _tu.save_arrays(
             self.state['transferDirectory'] + _sep + out['grads_file'],
             _np.array(grads, dtype=object)

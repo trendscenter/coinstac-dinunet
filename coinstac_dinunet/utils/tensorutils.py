@@ -6,8 +6,6 @@
 import numpy as _np
 import torch as _torch
 
-import coinstac_dinunet.config as _conf
-
 
 def safe_concat(large, small):
     r"""
@@ -39,12 +37,14 @@ def initialize_weights(*models):
                 module.bias.data.zero_()
 
 
-def caste_ndarray(a):
-    return a.astype(f'float{_conf.grad_precision_bit}')
+def caste_ndarray(a, precision_bits=32):
+    return a.astype(f'float{precision_bits}')
 
 
-def extract_grads(model):
-    return [caste_ndarray(p.grad.detach().cpu().numpy()) for p in model.parameters()]
+def extract_grads(model, precision_bits: int):
+    return [
+        caste_ndarray(p.grad.detach().cpu().numpy(), precision_bits) for p in model.parameters()
+    ]
 
 
 def save_arrays(file_path, arrays):
