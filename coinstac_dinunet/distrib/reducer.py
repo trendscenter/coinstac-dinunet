@@ -36,7 +36,10 @@ class COINNReducer:
                                        chunksize=self.cache['reduction_chunk_size']))
 
         avg_grads = list(self.pool.starmap(_mean, list(zip(*grads)), chunksize=self.cache['reduction_chunk_size']))
-        _tu.save_arrays(self.state['transferDirectory'] + _os.sep + out['avg_grads_file'], avg_grads)
-        out['update'] = True
+        _tu.save_arrays(
+            self.state['transferDirectory'] + _os.sep + out['avg_grads_file'],
+            _np.array(avg_grads, dtype=object)
+        )
 
+        out['update'] = True
         return out

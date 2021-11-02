@@ -1,6 +1,6 @@
 import os as _os
 import torch as _torch
-
+import numpy as _np
 from coinstac_dinunet.utils import tensorutils as _tu
 
 _SKIP_NORM_Layers = [_torch.nn.BatchNorm1d, _torch.nn.LayerNorm, _torch.nn.GroupNorm]
@@ -186,7 +186,7 @@ class DADParallel(_torch.nn.Module):
                     _sync(self._hierarchy_key(module_name, child_name), child, data)
             elif self._is_dad_module.get(module_name):
                 act_tall, local_grad_tall = data.pop()
-                dad_params["weight"].grad.data = (act_tall.T.mm(local_grad_tall)).T.contiguous()
+                dad_params["weight"].grad.data = (act_tall.T.mm(local_grad_tall.squeeze())).T.contiguous()
                 if dad_params.get("bias") is not None:
                     dad_params[f"bias"].grad.data = local_grad_tall.sum(0)
 
@@ -212,12 +212,15 @@ class DADParallel(_torch.nn.Module):
                     device=self.device,
                     tol=self.cache.setdefault('dad_tol', 1e-3)
                 )
-                data.append([act.T.detach().numpy(), delta.T.detach().numpy()])
+                data.append([act.T.detach().numpy(), delta.T.detach().numpy()[None, ...]])
 
         out, data = {}, []
         for ch_name, ch in list(self.module.named_children())[::-1]:
             _backward(ch_name, ch, data)
 
         out['dad_data'] = 'dad_data.npy'
-        _tu.save_arrays(self.state['transferDirectory'] + _os.sep + out['dad_data'], data)
+        _tu.save_arrays(
+            self.state['transferDirectory'] + _os.sep + out['dad_data'],
+            _np.array(data, dtype=object)
+        )
         return out

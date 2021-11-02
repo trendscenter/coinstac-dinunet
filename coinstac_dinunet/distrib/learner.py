@@ -3,6 +3,7 @@ import torch as _torch
 
 from coinstac_dinunet import config as _conf
 from coinstac_dinunet.utils import tensorutils as _tu
+import numpy as _np
 
 
 class COINNLearner:
@@ -52,6 +53,9 @@ class COINNLearner:
         first_model = list(self.trainer.nn.keys())[0]
         out['grads_file'] = _conf.grads_file
         grads = _tu.extract_grads(self.trainer.nn[first_model])
-        _tu.save_arrays(self.state['transferDirectory'] + _sep + out['grads_file'], grads)
+        _tu.save_arrays(
+            self.state['transferDirectory'] + _sep + out['grads_file'],
+            _np.array(grads, dtype=object)
+        )
         out['reduce'] = True
         return it, out
