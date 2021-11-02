@@ -2,7 +2,6 @@ import torch as _torch
 import sys as _sys
 import random as _random
 
-grad_precision_bit = 32
 grad_file_ext = '.npy'
 
 grads_file = f'grads{grad_file_ext}'

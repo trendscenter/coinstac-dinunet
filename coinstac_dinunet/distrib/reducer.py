@@ -24,7 +24,7 @@ class COINNReducer:
         self.state = trainer.state
         self.trainer = trainer
         self.pool = mp_pool
-        self.dtype = f"float{self.cache.setdefault('precision_bits', _conf.grad_precision_bit)}"
+        self.dtype = f"float{self.cache['precision_bits']}"
 
         self._chunk_size = self.cache.setdefault(
             'reduction_chunk_size',

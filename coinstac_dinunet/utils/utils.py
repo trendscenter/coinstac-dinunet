@@ -19,14 +19,7 @@ def performance_improved_(epoch, score, cache):
 
 
 def stop_training_(epoch, cache):
-    if epoch - cache['best_val_epoch'] > cache.get('patience', cache['epochs']):
-        return True
-
-    if cache['metric_direction'] == 'maximize':
-        return cache['best_val_score'] == _conf.score_high
-    elif cache['metric_direction'] == 'minimize':
-        return cache['best_val_score'] == _conf.score_low
-    return False
+    return epoch - cache['best_val_epoch'] > cache.get('patience', cache['epochs'])
 
 
 def duration(cache: dict, begin, key):
