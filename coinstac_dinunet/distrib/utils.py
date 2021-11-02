@@ -23,7 +23,7 @@ def _load(state, site, site_vars):
 
 def _cat(*data):
     act, grad = list(zip(*data))
-    return [_np.concatenate(act), _np.concatenate(grad)]
+    return [_np.concatenate(act), _np.concatenate(grad, 1).squeeze()[None, ...]]
 
 
 class DADLearner(_COINNLearner):
@@ -92,6 +92,9 @@ class DADReducer(_COINNReducer):
 
         reduced_data = list(
             self.pool.starmap(_cat, list(zip(*site_data)), chunksize=self.cache['reduction_chunk_size']))
-        _tu.save_arrays(self.state['transferDirectory'] + _os.sep + out['reduced_dad_data'], reduced_data)
+        _tu.save_arrays(
+            self.state['transferDirectory'] + _os.sep + out['reduced_dad_data'],
+            _np.array(reduced_data, dtype=object)
+        )
         out['update'] = True
         return out
