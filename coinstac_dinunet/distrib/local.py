@@ -47,6 +47,9 @@ class COINNLocal:
                  monitor_metric='f1',
                  metric_direction='maximize',
                  log_header='Loss|Accuracy,F1',
+                 agg_engine='dSGD',
+                 num_reducers=2,
+                 precision_bits=32,
                  **kw):
 
         self.out = {}
@@ -75,6 +78,9 @@ class COINNLocal:
         self._args['monitor_metric'] = monitor_metric
         self._args['metric_direction'] = metric_direction
         self._args['log_header'] = log_header
+        self._args['agg_engine'] = agg_engine
+        self._args['num_reducers'] = num_reducers
+        self._args['precision_bits'] = precision_bits
 
         self._args.update(**kw)
         self._args = _FrozenDict(self._args)

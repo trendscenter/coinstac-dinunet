@@ -14,7 +14,7 @@ class COINNLearner:
         self.trainer = trainer
         self.global_modes = self.input.get('global_modes', {})
         self.pool = mp_pool
-        self.dtype = f"float{self.cache.setdefault('precision_bits', _conf.grad_precision_bit)}"
+        self.dtype = f"float{self.cache['precision_bits']}"
 
     def step(self) -> dict:
         out = {}
