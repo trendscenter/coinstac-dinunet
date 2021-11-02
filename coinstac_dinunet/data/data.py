@@ -85,14 +85,11 @@ def _seed_worker(worker_id):
 class COINNDataHandle:
 
     def __init__(self, cache=None, input=None, state=None, dataloader_args=None, **kw):
-        if dataloader_args is None:
-            dataloader_args = cache.get('dataloader_args', {})
-
         self.cache = cache
         self.input = input
         self.state = state
-        self.dataset = self.cache.get('dataset', {})
-        self.dataloader_args = _utils.FrozenDict(dataloader_args)
+        self.dataset = self.cache.setdefault('dataset', {})
+        self.dataloader_args = _utils.FrozenDict(cache.get('dataloader_args', dataloader_args))
 
     def get_dataset(self, handle_key, files, dataset_cls=None):
         dataset = dataset_cls(mode=handle_key, limit=self.cache['load_limit'])

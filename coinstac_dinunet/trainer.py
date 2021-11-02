@@ -14,9 +14,9 @@ from .nn import NNTrainer as _NNTrainer
 class COINNTrainer(_NNTrainer, ABC):
     def __init__(self, **kw):
         super().__init__(**kw)
-        self.nn = self.cache.get('nn', {})
-        self.device = self.cache.get('device', {})
-        self.optimizer = self.cache.get('optimizer', {})
+        self.nn = self.cache.setdefault('nn', {})
+        self.device = self.cache.setdefault('device', {})
+        self.optimizer = self.cache.setdefault('optimizer', {})
 
     def _save_if_better(self, epoch, val_metrics):
         r"""

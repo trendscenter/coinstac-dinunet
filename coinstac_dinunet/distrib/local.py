@@ -17,6 +17,7 @@ from coinstac_dinunet.data import COINNDataHandle as _DataHandle
 from coinstac_dinunet.distrib.learner import COINNLearner as _dSGDLearner
 from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 from .utils import DADLearner as _DADLearner
+import traceback as _tback
 
 
 class COINNLocal:
@@ -112,12 +113,6 @@ class COINNLocal:
             out['data_size'][k] = dict((key, len(sp.get(key, []))) for key in sp)
         return out
 
-    def _attach_global(self, trainer):
-        self.cache['nn'] = trainer.nn
-        self.cache['device'] = trainer.device
-        self.cache['optimizer'] = trainer.optimizer
-        self.cache['dataset'] = trainer.data_handle.dataset
-
     def _next_run(self, trainer):
         out = {}
         self.cache.update(cursor=0)
@@ -130,15 +125,13 @@ class COINNLocal:
         self.cache['best_nn_state'] = f"best.{self.cache['task_id']}-{self.cache['split_ix']}.pt"
         self.cache['latest_nn_state'] = f"latest.{self.cache['task_id']}-{self.cache['split_ix']}.pt"
         out['phase'] = Phase.COMPUTATION
-        self._attach_global(trainer)
         return out
 
     def _pretrain_local(self, trainer_cls, datahandle_cls, train_dataset, validation_dataset):
         out = {'phase': Phase.COMPUTATION}
         if self._pretrain_args.get('epochs', 0) > 0 and self.cache['pretrain']:
             cache = {**self.cache}
-            cache.update(**self._pretrain_args)
-            cache.update(cache.get('pretrain_args', {}))
+            cache.update(cache.get('pretrain_args', self._pretrain_args))
             trainer = trainer_cls(data_handle=datahandle_cls(
                 cache=self.cache, input=self.input, state=self.state,
                 dataloader_args=self._dataloader_args
@@ -269,5 +262,10 @@ class COINNLocal:
         return learner_cls
 
     def __call__(self, *args, **kwargs):
-        self.compute(*args, **kwargs)
-        return {'output': self.out}
+        try:
+            self.compute(*args, **kwargs)
+            return {'output': self.out}
+        except:
+            _tback.print_exc()
+            raise Exception(self.out)
+
