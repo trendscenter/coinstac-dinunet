@@ -1,7 +1,6 @@
 import torch as _torch
 import sys as _sys
 import random as _random
-import argparse as _ap
 
 grad_precision_bit = 16
 grad_file_ext = '.npy'  # numpy
