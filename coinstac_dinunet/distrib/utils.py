@@ -36,8 +36,7 @@ class DADLearner(_COINNLearner):
                 input=self.input,
                 state=self.state,
                 device=self.trainer.device['gpu'],
-                reduction_rank=self.cache.get('dad_reduction_rank', 10),
-                num_pow_iters=self.cache.get('num_pow_iters', 5)
+                dtype=self.dtype
             )
 
     def step(self):

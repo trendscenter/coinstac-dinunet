@@ -94,9 +94,7 @@ def _dad_trainable_module(module):
 
 
 class DADParallel(_torch.nn.Module):
-    def __init__(self, module, cache=None, input=None, state=None, device=None,
-                 dtype='float32', reduction_rank=5, num_pow_iters=1,
-                 **kw):
+    def __init__(self, module, cache=None, input=None, state=None, device=None, dtype='float32', **kw):
         super().__init__()
         self.module = module.module if isinstance(module, DADParallel) else module
         self.cache = cache
@@ -104,8 +102,6 @@ class DADParallel(_torch.nn.Module):
         self.state = state
         self.device = device
         self.dtype = dtype
-        self.reduction_rank = reduction_rank
-        self.num_pow_iters = num_pow_iters
         self._is_dad_module = self.cache.setdefault('is_dad_module', {})
         self._reset()
 
