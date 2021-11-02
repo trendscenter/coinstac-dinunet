@@ -2,9 +2,8 @@ import torch as _torch
 import sys as _sys
 import random as _random
 
-grad_precision_bit = 16
+grad_precision_bit = 32
 grad_file_ext = '.npy'  # numpy
-min_batch_size = 4
 
 grads_file = f'grads{grad_file_ext}'
 avg_grads_file = f'avg_grads{grad_file_ext}'
