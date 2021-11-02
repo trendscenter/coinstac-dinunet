@@ -37,13 +37,13 @@ def initialize_weights(*models):
                 module.bias.data.zero_()
 
 
-def caste_ndarray(a, precision_bits=32):
-    return a.astype(f'float{precision_bits}')
+def caste_ndarray(a, dtype='float32'):
+    return a.astype(dtype)
 
 
-def extract_grads(model, precision_bits: int):
+def extract_grads(model, dtype='float32'):
     return [
-        caste_ndarray(p.grad.detach().cpu().numpy(), precision_bits) for p in model.parameters()
+        caste_ndarray(p.grad.detach().cpu().numpy(), dtype) for p in model.parameters()
     ]
 
 
