@@ -14,6 +14,7 @@ class COINNLearner:
         self.trainer = trainer
         self.global_modes = self.input.get('global_modes', {})
         self.pool = mp_pool
+        self.dtype = f"float{self.cache.setdefault('precision_bits', _conf.grad_precision_bit)}"
 
     def step(self) -> dict:
         out = {}
@@ -52,10 +53,7 @@ class COINNLearner:
         it, out = self.backward()
         first_model = list(self.trainer.nn.keys())[0]
         out['grads_file'] = _conf.grads_file
-        grads = _tu.extract_grads(
-            self.trainer.nn[first_model],
-            precision_bits=self.cache.setdefault('precision_bits', _conf.grad_precision_bit)
-        )
+        grads = _tu.extract_grads(self.trainer.nn[first_model], dtype=self.dtype)
         _tu.save_arrays(
             self.state['transferDirectory'] + _sep + out['grads_file'],
             _np.array(grads, dtype=object)

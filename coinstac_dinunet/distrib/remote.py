@@ -15,6 +15,7 @@ from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.vision import plotter as _plot
 from .reducer import COINNReducer as _dSGDReducer
 from .utils import DADReducer as _DADReducer, check as _check
+import traceback as _tback
 
 
 class EmptyDataHandle:
@@ -253,5 +254,12 @@ class COINNRemote:
         return reducer_cls
 
     def __call__(self, *args, **kwargs):
-        self.compute(*args, **kwargs)
-        return {'output': self.out, 'success': _check(all, 'phase', Phase.SUCCESS, self.input)}
+        try:
+            self.compute(*args, **kwargs)
+            return {
+                'output': self.out,
+                'success': _check(all, 'phase', Phase.SUCCESS, self.input)
+            }
+        except:
+            _tback.print_exc()
+            raise Exception(self.out)

@@ -87,11 +87,22 @@ class DADReducer(_COINNReducer):
     def reduce(self):
         out = {'reduced_dad_data': 'reduced_dad_data.npy'}
 
-        site_data = list(self.pool.starmap(_partial(_load, self.state), self.input.items(),
-                                           chunksize=self.cache['reduction_chunk_size']))
+        site_data = list(
+            self.pool.starmap(
+                _partial(_load, self.state), self.input.items(),
+                chunksize=self.cache['reduction_chunk_size']
+            )
+        )
 
         reduced_data = list(
-            self.pool.starmap(_cat, list(zip(*site_data)), chunksize=self.cache['reduction_chunk_size']))
+            self.pool.starmap(
+                _cat, list(zip(*site_data)),
+                chunksize=self.cache['reduction_chunk_size']
+            )
+        )
+
+        reduced_data = [[a1.astype(self.dtype), a2.astype(self.dtype)] for a1, a2 in reduced_data]
+
         _tu.save_arrays(
             self.state['transferDirectory'] + _os.sep + out['reduced_dad_data'],
             _np.array(reduced_data, dtype=object)

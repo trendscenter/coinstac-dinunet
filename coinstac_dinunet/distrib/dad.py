@@ -94,7 +94,8 @@ def _dad_trainable_module(module):
 
 
 class DADParallel(_torch.nn.Module):
-    def __init__(self, module, cache=None, input=None, state=None, device=None, reduction_rank=5, num_pow_iters=1,
+    def __init__(self, module, cache=None, input=None, state=None, device=None,
+                 dtype='float32', reduction_rank=5, num_pow_iters=1,
                  **kw):
         super().__init__()
         self.module = module.module if isinstance(module, DADParallel) else module
@@ -102,9 +103,10 @@ class DADParallel(_torch.nn.Module):
         self.input = input
         self.state = state
         self.device = device
-        self._is_dad_module = {}
+        self.dtype = dtype
         self.reduction_rank = reduction_rank
         self.num_pow_iters = num_pow_iters
+        self._is_dad_module = self.cache.setdefault('is_dad_module', {})
         self._reset()
 
     def _reset(self):
@@ -184,15 +186,20 @@ class DADParallel(_torch.nn.Module):
             if len(dad_children) > 0:
                 for child_name, child in dad_children.items():
                     _sync(self._hierarchy_key(module_name, child_name), child, data)
+
             elif self._is_dad_module.get(module_name):
                 act_tall, local_grad_tall = data.pop()
-                dad_params["weight"].grad.data = (act_tall.T.mm(local_grad_tall.squeeze())).T.contiguous()
+
+                act_tall = _torch.tensor(act_tall, dtype=_torch.float32)
+                local_grad_tall = _torch.tensor(local_grad_tall.squeeze(), dtype=_torch.float32)
+
+                dad_params["weight"].grad.data = (act_tall.T.mm(local_grad_tall)).T.contiguous()
                 if dad_params.get("bias") is not None:
                     dad_params[f"bias"].grad.data = local_grad_tall.sum(0)
 
-        reduced_data = _tu.load_arrays(self.state['baseDirectory'] + _os.sep + self.input['reduced_dad_data'])
+        _data = _tu.load_arrays(self.state['baseDirectory'] + _os.sep + self.input['reduced_dad_data']).tolist()[::-1]
         for ch_name, ch in list(self.module.named_children())[::-1]:
-            _sync(ch_name, ch, reduced_data)
+            _sync(ch_name, ch, _data)
 
     def dad_backward(self):
 
@@ -212,7 +219,8 @@ class DADParallel(_torch.nn.Module):
                     device=self.device,
                     tol=self.cache.setdefault('dad_tol', 1e-3)
                 )
-                data.append([act.T.detach().numpy(), delta.T.detach().numpy()[None, ...]])
+                data.append([act.T.detach().numpy().astype(self.dtype),
+                             delta.T.detach().numpy().astype(self.dtype)[None, ...]])
 
         out, data = {}, []
         for ch_name, ch in list(self.module.named_children())[::-1]:
