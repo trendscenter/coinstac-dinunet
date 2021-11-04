@@ -13,11 +13,11 @@ def _load(state, site, site_vars):
     return _tu.load_arrays(grads_file)
 
 
-def _mean(*data):
+def _mean(dtype, *data):
     """
     Starmap calls by doing func(*data) itself so dont have to do data[0]
     """
-    return _np.array(data).mean(0)
+    return _np.array(data).mean(0).astype(dtype)
 
 
 class COINNReducer:
@@ -38,11 +38,19 @@ class COINNReducer:
         """ Average each sites gradients and pass it to all sites. """
         out = {'avg_grads_file': _conf.avg_grads_file}
 
-        grads = list(self.pool.starmap(_partial(_load, self.state), self.input.items(),
-                                       chunksize=self._chunk_size))
+        grads = list(
+            self.pool.starmap(
+                _partial(_load, self.state), self.input.items(),
+                chunksize=self._chunk_size
+            )
+        )
 
-        avg_grads = list(self.pool.starmap(_mean, list(zip(*grads)), chunksize=self._chunk_size))
-        avg_grads = [arr.astype(self.dtype) for arr in avg_grads]
+        avg_grads = list(
+            self.pool.starmap(
+                _partial(_mean, self.dtype), list(zip(*grads)),
+                chunksize=self._chunk_size
+            )
+        )
 
         _tu.save_arrays(
             self.state['transferDirectory'] + _os.sep + out['avg_grads_file'],

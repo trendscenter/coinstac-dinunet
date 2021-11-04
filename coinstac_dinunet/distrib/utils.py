@@ -20,12 +20,12 @@ def _load(state, site, site_vars):
     return _tu.load_arrays(grads_file)
 
 
-def _cat(*data):
+def _cat(dtype, *data):
     """
     Starmap calls by doing func(*data) itself so dont have to do data[0]
     """
     act, grad = list(zip(*data))
-    return [_np.concatenate(act), _np.concatenate(grad, 1).squeeze()[None, ...]]
+    return [_np.concatenate(act).astype(dtype), _np.concatenate(grad, 1).astype(dtype)]
 
 
 class DADLearner(_COINNLearner):
@@ -95,12 +95,10 @@ class DADReducer(_COINNReducer):
 
         reduced_data = list(
             self.pool.starmap(
-                _cat, list(zip(*site_data)),
+                _partial(_cat, self.dtype), list(zip(*site_data)),
                 chunksize=self._chunk_size
             )
         )
-
-        reduced_data = [[a1.astype(self.dtype), a2.astype(self.dtype)] for a1, a2 in reduced_data]
 
         _tu.save_arrays(
             self.state['transferDirectory'] + _os.sep + out['reduced_dad_data'],
