@@ -6,7 +6,6 @@ from coinstac_dinunet.distrib.learner import COINNLearner as _COINNLearner
 from coinstac_dinunet.distrib.reducer import COINNReducer as _COINNReducer
 from coinstac_dinunet.utils import tensorutils as _tu
 from .dad import DADParallel as _DADParallel
-import math as _math
 
 
 def check(logic, k, v, kw):
@@ -21,9 +20,12 @@ def _load(state, site, site_vars):
     return _tu.load_arrays(grads_file)
 
 
-def _cat(*data):
+def _cat(dtype, *data):
+    """
+    Starmap calls by doing func(*data) itself so dont have to do data[0]
+    """
     act, grad = list(zip(*data))
-    return [_np.concatenate(act), _np.concatenate(grad, 1).squeeze()[None, ...]]
+    return [_np.concatenate(act).astype(dtype), _np.concatenate(grad, 1).astype(dtype)]
 
 
 class DADLearner(_COINNLearner):
@@ -80,8 +82,6 @@ class DADLearner(_COINNLearner):
 class DADReducer(_COINNReducer):
     def __init__(self, **kw):
         super().__init__(**kw)
-        if not self.cache.get('reduction_chunk_size'):
-            self.cache['reduction_chunk_size'] = _math.ceil(len(self.input) / self.pool._processes)
 
     def reduce(self):
         out = {'reduced_dad_data': 'reduced_dad_data.npy'}
@@ -89,18 +89,16 @@ class DADReducer(_COINNReducer):
         site_data = list(
             self.pool.starmap(
                 _partial(_load, self.state), self.input.items(),
-                chunksize=self.cache['reduction_chunk_size']
+                chunksize=self._chunk_size
             )
         )
 
         reduced_data = list(
             self.pool.starmap(
-                _cat, list(zip(*site_data)),
-                chunksize=self.cache['reduction_chunk_size']
+                _partial(_cat, self.dtype), list(zip(*site_data)),
+                chunksize=self._chunk_size
             )
         )
-
-        reduced_data = [[a1.astype(self.dtype), a2.astype(self.dtype)] for a1, a2 in reduced_data]
 
         _tu.save_arrays(
             self.state['transferDirectory'] + _os.sep + out['reduced_dad_data'],
