@@ -14,6 +14,9 @@ def _load(state, site, site_vars):
 
 
 def _mean(*data):
+    """
+    Starmap calls by doing func(*data) itself so dont have to do data[0]
+    """
     return _np.array(data).mean(0)
 
 
