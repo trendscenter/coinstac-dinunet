@@ -6,6 +6,7 @@
 import datetime as _datetime
 import os as _os
 import shutil as _shutil
+import traceback as _tback
 
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.utils as _utils
@@ -14,8 +15,7 @@ from coinstac_dinunet.utils import performance_improved_, stop_training_
 from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.vision import plotter as _plot
 from .reducer import COINNReducer as _dSGDReducer
-from .utils import DADReducer as _DADReducer, check as _check
-import traceback as _tback
+from .utils import DADReducer as _DADReducer
 
 
 class EmptyDataHandle:
@@ -23,6 +23,31 @@ class EmptyDataHandle:
         self.cache = cache
         self.input = input
         self.state = state
+
+
+def _gather(keys, data, mode='append'):
+    _MODES_ = ['append', 'extend']
+    assert mode in _MODES_, f"Invalid mode:{mode}. Has to be {_MODES_}"
+
+    res = {}
+    for k in keys:
+        res[k] = []
+
+    for d in data:
+        for k in res:
+            if mode == 'append':
+                res[k].append(d[k])
+            elif mode == 'extend':
+                res[k] = res[k] + d[k]
+
+    return res
+
+
+def check(logic, k, v, kw):
+    phases = []
+    for site_vars in kw.values():
+        phases.append(site_vars.get(k) == v)
+    return logic(phases)
 
 
 class COINNRemote:
@@ -83,22 +108,17 @@ class COINNRemote:
             out[site] = fold
         return out
 
-    def _accumulate_epoch_info(self, reducer):
+    def _accumulate_epoch_info(self, trainer):
         out = {}
-        val_averages, val_metrics = reducer.trainer.new_averages(), reducer.trainer.new_metrics()
-        train_averages, train_metrics = reducer.trainer.new_averages(), reducer.trainer.new_metrics()
-        for site, site_vars in self.input.items():
-            for ta, tm in site_vars[Key.TRAIN_SERIALIZABLE]:
-                train_averages.update(**ta), train_metrics.update(**tm)
+        train_scores = _gather([Key.TRAIN_SERIALIZABLE], self.input, 'extend')
+        train_scores = _gather(['averages', 'metrics'], train_scores, 'append')
+        out['train_averages'] = trainer.new_averages().reduce_sites(train_scores['averages'])
+        out['train_metrics'] = trainer.new_metrics().reduce_sites(train_scores['metrics'])
 
-            if site_vars.get(Key.VALIDATION_SERIALIZABLE):
-                va, vm = site_vars[Key.VALIDATION_SERIALIZABLE]
-                val_averages.update(**va), val_metrics.update(**vm)
-        out['train_averages'] = train_averages
-        out['train_metrics'] = train_metrics
-        if site_vars.get(Key.VALIDATION_SERIALIZABLE):
-            out['val_averages'] = val_averages
-            out['val_metrics'] = val_metrics
+        val_scores = _gather([Key.VALIDATION_SERIALIZABLE], self.input, 'extend')
+        val_scores = _gather(['averages', 'metrics'], val_scores, 'append')
+        out['val_averages'] = trainer.new_averages().reduce_sites(val_scores['averages'])
+        out['val_metrics'] = trainer.new_metrics().reduce_sites(val_scores['metrics'])
         return out
 
     def _on_run_end(self, trainer):
@@ -109,15 +129,15 @@ class COINNRemote:
         #######################
         This function saves test score of last fold.
         """
-        test_averages, test_metrics = trainer.new_averages(), trainer.new_metrics()
-        for site, site_vars in self.input.items():
-            if site_vars.get(Key.TEST_SERIALIZABLE):
-                ta, tm = site_vars[Key.TEST_SERIALIZABLE]
-                test_averages.update(**ta), test_metrics.update(**tm)
+        test_scores = _gather([Key.TEST_SERIALIZABLE], self.input, 'extend')
+        test_scores = _gather(['averages', 'metrics'], test_scores, 'append')
+        test_averages = trainer.new_averages().reduce_sites(test_scores['averages'])
+        test_metrics = trainer.new_metrics().reduce_sites(test_scores['metrics'])
 
-        if site_vars.get(Key.TEST_SERIALIZABLE):
-            self.cache[Key.TEST_METRICS].append([*test_averages.get(), *test_metrics.get()])
-            self.cache[Key.GLOBAL_TEST_SERIALIZABLE].append([vars(test_averages), vars(test_metrics)])
+        self.cache[Key.TEST_METRICS].append([*test_averages.get(), *test_metrics.get()])
+        self.cache[Key.GLOBAL_TEST_SERIALIZABLE].append(
+            {'averages': test_averages.serialize(), 'metrics': test_metrics.serialize()}
+        )
 
         _plot.plot_progress(self.cache, self.cache['log_dir'], plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG])
         _utils.save_scores(self.cache, self.cache['log_dir'], file_keys=[Key.TEST_METRICS])
@@ -128,11 +148,14 @@ class COINNRemote:
 
     def _send_global_scores(self, trainer):
         out = {}
-        averages = trainer.new_averages()
-        metrics = trainer.new_metrics()
-        for avg, sc in self.cache[Key.GLOBAL_TEST_SERIALIZABLE]:
-            averages.update(**avg)
-            metrics.update(**sc)
+        averages = []
+        metrics = []
+        for sc in self.cache[Key.GLOBAL_TEST_SERIALIZABLE]:
+            averages.append(sc['averages'])
+            metrics.append(sc['metrics'])
+
+        averages = trainer.new_averages().reduce_sites(averages)
+        metrics = trainer.new_averages().reduce_sites(metrics)
 
         self.cache[Key.GLOBAL_TEST_METRICS] = [[*averages.get(), *metrics.get()]]
         _utils.save_scores(self.cache, self.state['outputDirectory'] + _os.sep + self.cache['task_id'],
@@ -170,7 +193,7 @@ class COINNRemote:
             data_handle=EmptyDataHandle(cache=self.cache, input=self.input, state=self.state)
         )
         self.out['phase'] = self.input.get('phase', Phase.INIT_RUNS)
-        if _check(all, 'phase', Phase.INIT_RUNS, self.input):
+        if check(all, 'phase', Phase.INIT_RUNS, self.input):
             """
             Initialize all folds and loggers
             """
@@ -178,32 +201,32 @@ class COINNRemote:
             self.out['global_runs'] = self._next_run()
             self.out['phase'] = Phase.NEXT_RUN
 
-        if _check(all, 'phase', Phase.PRE_COMPUTATION, self.input):
+        if check(all, 'phase', Phase.PRE_COMPUTATION, self.input):
             self.out.update(**self._pre_compute())
             self.out['phase'] = Phase.PRE_COMPUTATION
 
         self.out['global_modes'] = self._set_mode()
-        if _check(all, 'phase', Phase.COMPUTATION, self.input):
+        if check(all, 'phase', Phase.COMPUTATION, self.input):
             """Initialize reducer"""
             reducer = self._get_reducer_cls(reducer_cls)(trainer=trainer, mp_pool=mp_pool)
 
             self.out['phase'] = Phase.COMPUTATION
-            if _check(all, 'reduce', True, self.input):
+            if check(all, 'reduce', True, self.input):
                 self.out.update(**reducer.reduce())
 
-            if _check(all, 'mode', Mode.VALIDATION_WAITING, self.input):
+            if check(all, 'mode', Mode.VALIDATION_WAITING, self.input):
                 self.cache['epoch'] += 1
                 if self.cache['epoch'] % self.cache['validation_epochs'] == 0:
                     self.out['global_modes'] = self._set_mode(mode=Mode.VALIDATION)
                 else:
                     self.out['global_modes'] = self._set_mode(mode=Mode.TRAIN)
 
-            if _check(all, 'mode', Mode.TRAIN_WAITING, self.input):
+            if check(all, 'mode', Mode.TRAIN_WAITING, self.input):
                 epoch_info = self._on_epoch_end(reducer)
                 nxt_epoch = self._next_epoch(**epoch_info)
                 self.out['global_modes'] = self._set_mode(mode=nxt_epoch['mode'])
 
-        if _check(all, 'phase', Phase.NEXT_RUN_WAITING, self.input):
+        if check(all, 'phase', Phase.NEXT_RUN_WAITING, self.input):
             """
             This block runs when a fold has completed all train, test, validation phase.
             We save all the scores and plot the results.
@@ -227,7 +250,7 @@ class COINNRemote:
         return out
 
     def _on_epoch_end(self, reducer):
-        epoch_info = self._accumulate_epoch_info(reducer)
+        epoch_info = self._accumulate_epoch_info(reducer.trainer)
         self.cache[Key.TRAIN_LOG].append([*epoch_info['train_averages'].get(), *epoch_info['train_metrics'].get()])
         self._save_if_better(**epoch_info)
         if epoch_info.get('val_averages'):
@@ -258,7 +281,7 @@ class COINNRemote:
             self.compute(*args, **kwargs)
             return {
                 'output': self.out,
-                'success': _check(all, 'phase', Phase.SUCCESS, self.input)
+                'success': check(all, 'phase', Phase.SUCCESS, self.input)
             }
         except:
             _tback.print_exc()

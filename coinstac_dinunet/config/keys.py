@@ -42,3 +42,8 @@ class AGG_Engine(str, _Enum):
     dSGD = 'dSGD'
     powerSGD = 'powerSGD'
     rankDAD = 'rankDAD'
+
+
+class GatherMode(str, _Enum):
+    APPEND = 'gather'
+    EXTEND = 'extend'

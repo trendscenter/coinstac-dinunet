@@ -7,6 +7,7 @@ import json as _json
 import os as _os
 import shutil as _shutil
 import time as _time
+import traceback as _tback
 from os import sep as _sep
 from typing import List as _List
 
@@ -17,7 +18,6 @@ from coinstac_dinunet.data import COINNDataHandle as _DataHandle
 from coinstac_dinunet.distrib.learner import COINNLearner as _dSGDLearner
 from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 from .utils import DADLearner as _DADLearner
-import traceback as _tback
 
 
 class COINNLocal:
@@ -222,7 +222,9 @@ class COINNLocal:
                 it, out = learner.to_reduce()
                 self.out.update(**out)
                 if it.get('averages') and it.get('metrics'):
-                    self.cache[Key.TRAIN_SERIALIZABLE].append([vars(it['averages']), vars(it['metrics'])])
+                    self.cache[Key.TRAIN_SERIALIZABLE].append(
+                        {'averages': it['averages'].serialize(), 'metrics': it['metrics'].serialize()}
+                    )
                     self.out.update(**trainer.on_iteration_end(0, 0, it))
 
             if all(m == Mode.VALIDATION for m in learner.global_modes.values()):
@@ -274,4 +276,3 @@ class COINNLocal:
         except:
             _tback.print_exc()
             raise Exception(self.out)
-

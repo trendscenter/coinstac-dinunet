@@ -42,7 +42,7 @@ class COINNTrainer(_NNTrainer, ABC):
                 dataset_list=validation_dataset,
                 use_padded_sampler=True
             )
-            out[Key.VALIDATION_SERIALIZABLE] = [vars(avg), vars(metrics)]
+            out[Key.VALIDATION_SERIALIZABLE] = [{'averages': avg.serialize(), 'metrics': metrics.serialize()}]
 
         out[Key.TRAIN_SERIALIZABLE] = self.cache[Key.TRAIN_SERIALIZABLE]
         self.cache[Key.TRAIN_SERIALIZABLE] = []
@@ -59,9 +59,9 @@ class COINNTrainer(_NNTrainer, ABC):
         if test_dataset:
             avg, metrics = self.evaluation(mode='test', save_pred=True,
                                            dataset_list=test_dataset)
-            out[Key.TEST_SERIALIZABLE] = [vars(avg), vars(metrics)]
+            out[Key.TEST_SERIALIZABLE] = [{'averages': avg.serialize(), 'metrics': metrics.serialize()}]
         return out
-    
+
     def set_monitor_metric(self):
         """Must be set from COINNLocal's constructor"""
         pass

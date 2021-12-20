@@ -9,29 +9,15 @@ import typing as _typing
 
 import numpy as _np
 import torch as _torch
+from sklearn import metrics as _metrics
+
 from coinstac_dinunet.config import metrics_num_precision as _nump, metrics_eps as _eps
 
 
-class SerializableMetrics:
-    def __init__(self, **kw):
-        pass
-
-    def __getattribute__(self, attribute):
-        if attribute == "__dict__":
-            obj = object.__getattribute__(self, attribute)
-            for k in obj:
-                if isinstance(obj[k], _np.ndarray):
-                    obj[k] = obj[k].tolist()
-                elif isinstance(obj[k], _torch.Tensor):
-                    obj[k] = obj[k].cpu().tolist()
-            return obj
-        else:
-            return object.__getattribute__(self, attribute)
-
-
-class COINNMetrics(SerializableMetrics):
-    def __init__(self, **kw):
-        super().__init__(**kw)
+class COINNMetrics:
+    def __init__(self, device='cpu', **kw):
+        self.reduction_mode = reduction_mode
+        self.device = device
 
     @_abc.abstractmethod
     def update(self, *args, **kw):
@@ -94,6 +80,14 @@ class COINNMetrics(SerializableMetrics):
             sc = sc()
         return sc
 
+    @_abc.abstractmethod
+    def serialize(self):
+        pass
+
+    @_abc.abstractmethod
+    def reduce_sites(self, scores):
+        pass
+
 
 class COINNAverages(COINNMetrics):
     def __init__(self, num_averages=1, **kw):
@@ -150,17 +144,11 @@ class COINNAverages(COINNMetrics):
             return round(sum(avgs) / len(avgs), self.num_precision)
         return avgs
 
-    @property
-    def eps(self):
-        return _eps
+    def serialize(self):
+        return [self.values.tolist(), self.counts.tolist()]
 
-    @property
-    def num_precision(self):
-        return _nump
-
-    @property
-    def time(self):
-        return _time.time()
+    def reduce_sites(self, scores: list):
+        self.values, self.counts = _np.array(scores).sum(0)
 
 
 class Prf1a(COINNMetrics):
@@ -169,9 +157,11 @@ class Prf1a(COINNMetrics):
         Precision, Recall, F1 Score, Accuracy, and Overlap(IOU).
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kw):
+        super().__init__(**kw)
         self.tn, self.fp, self.fn, self.tp = 0, 0, 0, 0
+        self._precision = 0
+        self._recall = 0
 
     def update(self, tn=0, fp=0, fn=0, tp=0, **kw):
         self.tp += tp
@@ -205,12 +195,12 @@ class Prf1a(COINNMetrics):
     @property
     def precision(self):
         p = self.tp / max(self.tp + self.fp, self.eps)
-        return round(p, self.num_precision)
+        return round(max(p, self._precision), self.num_precision)
 
     @property
     def recall(self):
         r = self.tp / max(self.tp + self.fn, self.eps)
-        return round(r, self.num_precision)
+        return round(max(r, self._recall), self.num_precision)
 
     @property
     def accuracy(self):
@@ -235,6 +225,12 @@ class Prf1a(COINNMetrics):
         o = self.tp / max(self.tp + self.fp + self.fn, self.eps)
         return round(o, self.num_precision)
 
+    def serialize(self):
+        return [self.precision, self.recall]
+
+    def reduce_sites(self, scores: list):
+        self._precision, self._recall = _np.array(scores).mean(0)
+
 
 class ConfusionMatrix(COINNMetrics):
     """
@@ -244,9 +240,11 @@ class ConfusionMatrix(COINNMetrics):
     """
 
     def __init__(self, num_classes=None, device='cpu', **kw):
-        super().__init__(**kw)
+        super().__init__(device, **kw)
         self.num_classes = num_classes
         self.matrix = _torch.zeros(num_classes, num_classes).float()
+        self._precision = [0] * self.num_classes
+        self._recall = [0] * self.num_classes
         self.device = device
 
     def reset(self):
@@ -269,15 +267,19 @@ class ConfusionMatrix(COINNMetrics):
     def precision(self, average=True):
         precision = [0] * self.num_classes
         for i in range(self.num_classes):
-            precision[i] = self.matrix[i, i] / max(_torch.sum(self.matrix[:, i]).item(), self.eps)
-        precision = _np.array(precision)
+            _p = max(self._precision[i], self.eps)
+            p = max(_torch.sum(self.matrix[:, i]).item(), self.eps)
+            precision[i] = self.matrix[i, i] / max(p, _p)
+
         return sum(precision) / self.num_classes if average else precision
 
     def recall(self, average=True):
         recall = [0] * self.num_classes
         for i in range(self.num_classes):
-            recall[i] = self.matrix[i, i] / max(_torch.sum(self.matrix[i, :]).item(), self.eps)
-        recall = _np.array(recall)
+            _r = max(self._recall[i], self.eps)
+            r = max(_torch.sum(self.matrix[i, :]).item(), self.eps)
+            recall[i] = self.matrix[i, i] / max(r, _r)
+
         return sum(recall) / self.num_classes if average else recall
 
     def f1(self, average=True):
@@ -297,4 +299,48 @@ class ConfusionMatrix(COINNMetrics):
                 round(self.precision(), self.num_precision), round(self.recall(), self.num_precision)]
 
     def serialize(self, **kw):
-        return self.matrix
+        return [self.precision().tolist(), self.recall().tolist()]
+
+    def reduce_sites(self, scores: list):
+        self._precision, self._recall = _np.array(scores).mean(0)
+
+
+class AUCROCMetrics(COINNMetrics):
+    __doc__ = "Restricted to binary case"
+
+    def __init__(self, device='cpu', **kw):
+        super().__init__(device, **kw)
+        self.probabilities = []
+        self.labels = []
+        self.fpr = None
+        self.tpr = None
+        self.thresholds = None
+        self._auc = 0
+
+    def accumulate(self, other):
+        self.probabilities += other.probabilities
+        self.labels += other.labels
+
+    def update(self, *args, **kw):
+        pass
+
+    def reset(self):
+        self.probabilities = []
+        self.labels = []
+
+    def auc(self):
+        self.fpr, self.tpr, self.thresholds = _metrics.roc_curve(self.labels, self.probabilities, pos_label=1)
+        return max(_metrics.auc(self.fpr, self.tpr), self._auc)
+
+    def get(self, *args, **kw):
+        return [round(self.auc(), self.num_precision)]
+
+    def add(self, pred: _torch.Tensor, true: _torch.Tensor):
+        self.probabilities += pred.flatten().clone().detach().cpu().tolist()
+        self.labels += true.clone().flatten().detach().cpu().tolist()
+
+    def serialize(self):
+        return [self.auc()]
+
+    def reduce_sites(self, scores: list):
+        self._auc = _np.array(scores).mean()
