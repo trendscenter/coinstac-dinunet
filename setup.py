@@ -30,5 +30,5 @@ setup(
         'coinstac_dinunet.utils', 'coinstac_dinunet.vision'
     ],
     include_package_data=True,
-    install_requires=['numpy', 'pillow', 'matplotlib', 'opencv-python-headless', 'pandas']
+    install_requires=['numpy', 'pillow', 'matplotlib', 'opencv-python-headless', 'pandas', 'sklearn']
 )

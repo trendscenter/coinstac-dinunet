@@ -153,6 +153,7 @@ class Prf1a(COINNMetrics):
         self.tn, self.fp, self.fn, self.tp = 0, 0, 0, 0
         self._precision = 0
         self._recall = 0
+        self._accuracy = 0
 
     def add(self, pred, true):
         y_true = true.clone().int().view(1, -1).squeeze()
@@ -191,7 +192,7 @@ class Prf1a(COINNMetrics):
     def accuracy(self):
         a = (self.tp + self.tn) / \
             max(self.tp + self.fp + self.fn + self.tn, self.eps)
-        return round(a, self.num_precision)
+        return round(max(a, self._accuracy), self.num_precision)
 
     @property
     def f1(self):
@@ -211,10 +212,10 @@ class Prf1a(COINNMetrics):
         return round(o, self.num_precision)
 
     def serialize(self):
-        return [self.precision, self.recall]
+        return [self.accuracy, self.precision, self.recall]
 
     def reduce_sites(self, scores: list):
-        self._precision, self._recall = _np.array(scores).mean(0)
+        self._accuracy, self._precision, self._recall = _np.array(scores).mean(0)
 
 
 class ConfusionMatrix(COINNMetrics):
@@ -230,6 +231,7 @@ class ConfusionMatrix(COINNMetrics):
         self.matrix = _torch.zeros(num_classes, num_classes).float()
         self._precision = [0] * self.num_classes
         self._recall = [0] * self.num_classes
+        self._accuracy = 0
         self.device = device
 
     def reset(self):
@@ -274,17 +276,17 @@ class ConfusionMatrix(COINNMetrics):
         return f_1[0] if average else f_1
 
     def accuracy(self):
-        return self.matrix.trace().item() / max(self.matrix.sum().item(), self.eps)
+        return max(self.matrix.trace().item() / max(self.matrix.sum().item(), self.eps), self._accuracy)
 
     def get(self):
         return [round(self.accuracy(), self.num_precision), round(self.f1(), self.num_precision),
                 round(self.precision(), self.num_precision), round(self.recall(), self.num_precision)]
 
     def serialize(self, **kw):
-        return [self.precision().tolist(), self.recall().tolist()]
+        return [self.accuracy(), self.precision().tolist(), self.recall().tolist()]
 
     def reduce_sites(self, scores: list):
-        self._precision, self._recall = _np.array(scores).mean(0)
+        self._accuracy, self._precision, self._recall = _np.array(scores).mean(0)
 
 
 class AUCROCMetrics(COINNMetrics):

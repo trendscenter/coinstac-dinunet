@@ -116,13 +116,17 @@ class COINNRemote:
         out = {}
         train_scores = _gather([Key.TRAIN_SERIALIZABLE], self.input.values(), 'extend')
         train_scores = _gather(['averages', 'metrics'], train_scores[Key.TRAIN_SERIALIZABLE], 'append')
-        out['train_averages'] = trainer.new_averages().reduce_sites(train_scores['averages'])
-        out['train_metrics'] = trainer.new_metrics().reduce_sites(train_scores['metrics'])
+        out['train_averages'] = trainer.new_averages()
+        out['train_averages'].reduce_sites(train_scores['averages'])
+        out['train_metrics'] = trainer.new_metrics()
+        out['train_metrics'].reduce_sites(train_scores['metrics'])
 
         val_scores = _gather([Key.VALIDATION_SERIALIZABLE], self.input.values(), 'extend')
         val_scores = _gather(['averages', 'metrics'], val_scores[Key.VALIDATION_SERIALIZABLE], 'append')
-        out['val_averages'] = trainer.new_averages().reduce_sites(val_scores['averages'])
-        out['val_metrics'] = trainer.new_metrics().reduce_sites(val_scores['metrics'])
+        out['val_averages'] = trainer.new_averages()
+        out['val_averages'].reduce_sites(val_scores['averages'])
+        out['val_metrics'] = trainer.new_metrics()
+        out['val_metrics'].reduce_sites(val_scores['metrics'])
         return out
 
     def _on_epoch_end(self, reducer):
@@ -146,8 +150,10 @@ class COINNRemote:
         """
         test_scores = _gather([Key.TEST_SERIALIZABLE], self.input.values(), 'extend')
         test_scores = _gather(['averages', 'metrics'], test_scores[Key.TEST_SERIALIZABLE], 'append')
-        test_averages = trainer.new_averages().reduce_sites(test_scores['averages'])
-        test_metrics = trainer.new_metrics().reduce_sites(test_scores['metrics'])
+        test_averages = trainer.new_averages()
+        test_averages.reduce_sites(test_scores['averages'])
+        test_metrics = trainer.new_metrics()
+        test_metrics.reduce_sites(test_scores['metrics'])
 
         self.cache[Key.TEST_METRICS].append([*test_averages.get(), *test_metrics.get()])
         self.cache[Key.GLOBAL_TEST_SERIALIZABLE].append(
@@ -165,8 +171,10 @@ class COINNRemote:
         out = {}
 
         global_test_scores = _gather(['averages', 'metrics'], self.cache[Key.GLOBAL_TEST_SERIALIZABLE], 'append')
-        averages = trainer.new_averages().reduce_sites(global_test_scores['averages'])
-        metrics = trainer.new_averages().reduce_sites(global_test_scores['metrics'])
+        averages = trainer.new_averages()
+        averages.reduce_sites(global_test_scores['averages'])
+        metrics = trainer.new_averages()
+        metrics.reduce_sites(global_test_scores['metrics'])
 
         self.cache[Key.GLOBAL_TEST_METRICS] = [[*averages.get(), *metrics.get()]]
         _utils.save_scores(self.cache, self.state['outputDirectory'] + _os.sep + self.cache['task_id'],
