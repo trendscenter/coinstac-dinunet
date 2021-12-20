@@ -28,18 +28,22 @@ class EmptyDataHandle:
 def _gather(keys, data, mode='append'):
     _MODES_ = ['append', 'extend']
     assert mode in _MODES_, f"Invalid mode:{mode}. Has to be {_MODES_}"
+    data = list(data)
 
     res = {}
     for k in keys:
         res[k] = []
 
-    for d in data:
-        for k in res:
+    for k in res:
+        for d in data:
+            if not d.get(k):
+                continue
+
             if mode == 'append':
                 res[k].append(d[k])
+
             elif mode == 'extend':
                 res[k] = res[k] + d[k]
-
     return res
 
 
@@ -110,16 +114,27 @@ class COINNRemote:
 
     def _accumulate_epoch_info(self, trainer):
         out = {}
-        train_scores = _gather([Key.TRAIN_SERIALIZABLE], self.input, 'extend')
+        train_scores = _gather([Key.TRAIN_SERIALIZABLE], self.input.values(), 'extend')
         train_scores = _gather(['averages', 'metrics'], train_scores[Key.TRAIN_SERIALIZABLE], 'append')
         out['train_averages'] = trainer.new_averages().reduce_sites(train_scores['averages'])
         out['train_metrics'] = trainer.new_metrics().reduce_sites(train_scores['metrics'])
 
-        val_scores = _gather([Key.VALIDATION_SERIALIZABLE], self.input, 'extend')
+        val_scores = _gather([Key.VALIDATION_SERIALIZABLE], self.input.values(), 'extend')
         val_scores = _gather(['averages', 'metrics'], val_scores[Key.VALIDATION_SERIALIZABLE], 'append')
         out['val_averages'] = trainer.new_averages().reduce_sites(val_scores['averages'])
         out['val_metrics'] = trainer.new_metrics().reduce_sites(val_scores['metrics'])
         return out
+
+    def _on_epoch_end(self, reducer):
+        epoch_info = self._accumulate_epoch_info(reducer.trainer)
+        self.cache[Key.TRAIN_LOG].append([*epoch_info['train_averages'].get(), *epoch_info['train_metrics'].get()])
+        self._save_if_better(**epoch_info)
+        if epoch_info.get('val_averages'):
+            self.cache[Key.VALIDATION_LOG].append([*epoch_info['val_averages'].get(), *epoch_info['val_metrics'].get()])
+
+        if lazy_debug(self.cache['epoch']):
+            _plot.plot_progress(self.cache, self.cache['log_dir'], plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG])
+        return epoch_info
 
     def _on_run_end(self, trainer):
         """
@@ -129,7 +144,7 @@ class COINNRemote:
         #######################
         This function saves test score of last fold.
         """
-        test_scores = _gather([Key.TEST_SERIALIZABLE], self.input, 'extend')
+        test_scores = _gather([Key.TEST_SERIALIZABLE], self.input.values(), 'extend')
         test_scores = _gather(['averages', 'metrics'], test_scores[Key.TEST_SERIALIZABLE], 'append')
         test_averages = trainer.new_averages().reduce_sites(test_scores['averages'])
         test_metrics = trainer.new_metrics().reduce_sites(test_scores['metrics'])
@@ -148,15 +163,10 @@ class COINNRemote:
 
     def _send_global_scores(self, trainer):
         out = {}
-        averages = []
-        metrics = []
-        for sc in self.cache[Key.GLOBAL_TEST_SERIALIZABLE]:
-            # Todo
-            averages.append(sc['averages'])
-            metrics.append(sc['metrics'])
 
-        averages = trainer.new_averages().reduce_sites(averages)
-        metrics = trainer.new_averages().reduce_sites(metrics)
+        global_test_scores = _gather(['averages', 'metrics'], self.cache[Key.GLOBAL_TEST_SERIALIZABLE], 'append')
+        averages = trainer.new_averages().reduce_sites(global_test_scores['averages'])
+        metrics = trainer.new_averages().reduce_sites(global_test_scores['metrics'])
 
         self.cache[Key.GLOBAL_TEST_METRICS] = [[*averages.get(), *metrics.get()]]
         _utils.save_scores(self.cache, self.state['outputDirectory'] + _os.sep + self.cache['task_id'],
@@ -249,17 +259,6 @@ class COINNRemote:
         else:
             out['mode'] = Mode.TRAIN
         return out
-
-    def _on_epoch_end(self, reducer):
-        epoch_info = self._accumulate_epoch_info(reducer.trainer)
-        self.cache[Key.TRAIN_LOG].append([*epoch_info['train_averages'].get(), *epoch_info['train_metrics'].get()])
-        self._save_if_better(**epoch_info)
-        if epoch_info.get('val_averages'):
-            self.cache[Key.VALIDATION_LOG].append([*epoch_info['val_averages'].get(), *epoch_info['val_metrics'].get()])
-
-        if lazy_debug(self.cache['epoch']):
-            _plot.plot_progress(self.cache, self.cache['log_dir'], plot_keys=[Key.TRAIN_LOG, Key.VALIDATION_LOG])
-        return epoch_info
 
     def _save_if_better(self, **kw):
         if kw.get('val_metrics'):

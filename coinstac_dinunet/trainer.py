@@ -43,9 +43,6 @@ class COINNTrainer(_NNTrainer, ABC):
                 use_padded_sampler=True
             )
             out[Key.VALIDATION_SERIALIZABLE] = [{'averages': avg.serialize(), 'metrics': metrics.serialize()}]
-
-        out[Key.TRAIN_SERIALIZABLE] = self.cache[Key.TRAIN_SERIALIZABLE]
-        self.cache[Key.TRAIN_SERIALIZABLE] = []
         self.cache['cursor'] = 0
         return out
 

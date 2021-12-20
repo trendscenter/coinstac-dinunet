@@ -20,6 +20,27 @@ from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 from .utils import DADLearner as _DADLearner
 
 
+def _gather(keys, data, mode='append'):
+    _MODES_ = ['append', 'extend']
+    assert mode in _MODES_, f"Invalid mode:{mode}. Has to be {_MODES_}"
+    data = list(data)
+
+    res = {}
+    for k in keys:
+        res[k] = []
+
+    for k in res:
+        for d in data:
+            if not d.get(k):
+                continue
+
+            if mode == 'append':
+                res[k].append(d[k])
+
+            elif mode == 'extend':
+                res[k] = res[k] + d[k]
+    return res
+
 class COINNLocal:
     _PROMPT_TASK_ = "Task id must be given."
     _PROMPT_MODE_ = f"Mode must be provided and should be one of {[Mode.TRAIN, Mode.TEST]}."
@@ -236,6 +257,8 @@ class COINNLocal:
                 We send the confusion matrix to the remote to accumulate global score for model selection.
                 """
                 self.out.update(**trainer.validation_distributed(dataset_cls))
+                self.out[Key.TRAIN_SERIALIZABLE] = self.cache[Key.TRAIN_SERIALIZABLE]
+                self.cache[Key.TRAIN_SERIALIZABLE] = []
                 self.out['mode'] = Mode.TRAIN_WAITING
 
             if all(m == Mode.TEST for m in learner.global_modes.values()):
