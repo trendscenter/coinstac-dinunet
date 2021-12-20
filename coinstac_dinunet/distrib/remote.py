@@ -111,12 +111,12 @@ class COINNRemote:
     def _accumulate_epoch_info(self, trainer):
         out = {}
         train_scores = _gather([Key.TRAIN_SERIALIZABLE], self.input, 'extend')
-        train_scores = _gather(['averages', 'metrics'], train_scores, 'append')
+        train_scores = _gather(['averages', 'metrics'], train_scores[Key.TRAIN_SERIALIZABLE], 'append')
         out['train_averages'] = trainer.new_averages().reduce_sites(train_scores['averages'])
         out['train_metrics'] = trainer.new_metrics().reduce_sites(train_scores['metrics'])
 
         val_scores = _gather([Key.VALIDATION_SERIALIZABLE], self.input, 'extend')
-        val_scores = _gather(['averages', 'metrics'], val_scores, 'append')
+        val_scores = _gather(['averages', 'metrics'], val_scores[Key.VALIDATION_SERIALIZABLE], 'append')
         out['val_averages'] = trainer.new_averages().reduce_sites(val_scores['averages'])
         out['val_metrics'] = trainer.new_metrics().reduce_sites(val_scores['metrics'])
         return out
@@ -130,7 +130,7 @@ class COINNRemote:
         This function saves test score of last fold.
         """
         test_scores = _gather([Key.TEST_SERIALIZABLE], self.input, 'extend')
-        test_scores = _gather(['averages', 'metrics'], test_scores, 'append')
+        test_scores = _gather(['averages', 'metrics'], test_scores[Key.TEST_SERIALIZABLE], 'append')
         test_averages = trainer.new_averages().reduce_sites(test_scores['averages'])
         test_metrics = trainer.new_metrics().reduce_sites(test_scores['metrics'])
 
@@ -151,6 +151,7 @@ class COINNRemote:
         averages = []
         metrics = []
         for sc in self.cache[Key.GLOBAL_TEST_SERIALIZABLE]:
+            # Todo
             averages.append(sc['averages'])
             metrics.append(sc['metrics'])
 
