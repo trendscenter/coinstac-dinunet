@@ -16,12 +16,7 @@ from coinstac_dinunet.config import metrics_num_precision as _nump, metrics_eps 
 
 class COINNMetrics:
     def __init__(self, device='cpu', **kw):
-        self.reduction_mode = reduction_mode
         self.device = device
-
-    @_abc.abstractmethod
-    def update(self, *args, **kw):
-        raise NotImplementedError('Must be implemented.')
 
     @_abc.abstractmethod
     def add(self, *args, **kw):
@@ -112,10 +107,6 @@ class COINNAverages(COINNMetrics):
         self.values[index] += val * n
         self.counts[index] += n
 
-    def update(self, values: _typing.List[float] = None, counts: _typing.List[int] = None, **kw):
-        self.values += _np.array(values)
-        self.counts += _np.array(counts)
-
     def accumulate(self, other):
         r"""
         Add another ETAverage object to self
@@ -162,12 +153,6 @@ class Prf1a(COINNMetrics):
         self.tn, self.fp, self.fn, self.tp = 0, 0, 0, 0
         self._precision = 0
         self._recall = 0
-
-    def update(self, tn=0, fp=0, fn=0, tp=0, **kw):
-        self.tp += tp
-        self.fp += fp
-        self.tn += tn
-        self.fn += fn
 
     def add(self, pred, true):
         y_true = true.clone().int().view(1, -1).squeeze()
@@ -250,9 +235,6 @@ class ConfusionMatrix(COINNMetrics):
     def reset(self):
         self.matrix = _torch.zeros(self.num_classes, self.num_classes).float()
 
-    def update(self, matrix=0, **kw):
-        self.matrix += _torch.tensor(matrix)
-
     def accumulate(self, other: COINNMetrics):
         self.matrix += other.matrix
 
@@ -320,9 +302,6 @@ class AUCROCMetrics(COINNMetrics):
     def accumulate(self, other):
         self.probabilities += other.probabilities
         self.labels += other.labels
-
-    def update(self, *args, **kw):
-        pass
 
     def reset(self):
         self.probabilities = []
