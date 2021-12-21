@@ -173,7 +173,7 @@ class COINNRemote:
         global_test_scores = _gather(['averages', 'metrics'], self.cache[Key.GLOBAL_TEST_SERIALIZABLE], 'append')
         averages = trainer.new_averages()
         averages.reduce_sites(global_test_scores['averages'])
-        metrics = trainer.new_averages()
+        metrics = trainer.new_metrics()
         metrics.reduce_sites(global_test_scores['metrics'])
 
         self.cache[Key.GLOBAL_TEST_METRICS] = [[*averages.get(), *metrics.get()]]
