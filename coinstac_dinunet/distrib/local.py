@@ -7,6 +7,7 @@ import json as _json
 import os as _os
 import shutil as _shutil
 import time as _time
+import traceback as _tback
 from os import sep as _sep
 from typing import List as _List
 
@@ -17,7 +18,6 @@ from coinstac_dinunet.data import COINNDataHandle as _DataHandle
 from coinstac_dinunet.distrib.learner import COINNLearner as _dSGDLearner
 from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 from .utils import DADLearner as _DADLearner
-import traceback as _tback
 
 
 class COINNLocal:
@@ -180,13 +180,14 @@ class COINNLocal:
         elif self.out['phase'] == Phase.NEXT_RUN:
             self.cache.update(**self.input['global_runs'][self.state['clientId']])
             self.out.update(**self._next_run(trainer))
-            self.out.update(
-                **self._pretrain_local(
-                    trainer_cls,
-                    datahandle_cls,
-                    trainer.data_handle.get_train_dataset(dataset_cls),
-                    trainer.data_handle.get_validation_dataset(dataset_cls))
-            )
+            if self.cache['mode'] == Mode.TRAIN:
+                self.out.update(
+                    **self._pretrain_local(
+                        trainer_cls,
+                        datahandle_cls,
+                        trainer.data_handle.get_train_dataset(dataset_cls),
+                        trainer.data_handle.get_validation_dataset(dataset_cls))
+                )
 
         elif self.out['phase'] == Phase.PRE_COMPUTATION and self.input.get('pretrained_weights'):
             trainer.load_checkpoint(
@@ -222,7 +223,9 @@ class COINNLocal:
                 it, out = learner.to_reduce()
                 self.out.update(**out)
                 if it.get('averages') and it.get('metrics'):
-                    self.cache[Key.TRAIN_SERIALIZABLE].append([vars(it['averages']), vars(it['metrics'])])
+                    self.cache[Key.TRAIN_SERIALIZABLE].append(
+                        {'averages': it['averages'].serialize(), 'metrics': it['metrics'].serialize()}
+                    )
                     self.out.update(**trainer.on_iteration_end(0, 0, it))
 
             if all(m == Mode.VALIDATION for m in learner.global_modes.values()):
@@ -234,6 +237,8 @@ class COINNLocal:
                 We send the confusion matrix to the remote to accumulate global score for model selection.
                 """
                 self.out.update(**trainer.validation_distributed(dataset_cls))
+                self.out[Key.TRAIN_SERIALIZABLE] = self.cache[Key.TRAIN_SERIALIZABLE]
+                self.cache[Key.TRAIN_SERIALIZABLE] = []
                 self.out['mode'] = Mode.TRAIN_WAITING
 
             if all(m == Mode.TEST for m in learner.global_modes.values()):
@@ -274,4 +279,3 @@ class COINNLocal:
         except:
             _tback.print_exc()
             raise Exception(self.out)
-

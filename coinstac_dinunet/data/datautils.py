@@ -39,15 +39,16 @@ def create_k_fold_splits(files, cache, shuffle_files=True, name='SPLIT'):
     save_to_dir = cache['split_dir']
     if shuffle_files:
         _rd.shuffle(files)
-    ix_splits = _np.array_split(_np.arange(len(files)), k)
+    file_ix = _np.arange(len(files))
+    ix_splits = _np.array_split(file_ix, k)
     for i in range(len(ix_splits)):
         test_ix = ix_splits[i].tolist()
         val_ix = ix_splits[(i + 1) % len(ix_splits)].tolist()
-        train_ix = [ix for ix in _np.arange(len(files)) if ix not in test_ix + val_ix]
+        train_ix = _np.delete(file_ix.copy(), _np.array(test_ix + val_ix))
 
-        splits = {'train': [files[ix] for ix in train_ix],
-                  'validation': [files[ix] for ix in val_ix],
-                  'test': [files[ix] for ix in test_ix]}
+        splits = {"train": [files[ix] for ix in train_ix],
+                  "validation": [files[ix] for ix in val_ix],
+                  "test": [files[ix] for ix in test_ix]}
 
         if save_to_dir:
             f = open(save_to_dir + _os.sep + f'{name}_' + str(i) + '.json', "w")

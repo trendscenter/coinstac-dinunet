@@ -28,21 +28,22 @@ def safe_collate(batch):
 
 
 class COINNDataset(_Dataset):
-    def __init__(self, mode='init', limit=_conf.max_size):
+    def __init__(self, mode='init', cache=None, input=None, state=None, limit=_conf.max_size):
         self.mode = mode
         self.limit = limit
-        self.state = {}
-        self.inputspecs = {}
+        self.cache = cache
+        self.input = input
+        self.state = state
         self.indices = []
 
-    def load_index(self, site, file):
+    def load_index(self, file):
         r"""
         Logic to load indices of a single file.
         -Sometimes one image can have multiple indices like U-net where we have to get multiple patches of images.
         """
-        self.indices.append([site, file])
+        self.indices.append([file])
 
-    def _load_indices(self, site, files, **kw):
+    def _load_indices(self, files, **kw):
         r"""
         We load the proper indices/names(whatever is called) of the files in order to prepare minibatches.
         Only load lim numbr of files so that it is easer to debug(Default is infinite, -lim/--load-lim argument).
@@ -50,10 +51,10 @@ class COINNDataset(_Dataset):
         for file in files:
             if len(self) >= self.limit:
                 break
-            self.load_index(site, file)
+            self.load_index(file)
 
         if kw.get('verbose', True):
-            print(f'{site}, {self.mode}, {len(self)} Indices Loaded')
+            print(f'{self.mode}, {len(self)} Indices Loaded')
 
     def __getitem__(self, index):
         r"""
@@ -68,13 +69,11 @@ class COINNDataset(_Dataset):
     def transforms(self, **kw):
         return None
 
-    def path(self, site, root_dir='baseDirectory', inputspec_key='_N/A_'):
-        return _os.path.join(self.state[site][root_dir], self.inputspecs[site].get(inputspec_key, ''))
+    def path(self, root_dir='baseDirectory', cache_key='_N/A_'):
+        return _os.path.join(self.state[root_dir], self.cache.get(cache_key, ''))
 
-    def add(self, files, cache: dict = None, state: dict = None):
-        self.state[state['clientId']] = state
-        self.inputspecs[state['clientId']] = cache
-        self._load_indices(site=state['clientId'], files=files, verbose=False)
+    def add(self, files):
+        self._load_indices(files=files, verbose=False)
 
 
 def _seed_worker(worker_id):
@@ -92,9 +91,15 @@ class COINNDataHandle:
         self.dataloader_args = _utils.FrozenDict(cache.get('dataloader_args', dataloader_args))
 
     def get_dataset(self, handle_key, files, dataset_cls=None):
-        dataset = dataset_cls(mode=handle_key, limit=self.cache['load_limit'])
-        dataset.add(files=files, cache=self.cache, state=self.state)
-        self.dataset[handle_key] = dataset
+        dataset = dataset_cls(
+            mode=handle_key, cache=self.cache, input=self.input, state=self.state, limit=self.cache['load_limit']
+        )
+        dataset.add(files=files)
+
+        self.dataset[handle_key] = None
+        if len(dataset) > 0:
+            self.dataset[handle_key] = dataset
+
         return self.dataset[handle_key]
 
     def get_train_dataset(self, dataset_cls):
@@ -186,10 +191,13 @@ class COINNDataHandle:
         return batch, out
 
     def prepare_data(self):
+        return _kfolds(self.list_files(), self.cache, self.state)
+
+    def list_files(self) -> list:
         files = []
         if self.cache.get('data_dir'):
             files = _os.listdir(self.state['baseDirectory'] + _os.sep + self.cache['data_dir'])
-        return _kfolds(files, self.cache, self.state)
+        return files
 
 
 class COINNPaddedDataSampler:

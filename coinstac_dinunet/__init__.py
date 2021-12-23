@@ -11,5 +11,4 @@ except Exception as e:
 from .data import COINNDataset, COINNDataHandle
 from .distrib import COINNLearner, COINNReducer
 from .distrib import COINNLocal, COINNRemote
-from .nn import PooledTrainer
 from .trainer import COINNTrainer

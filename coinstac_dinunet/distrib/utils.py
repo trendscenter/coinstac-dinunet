@@ -8,13 +8,6 @@ from coinstac_dinunet.utils import tensorutils as _tu
 from .dad import DADParallel as _DADParallel
 
 
-def check(logic, k, v, kw):
-    phases = []
-    for site_vars in kw.values():
-        phases.append(site_vars.get(k) == v)
-    return logic(phases)
-
-
 def _load(state, site, site_vars):
     grads_file = state['baseDirectory'] + _os.sep + site + _os.sep + site_vars['dad_data']
     return _tu.load_arrays(grads_file)
