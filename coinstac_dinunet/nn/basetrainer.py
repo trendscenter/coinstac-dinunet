@@ -222,6 +222,7 @@ class NNTrainer:
                     self.on_iteration_end(i=_i, ep=ep, it=it)
 
             if val_dataset and ep % self.cache.get('validation_epochs', 1) == 0:
+                info('--- Validation ---', self.cache.get('verbose'))
                 val_averages, val_metric = self.evaluation(mode='validation', dataset_list=val_dataset,
                                                            use_padded_sampler=True)
                 self.cache[Key.VALIDATION_LOG].append([*val_averages.get(), *val_metric.get()])

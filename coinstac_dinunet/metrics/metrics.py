@@ -310,10 +310,10 @@ class AUCROCMetrics(COINNMetrics):
         self.labels = []
 
     def auc(self):
-        if len(self.labels) > 0:
+        if self._auc <= 0 and len(self.labels) > 0:
             self.fpr, self.tpr, self.thresholds = _metrics.roc_curve(self.labels, self.probabilities, pos_label=1)
-            return max(_metrics.auc(self.fpr, self.tpr), self._auc)
-        return 0.0
+            return _metrics.auc(self.fpr, self.tpr)
+        return self._auc
 
     def get(self, *args, **kw):
         return [round(self.auc(), self.num_precision)]
