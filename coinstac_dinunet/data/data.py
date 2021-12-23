@@ -95,7 +95,11 @@ class COINNDataHandle:
             mode=handle_key, cache=self.cache, input=self.input, state=self.state, limit=self.cache['load_limit']
         )
         dataset.add(files=files)
-        self.dataset[handle_key] = dataset
+
+        self.dataset[handle_key] = None
+        if len(dataset) > 0:
+            self.dataset[handle_key] = dataset
+
         return self.dataset[handle_key]
 
     def get_train_dataset(self, dataset_cls):

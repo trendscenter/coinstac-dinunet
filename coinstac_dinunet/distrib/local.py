@@ -180,13 +180,14 @@ class COINNLocal:
         elif self.out['phase'] == Phase.NEXT_RUN:
             self.cache.update(**self.input['global_runs'][self.state['clientId']])
             self.out.update(**self._next_run(trainer))
-            self.out.update(
-                **self._pretrain_local(
-                    trainer_cls,
-                    datahandle_cls,
-                    trainer.data_handle.get_train_dataset(dataset_cls),
-                    trainer.data_handle.get_validation_dataset(dataset_cls))
-            )
+            if self.cache['mode'] == Mode.TRAIN:
+                self.out.update(
+                    **self._pretrain_local(
+                        trainer_cls,
+                        datahandle_cls,
+                        trainer.data_handle.get_train_dataset(dataset_cls),
+                        trainer.data_handle.get_validation_dataset(dataset_cls))
+                )
 
         elif self.out['phase'] == Phase.PRE_COMPUTATION and self.input.get('pretrained_weights'):
             trainer.load_checkpoint(

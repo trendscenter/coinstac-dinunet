@@ -122,10 +122,11 @@ class NNTrainer:
         eval_loaders = []
 
         for d in dataset_list:
-            eval_loaders.append(
-                self.data_handle.get_loader(handle_key=mode, dataset=d, shuffle=False,
-                                            use_padded_sampler=use_padded_sampler)
-            )
+            if d and len(d) > 0:
+                eval_loaders.append(
+                    self.data_handle.get_loader(handle_key=mode, dataset=d, shuffle=False,
+                                                use_padded_sampler=use_padded_sampler)
+                )
 
         def _update_scores(_out, _it, _avg, _metrics):
             if _out is None:
@@ -183,8 +184,6 @@ class NNTrainer:
         return it
 
     def init_training_cache(self):
-        self.set_monitor_metric()
-        self.set_log_headers()
         self.cache[Key.TRAIN_LOG] = []
         self.cache[Key.VALIDATION_LOG] = []
         self.cache['best_val_epoch'] = 0
@@ -304,13 +303,6 @@ class NNTrainer:
 
     def new_averages(self):
         return _base_metrics.COINNAverages(num_averages=1)
-
-    def set_monitor_metric(self):
-        self.cache['monitor_metric'] = 'time'
-        self.cache['metric_direction'] = 'maximize'
-
-    def set_log_headers(self):
-        self.cache['log_header'] = 'Loss'
 
     def _on_epoch_end(self, ep, **kw):
         r"""
