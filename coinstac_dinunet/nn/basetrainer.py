@@ -195,7 +195,7 @@ class NNTrainer:
         if not isinstance(val_dataset, list):
             val_dataset = [val_dataset]
 
-        loader = self.data_handle.get_loader('train', dataset=train_dataset, shuffle=True)
+        loader = self.data_handle.get_loader('train', dataset=train_dataset, drop_last=True, shuffle=True)
         local_iter = self.cache.get('local_iterations', 1)
         tot_iter = len(loader) // local_iter
         for ep in range(1, self.cache['epochs'] + 1):
