@@ -186,8 +186,8 @@ class DADParallel(_torch.nn.Module):
             elif self._is_dad_module.get(module_name):
                 act_tall, local_grad_tall = data.pop()
 
-                act_tall = _torch.tensor(act_tall, dtype=_torch.float32, device=self.device)
-                local_grad_tall = _torch.tensor(local_grad_tall.squeeze(), dtype=_torch.float32, device=self.device)
+                act_tall = _torch.from_numpy(act_tall).float().to(self.device)
+                local_grad_tall = _torch.from_numpy(local_grad_tall.squeeze()).float().to(self.device)
 
                 dad_params["weight"].grad.data = (act_tall.T.mm(local_grad_tall)).T.contiguous()
                 if dad_params.get("bias") is not None:
