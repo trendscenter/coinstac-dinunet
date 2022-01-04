@@ -215,8 +215,8 @@ class DADParallel(_torch.nn.Module):
                     device=self.device,
                     tol=self.cache.setdefault('dad_tol', 1e-3)
                 )
-                data.append([act.T.detach().numpy().astype(self.dtype),
-                             delta.T.detach().numpy().astype(self.dtype)[None, ...]])
+                data.append([act.T.detach().cpu().numpy().astype(self.dtype),
+                             delta.T.detach().cpu().numpy().astype(self.dtype)[None, ...]])
 
         out, data = {}, []
         for ch_name, ch in list(self.module.named_children())[::-1]:
