@@ -75,7 +75,7 @@ def init_k_folds(files, cache, state):
     """
 
     data_splitter = split_place_holder
-    if cache.get('split_ratio') is not None:
+    if len(cache.get('split_ratio', [])) >= 1:
         data_splitter = create_ratio_split
     elif cache.get('num_folds') is not None:
         data_splitter = create_k_fold_splits
