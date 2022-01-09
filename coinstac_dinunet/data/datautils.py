@@ -3,6 +3,8 @@ import os as _os
 import random as _rd
 import shutil as _shutil
 
+_sep = _os.sep
+
 import numpy as _np
 
 
@@ -27,7 +29,7 @@ def create_ratio_split(files, cache, shuffle_files=True, name='SPLIT'):
     splits = _np.split(files[::-1], locs)[::-1]
     splits = dict([(k, sp.tolist()[::-1]) for k, sp in zip(keys, splits)])
     if save_to_dir:
-        f = open(save_to_dir + _os.sep + f'{name}.json', "w")
+        f = open(save_to_dir + _sep + f'{name}.json', "w")
         f.write(_json.dumps(splits))
         f.close()
     else:
@@ -51,7 +53,7 @@ def create_k_fold_splits(files, cache, shuffle_files=True, name='SPLIT'):
                   "test": [files[ix] for ix in test_ix]}
 
         if save_to_dir:
-            f = open(save_to_dir + _os.sep + f'{name}_' + str(i) + '.json', "w")
+            f = open(save_to_dir + _sep + f'{name}_' + str(i) + '.json', "w")
             f.write(_json.dumps(splits))
             f.close()
         else:
@@ -61,37 +63,32 @@ def create_k_fold_splits(files, cache, shuffle_files=True, name='SPLIT'):
 def split_place_holder(files, cache):
     save_to_dir = cache['split_dir']
     splits = {'train': [], 'validation': [], 'test': []}
-    f = open(save_to_dir + _os.sep + f'empty_split.json', "w")
+    f = open(save_to_dir + _sep + f'empty_split.json', "w")
     f.write(_json.dumps(splits))
 
 
 def init_k_folds(files, cache, state):
-    """
-    If one wants to use custom splits:- Populate splits_dir as specified in inputs spec with split files(.json)
-        with list of file names on each train, validation, and test keys.
-    Number of split files should be equal to num_folds passed in inputspec
-    If nothing is provided, random k-splits will be created.
-    Splits will be copied/created in output directory to have everything of a result at the same place.
-    """
-
-    data_splitter = split_place_holder
-    if len(cache.get('split_ratio', [])) >= 1:
-        data_splitter = create_ratio_split
-    elif cache.get('num_folds') is not None:
-        data_splitter = create_k_fold_splits
-
     out = {}
-    cache['split_dir'] = cache.get('split_dir', 'splits')
-    split_dir = state['baseDirectory'] + _os.sep + cache['split_dir']
 
-    cache['split_dir'] = state['outputDirectory'] + _os.sep + cache['task_id'] + _os.sep + cache['split_dir']
+    """Splits dir path given"""
+    _dir = state['baseDirectory'] + _sep + cache.get('split_dir', 'splits')
+
+    cache['split_dir'] = state['outputDirectory'] + _sep + cache['task_id'] + _sep + 'splits'
     _os.makedirs(cache['split_dir'], exist_ok=True)
+    if _os.path.exists(_dir) and len(_os.listdir(_dir)) > 0:
+        [_shutil.copy(_dir + _sep + f, cache['split_dir'] + _sep + f) for f in _os.listdir(_dir)]
 
-    if _os.path.exists(split_dir) and len(_os.listdir(split_dir)) > 0:
-        [_shutil.copy(split_dir + _os.sep + f, cache['split_dir'] + _os.sep + f) for f in _os.listdir(split_dir)]
+    elif cache.get('split_files'):
+        [_shutil.copy(state['baseDirectory'] + _sep + f, cache['split_dir'] + _sep + f) for f in cache['split_files']]
+    
+    elif cache.get('num_folds'):
+        create_k_fold_splits(files, cache)
 
-    elif len(_os.listdir(cache['split_dir'])) == 0:
-        data_splitter(files, cache)
+    elif cache.get('split_ratio'):
+        create_ratio_split(files, cache)
+
+    else:
+        split_place_holder(None, cache)
 
     splits = sorted(_os.listdir(cache['split_dir']))
     cache['splits'] = dict(zip([str(i) for i in range(len(splits))], splits))
