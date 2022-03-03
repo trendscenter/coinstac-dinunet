@@ -187,9 +187,9 @@ class DADParallel(_torch.nn.Module):
                 act_tall, local_grad_tall = data.pop()
 
                 act_tall = _torch.from_numpy(act_tall).float().to(self.device)
-                local_grad_tall = _torch.from_numpy(local_grad_tall.squeeze(0)).float().to(self.device)
+                local_grad_tall = _torch.from_numpy(local_grad_tall).float().to(self.device)
 
-                dad_params["weight"].grad.data = (act_tall.T.mm(local_grad_tall)).T.contiguous()
+                dad_params["weight"].grad.data = (act_tall.mm(local_grad_tall)).T.contiguous()
                 if dad_params.get("bias") is not None:
                     dad_params[f"bias"].grad.data = local_grad_tall.sum(0)
 
@@ -215,8 +215,8 @@ class DADParallel(_torch.nn.Module):
                     device=self.device,
                     tol=self.cache.setdefault('dad_tol', 1e-3)
                 )
-                data.append([act.T.detach().cpu().numpy().astype(self.dtype),
-                             delta.T.detach().cpu().numpy().astype(self.dtype)[None, ...]])
+                data.append([act.detach().cpu().numpy().astype(self.dtype),
+                             delta.detach().unsqueeze(-1).cpu().numpy().astype(self.dtype)])
 
         out, data = {}, []
         for ch_name, ch in list(self.module.named_children())[::-1]:
