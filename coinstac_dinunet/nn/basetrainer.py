@@ -62,7 +62,7 @@ class NNTrainer:
     def _set_gpus(self):
         self.device['gpu'] = _torch.device("cpu")
         if self.cache.get('gpus') is not None and len(self.cache['gpus']) > 0:
-            if _conf.gpu_available:
+            if _conf.CUDA_AVAILABLE:
                 self.device['gpu'] = _torch.device(f"cuda:{self.cache['gpus'][0]}")
                 if len(self.cache['gpus']) >= 2:
                     for mkey in self.nn:
