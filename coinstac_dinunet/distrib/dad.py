@@ -6,7 +6,8 @@ from coinstac_dinunet.utils import tensorutils as _tu
 _SKIP_NORM_Layers = [_torch.nn.BatchNorm1d, _torch.nn.LayerNorm, _torch.nn.GroupNorm]
 
 
-def power_iteration_BC(B, C, rank=10, numiterations=20, device='cuda', tol=1e-3):
+def power_iteration_BC(B, C, rank, numiterations, tol):
+    device = B.device
     [cm, cn] = C.shape
     if cm > cn:
         CC = _torch.mm(C.T, C)
@@ -81,7 +82,8 @@ def power_iteration_BC(B, C, rank=10, numiterations=20, device='cuda', tol=1e-3)
     eigs = eigs[1:-1]
     return (
         _torch.stack([x["sigma"] * x["b"] for x in eigs], 1),
-        _torch.stack([x["c"] for x in eigs], 1),)
+        _torch.stack([x["c"] for x in eigs], 1)
+    )
 
 
 def _dad_trainable_module(module):
@@ -184,10 +186,10 @@ class DADParallel(_torch.nn.Module):
                     _sync(self._hierarchy_key(module_name, child_name), child, data)
 
             elif self._is_dad_module.get(module_name):
-                act_tall, local_grad_tall = data.pop()
+                local_grad_tall, act_tall = data.pop()
 
+                local_grad_tall = _torch.from_numpy(local_grad_tall).float().to(self.device).T
                 act_tall = _torch.from_numpy(act_tall).float().to(self.device)
-                local_grad_tall = _torch.from_numpy(local_grad_tall).float().to(self.device)
 
                 dad_params["weight"].grad.data = (act_tall.mm(local_grad_tall)).T.contiguous()
                 if dad_params.get("bias") is not None:
@@ -207,16 +209,17 @@ class DADParallel(_torch.nn.Module):
                     _backward(self._hierarchy_key(module_name, child_name), child, data)
 
             elif self._is_dad_module.get(module_name):
-                delta, act = power_iteration_BC(
-                    self._local_grads[module_name].T,
-                    self._activations[module_name].T,
-                    rank=self.cache.setdefault('dad_reduction_rank', 10),
-                    numiterations=self.cache.setdefault('dad_num_pow_iters', 5),
-                    device=self.device,
-                    tol=self.cache.setdefault('dad_tol', 1e-3)
+                grad, act = power_iteration_BC(
+                    self._local_grads[module_name].detach().T,
+                    self._activations[module_name].detach().T,
+                    self.cache.setdefault('dad_reduction_rank', 10),
+                    self.cache.setdefault('dad_num_pow_iters', 5),
+                    self.cache.setdefault('dad_tol', 1e-3)
                 )
-                data.append([act.detach().cpu().numpy().astype(self.dtype),
-                             delta.detach().unsqueeze(-1).cpu().numpy().astype(self.dtype)])
+                data.append([
+                    grad.unsqueeze(-1).cpu().numpy().astype(self.dtype),
+                    act.cpu().numpy().astype(self.dtype)
+                ])
 
         out, data = {}, []
         for ch_name, ch in list(self.module.named_children())[::-1]:

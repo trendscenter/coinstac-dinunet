@@ -15,24 +15,6 @@ def _load(state, site, site_vars):
     return _tu.load_arrays(grads_file)
 
 
-def _cat(dtype, cache, *data):
-    """
-    Starmap calls by doing func(*data) itself so don't have to do data[0]
-    """
-    act, grad = list(zip(*data))
-    act = _torch.cat([_torch.from_numpy(a).to(_config.DEVICE) for a in act], 1)
-    grad = _torch.cat([_torch.from_numpy(g).to(_config.DEVICE) for g in grad], 1).squeeze(-1)
-    if _config.CUDA_AVAILABLE:
-        grad, act = _SPI(
-            grad, act,
-            rank=cache.setdefault('dad_reduction_rank', 10),
-            numiterations=cache.setdefault('dad_num_pow_iters', 5),
-            device=_config.DEVICE,
-            tol=cache.setdefault('dad_tol', 1e-3)
-        )
-    return [act.cpu().numpy().astype(dtype), grad.T.cpu().numpy().astype(dtype)]
-
-
 class DADLearner(_COINNLearner):
     def __init__(self, **kw):
         super().__init__(**kw)
@@ -93,17 +75,27 @@ class DADReducer(_COINNReducer):
 
         site_data = list(
             self.pool.starmap(
-                _partial(_load, self.state), self.input.items(),
-                chunksize=self._chunk_size
+                _partial(_load, self.state), self.input.items()
             )
         )
 
-        reduced_data = list(
-            self.pool.starmap(
-                _partial(_cat, self.dtype, self.cache), list(zip(*site_data)),
-                chunksize=self._chunk_size
-            )
-        )
+        reduced_data = []
+        for d in list(zip(*site_data)):
+            grad, act = list(zip(*d))
+            grad = _torch.cat([_torch.from_numpy(g).to(_config.DEVICE) for g in grad], 1).squeeze(-1)
+            act = _torch.cat([_torch.from_numpy(a).to(_config.DEVICE) for a in act], 1)
+            if _config.CUDA_AVAILABLE:
+                grad, act = _SPI(
+                    grad,
+                    act,
+                    self.cache.setdefault('dad_reduction_rank', 10),
+                    self.cache.setdefault('dad_num_pow_iters', 5),
+                    self.cache.setdefault('dad_tol', 1e-3)
+                )
+            reduced_data.append([
+                grad.cpu().numpy().astype(self.dtype),
+                act.cpu().numpy().astype(self.dtype)
+            ])
 
         _tu.save_arrays(
             self.state['transferDirectory'] + _os.sep + out['reduced_dad_data'],

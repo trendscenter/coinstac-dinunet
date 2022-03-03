@@ -1,4 +1,3 @@
-import math as _math
 import os as _os
 from functools import partial as _partial
 
@@ -14,14 +13,6 @@ def _load(state, site, site_vars):
     return _tu.load_arrays(grads_file)
 
 
-def _mean(dtype, *data):
-    """
-    Starmap calls by doing func(*data) itself so dont have to do data[0]
-    """
-    data = _torch.from_numpy(_np.array(data)).to(_conf.DEVICE).mean(0)
-    return data.cpu().numpy().astype(dtype)
-
-
 class COINNReducer:
     def __init__(self, trainer, mp_pool, **kw):
         self.cache = trainer.cache
@@ -31,28 +22,20 @@ class COINNReducer:
         self.pool = mp_pool
         self.dtype = f"float{self.cache['precision_bits']}"
 
-        self._chunk_size = self.cache.setdefault(
-            'reduction_chunk_size',
-            _math.ceil(len(self.input) / mp_pool._processes)
-        )
-
     def reduce(self):
         """ Average each sites gradients and pass it to all sites. """
         out = {'avg_grads_file': _conf.avg_grads_file}
 
         grads = list(
             self.pool.starmap(
-                _partial(_load, self.state), self.input.items(),
-                chunksize=self._chunk_size
+                _partial(_load, self.state), self.input.items()
             )
         )
 
-        avg_grads = list(
-            self.pool.starmap(
-                _partial(_mean, self.dtype), list(zip(*grads)),
-                chunksize=self._chunk_size
-            )
-        )
+        avg_grads = []
+        for data in list(zip(*grads)):
+            data = _torch.from_numpy(_np.array(data)).to(_conf.DEVICE).mean(0)
+            avg_grads.append(data.cpu().numpy().astype(self.dtype))
 
         _tu.save_arrays(
             self.state['transferDirectory'] + _os.sep + out['avg_grads_file'],
