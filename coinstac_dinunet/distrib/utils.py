@@ -20,18 +20,17 @@ def _cat(dtype, cache, *data):
     Starmap calls by doing func(*data) itself so don't have to do data[0]
     """
     act, grad = list(zip(*data))
-    act = _torch.cat([_torch.from_numpy(a).to(_config.DEVICE) for a in act])
-    grad = _torch.cat([_torch.from_numpy(g).to(_config.DEVICE) for g in grad], 1).squeeze(0)
+    act = _torch.cat([_torch.from_numpy(a).to(_config.DEVICE) for a in act], 1)
+    grad = _torch.cat([_torch.from_numpy(g).to(_config.DEVICE) for g in grad], 1).squeeze(-1)
     if _config.CUDA_AVAILABLE:
         grad, act = _SPI(
-            grad.T, act.T,
+            grad, act,
             rank=cache.setdefault('dad_reduction_rank', 10),
             numiterations=cache.setdefault('dad_num_pow_iters', 5),
             device=_config.DEVICE,
             tol=cache.setdefault('dad_tol', 1e-3)
         )
-        act, grad = act.T, grad.T
-    return [act.cpu().numpy().astype(dtype), grad.unsqueeze(0).cpu().numpy().astype(dtype)]
+    return [act.cpu().numpy().astype(dtype), grad.T.cpu().numpy().astype(dtype)]
 
 
 class DADLearner(_COINNLearner):
