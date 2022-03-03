@@ -26,8 +26,9 @@ setup(
     ],
     packages=[
         'coinstac_dinunet', 'coinstac_dinunet.config', 'coinstac_dinunet.data',
-        'coinstac_dinunet.metrics', 'coinstac_dinunet.distrib', 'coinstac_dinunet.nn',
-        'coinstac_dinunet.utils', 'coinstac_dinunet.vision'
+        'coinstac_dinunet.metrics', 'coinstac_dinunet.distrib',
+        'coinstac_dinunet.distrib.nodes', 'coinstac_dinunet.distrib.powersgd', 'coinstac_dinunet.distrib.rankdad',
+        'coinstac_dinunet.nn', 'coinstac_dinunet.utils', 'coinstac_dinunet.vision'
     ],
     include_package_data=True,
     install_requires=['numpy', 'pillow', 'matplotlib', 'opencv-python-headless', 'pandas', 'sklearn']

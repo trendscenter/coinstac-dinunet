@@ -14,8 +14,8 @@ from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.utils import performance_improved_, stop_training_
 from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.vision import plotter as _plot
-from .reducer import COINNReducer as _dSGDReducer
-from .dad import DADReducer as _DADReducer
+from ..reducer import COINNReducer as _dSGDReducer
+from ..rankdad import DADReducer as _DADReducer
 
 
 class EmptyDataHandle:

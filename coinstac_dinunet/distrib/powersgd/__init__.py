@@ -1,13 +1,14 @@
 import os as _os
 
 import torch as _torch
+import numpy as _np
 
 from coinstac_dinunet import config as _conf
 from coinstac_dinunet.utils import tensorutils as _tu
-import numpy as _np
-from coinstac_dinunet.distrib.learner import COINNLearner as _COINNLearner
-from coinstac_dinunet.distrib.reducer import COINNReducer as _COINNReducer
 from functools import partial as _partial
+
+from .. import COINNLearner as _COINNLearner
+from .. import COINNReducer as _COINNReducer
 
 _sep = _os.sep
 
@@ -16,11 +17,9 @@ class PowerSGDLearner(_COINNLearner):
 
     def step(self) -> dict:
         out = {}
-        grads = _tu.load_arrays(self.state['baseDirectory'] + _sep + self.input['agg_grads_file'])
+        agg_grads = _tu.load_arrays(self.state['baseDirectory'] + _sep + self.input['agg_grads_file'])
 
-        first_model = list(self.trainer.nn.keys())[0]
-        for i, param in enumerate(self.trainer.nn[first_model].parameters()):
-            param.grad = _torch.tensor(grads[i], dtype=_torch.float32).to(self.trainer.device['gpu'])
+        #  Todo
 
         first_optim = list(self.trainer.optimizer.keys())[0]
         self.trainer.optimizer[first_optim].step()

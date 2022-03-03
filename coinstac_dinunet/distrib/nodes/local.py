@@ -15,9 +15,10 @@ import coinstac_dinunet.config as _conf
 import coinstac_dinunet.utils as _utils
 from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.data import COINNDataHandle as _DataHandle
-from coinstac_dinunet.distrib.learner import COINNLearner as _dSGDLearner
 from coinstac_dinunet.utils import FrozenDict as _FrozenDict
-from .dad import DADLearner as _DADLearner
+
+from ..learner import COINNLearner as _dSGDLearner
+from ..rankdad import DADLearner as _DADLearner
 
 
 class COINNLocal:

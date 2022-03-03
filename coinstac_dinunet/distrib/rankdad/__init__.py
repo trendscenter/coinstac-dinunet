@@ -6,7 +6,7 @@ from coinstac_dinunet.distrib.learner import COINNLearner as _COINNLearner
 from coinstac_dinunet.distrib.reducer import COINNReducer as _COINNReducer
 from coinstac_dinunet.utils import tensorutils as _tu
 import coinstac_dinunet.config as _config
-from .spi import DADParallel as _DADParallel, power_iteration_BC as _SPI
+from .spi import DADParallel as DADParallel, power_iteration_BC
 import torch as _torch
 
 
@@ -19,7 +19,7 @@ class DADLearner(_COINNLearner):
     def __init__(self, **kw):
         super().__init__(**kw)
         for fk in self.trainer.nn:
-            self.trainer.nn[fk] = _DADParallel(
+            self.trainer.nn[fk] = DADParallel(
                 self.trainer.nn[fk],
                 cache=self.cache,
                 input=self.input,
@@ -85,7 +85,7 @@ class DADReducer(_COINNReducer):
             grad = _torch.cat([_torch.from_numpy(g).to(_config.DEVICE) for g in grad], 1).squeeze(-1)
             act = _torch.cat([_torch.from_numpy(a).to(_config.DEVICE) for a in act], 1)
             if _config.CUDA_AVAILABLE:
-                grad, act = _SPI(
+                grad, act = power_iteration_BC(
                     grad,
                     act,
                     self.cache.setdefault('dad_reduction_rank', 10),
