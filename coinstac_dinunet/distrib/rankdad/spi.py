@@ -106,6 +106,9 @@ class DADParallel(_torch.nn.Module):
         self.dtype = dtype
         self._is_dad_module = self.cache.setdefault('is_dad_module', {})
         self._reset()
+        self.rank = self.cache.setdefault('dad_reduction_rank', 10),
+        self.num_pow_iters = self.cache.setdefault('dad_num_pow_iters', 5),
+        self.dad_tol = self.cache.setdefault('dad_tol', 1e-3)
 
     def _reset(self):
         self.fw_hooks_handle = []
@@ -212,9 +215,9 @@ class DADParallel(_torch.nn.Module):
                 grad, act = power_iteration_BC(
                     self._local_grads[module_name].detach().T,
                     self._activations[module_name].detach().T,
-                    self.cache.setdefault('dad_reduction_rank', 10),
-                    self.cache.setdefault('dad_num_pow_iters', 5),
-                    self.cache.setdefault('dad_tol', 1e-3)
+                    self.rank,
+                    self.num_pow_iters,
+                    self.dad_tol
                 )
                 data.append([
                     grad.unsqueeze(-1).cpu().numpy().astype(self.dtype),

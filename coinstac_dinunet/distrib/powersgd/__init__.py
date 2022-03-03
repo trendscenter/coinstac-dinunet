@@ -1,6 +1,5 @@
 import os as _os
 
-import torch as _torch
 import numpy as _np
 
 from coinstac_dinunet import config as _conf
@@ -14,6 +13,17 @@ _sep = _os.sep
 
 
 class PowerSGDLearner(_COINNLearner):
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.matrix_approximation_rank = self.cache.setdefault('matrix_approximation_rank', 1)
+        self.start_powerSGD_iter = self.cache.setdefault('start_powerSGD_iter', 10)
+        self.use_error_feedback = self.cache.setdefault('use_error_feedback', True)
+        self.warm_start = self.cache.setdefault('warm_start', True)
+        self.seed = self.cache.get('seed')
+        self.error_dict = {}
+        self.p_memory_dict = {}
+        self.q_memory_dict = {}
+        self.iter = 0
 
     def step(self) -> dict:
         out = {}
@@ -47,6 +57,7 @@ class PowerSGDLearner(_COINNLearner):
         first_model = list(self.trainer.nn.keys())[0]
         out['compressed_grads_file'] = _conf.grads_file
         grads = _tu.extract_grads(self.trainer.nn[first_model], dtype=self.dtype)
+
 
         compressed_grads = []  # PowerSGD compression todo
 

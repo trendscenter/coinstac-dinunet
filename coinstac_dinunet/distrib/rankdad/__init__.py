@@ -69,6 +69,9 @@ class DADLearner(_COINNLearner):
 class DADReducer(_COINNReducer):
     def __init__(self, **kw):
         super().__init__(**kw)
+        self.rank = self.cache.setdefault('dad_reduction_rank', 10),
+        self.num_pow_iters = self.cache.setdefault('dad_num_pow_iters', 5),
+        self.dad_tol = self.cache.setdefault('dad_tol', 1e-3)
 
     def reduce(self):
         out = {'reduced_dad_data': 'reduced_dad_data.npy'}
@@ -86,11 +89,8 @@ class DADReducer(_COINNReducer):
             act = _torch.cat([_torch.from_numpy(a).to(_config.DEVICE) for a in act], 1)
             if _config.CUDA_AVAILABLE:
                 grad, act = power_iteration_BC(
-                    grad,
-                    act,
-                    self.cache.setdefault('dad_reduction_rank', 10),
-                    self.cache.setdefault('dad_num_pow_iters', 5),
-                    self.cache.setdefault('dad_tol', 1e-3)
+                    grad, act,
+                    self.rank, self.num_pow_iters, self.dad_tol
                 )
             reduced_data.append([
                 grad.cpu().numpy().astype(self.dtype),
