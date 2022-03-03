@@ -63,7 +63,7 @@ def _load(state, site, site_vars):
     return _tu.load_arrays(grads_file)
 
 
-class COINNReducer(_COINNReducer):
+class PowerSGDReducer(_COINNReducer):
 
     def reduce(self):
         """ Average each sites gradients and pass it to all sites. """

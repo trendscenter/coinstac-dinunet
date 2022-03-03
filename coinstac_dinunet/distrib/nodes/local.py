@@ -19,6 +19,7 @@ from coinstac_dinunet.utils import FrozenDict as _FrozenDict
 
 from ..learner import COINNLearner as _dSGDLearner
 from ..rankdad import DADLearner as _DADLearner
+from ..powersgd import PowerSGDLearner as _PowerSGDLearner
 
 
 class COINNLocal:
@@ -268,8 +269,12 @@ class COINNLocal:
 
         if self.cache.get('agg_engine') == AGG_Engine.dSGD:
             return _dSGDLearner
+
         elif self.cache.get('agg_engine') == AGG_Engine.rankDAD:
             return _DADLearner
+
+        elif self.cache.get('agg_engine') == AGG_Engine.powerSGD:
+            return _PowerSGDLearner
 
         return learner_cls
 
