@@ -5,7 +5,9 @@ from functools import partial as _partial
 from coinstac_dinunet.distrib.learner import COINNLearner as _COINNLearner
 from coinstac_dinunet.distrib.reducer import COINNReducer as _COINNReducer
 from coinstac_dinunet.utils import tensorutils as _tu
-from .dad import DADParallel as _DADParallel
+import coinstac_dinunet.config as _config
+from .dad import DADParallel as _DADParallel, power_iteration_BC as _SPI
+import torch as _torch
 
 
 def _load(state, site, site_vars):
@@ -13,12 +15,23 @@ def _load(state, site, site_vars):
     return _tu.load_arrays(grads_file)
 
 
-def _cat(dtype, *data):
+def _cat(dtype, cache, *data):
     """
-    Starmap calls by doing func(*data) itself so dont have to do data[0]
+    Starmap calls by doing func(*data) itself so don't have to do data[0]
     """
     act, grad = list(zip(*data))
-    return [_np.concatenate(act).astype(dtype), _np.concatenate(grad, 1).astype(dtype)]
+    act = _torch.cat([_torch.from_numpy(a).to(_config.DEVICE) for a in act])
+    grad = _torch.cat([_torch.from_numpy(g).to(_config.DEVICE) for g in grad], 1).squeeze(0)
+    if _config.CUDA_AVAILABLE:
+        grad, act = _SPI(
+            grad.T, act.T,
+            rank=cache.setdefault('dad_reduction_rank', 10),
+            numiterations=cache.setdefault('dad_num_pow_iters', 5),
+            device=_config.DEVICE,
+            tol=cache.setdefault('dad_tol', 1e-3)
+        )
+        act, grad = act.T, grad.T
+    return [act.cpu().numpy().astype(dtype), grad.unsqueeze(0).cpu().numpy().astype(dtype)]
 
 
 class DADLearner(_COINNLearner):
@@ -88,7 +101,7 @@ class DADReducer(_COINNReducer):
 
         reduced_data = list(
             self.pool.starmap(
-                _partial(_cat, self.dtype), list(zip(*site_data)),
+                _partial(_cat, self.dtype, self.cache), list(zip(*site_data)),
                 chunksize=self._chunk_size
             )
         )

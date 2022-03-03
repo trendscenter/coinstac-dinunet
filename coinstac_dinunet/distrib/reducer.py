@@ -6,6 +6,7 @@ import numpy as _np
 
 import coinstac_dinunet.config as _conf
 import coinstac_dinunet.utils.tensorutils as _tu
+import torch as _torch
 
 
 def _load(state, site, site_vars):
@@ -17,7 +18,8 @@ def _mean(dtype, *data):
     """
     Starmap calls by doing func(*data) itself so dont have to do data[0]
     """
-    return _np.array(data).mean(0).astype(dtype)
+    data = _torch.from_numpy(_np.array(data)).to(_conf.DEVICE).mean(0)
+    return data.cpu().numpy().astype(dtype)
 
 
 class COINNReducer:
