@@ -26,38 +26,28 @@ class PowerSGDLearner(_COINNLearner):
         self.iter = 0
 
     def step(self) -> dict:
+        if self.iter < self.start_powerSGD_iter:
+            self.iter += 1
+            return super(PowerSGDLearner, self).step()
+
         out = {}
         agg_grads = _tu.load_arrays(self.state['baseDirectory'] + _sep + self.input['agg_grads_file'])
-
         #  Todo
 
         first_optim = list(self.trainer.optimizer.keys())[0]
         self.trainer.optimizer[first_optim].step()
         return out
 
-    def backward(self):
-        out = {}
-        first_model = list(self.trainer.nn.keys())[0]
-        first_optim = list(self.trainer.optimizer.keys())[0]
-
-        self.trainer.nn[first_model].train()
-        self.trainer.optimizer[first_optim].zero_grad()
-
-        its = []
-        for _ in range(self.cache['local_iterations']):
-            batch, nxt_iter_out = self.trainer.data_handle.next_iter()
-            it = self.trainer.iteration(batch)
-            it['loss'].backward()
-            its.append(it)
-            out.update(**nxt_iter_out)
-        return self.trainer.reduce_iteration(its), out
-
     def to_reduce(self):
+        if self.iter < self.start_powerSGD_iter:
+            it, out = super(PowerSGDLearner, self).to_reduce()
+            out['start_power_iter'] = False
+            return it, out
+
         it, out = self.backward()
         first_model = list(self.trainer.nn.keys())[0]
         out['compressed_grads_file'] = _conf.grads_file
         grads = _tu.extract_grads(self.trainer.nn[first_model], dtype=self.dtype)
-
 
         compressed_grads = []  # PowerSGD compression todo
 
@@ -66,6 +56,7 @@ class PowerSGDLearner(_COINNLearner):
             _np.array(compressed_grads, dtype=object)
         )
         out['reduce'] = True
+        out['start_power_iter'] = True
         return it, out
 
 
@@ -78,8 +69,10 @@ class PowerSGDReducer(_COINNReducer):
 
     def reduce(self):
         """ Average each sites gradients and pass it to all sites. """
-        out = {'avg_grads_file': _conf.avg_grads_file}
+        if not list(self.input.values())[0]['start_power_iter']:
+            return super(PowerSGDReducer, self).reduce()
 
+        out = {'avg_grads_file': _conf.avg_grads_file}
         grads = list(
             self.pool.starmap(
                 _partial(_load, self.state), self.input.items()
