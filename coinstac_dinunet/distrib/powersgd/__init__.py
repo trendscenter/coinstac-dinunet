@@ -38,6 +38,10 @@ class PowerSGDLearner(_COINNLearner):
         self.trainer.optimizer[first_optim].step()
         return out
 
+        first_optim = list(self.trainer.optimizer.keys())[0]
+        self.trainer.optimizer[first_optim].step()
+        return out
+
     def to_reduce(self):
         if self.iter < self.start_powerSGD_iter:
             it, out = super(PowerSGDLearner, self).to_reduce()
