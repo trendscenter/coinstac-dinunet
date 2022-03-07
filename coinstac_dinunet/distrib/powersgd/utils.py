@@ -5,9 +5,10 @@ import numpy as np
 import torch
 import torch.distributed as dist
 
+from . import default_hooks as default
 
-""""COPIED for pytorch official repo for reference only"""
-
+import torch.distributed as dist
+dist._GradBucket
 def _orthogonalize(matrix, epsilon=1e-8):
     """
     Applies Gram-Schmidt procedure to orthogonalize a given 2D tensor.
@@ -31,55 +32,24 @@ def _orthogonalize(matrix, epsilon=1e-8):
             rest = matrix[:, i + 1 :]
             rest -= torch.sum(col * rest, dim=0) * col
 
-
-class PowerSGDState(object):
-    def __init__(
-        self,
-        process_group,
-        matrix_approximation_rank=1,
-        start_powerSGD_iter=10,
-        use_error_feedback=True,
-        warm_start=True,
-        random_seed=0,
-    ):
-        self.process_group = process_group
-        self.matrix_approximation_rank = matrix_approximation_rank
-        if (use_error_feedback or warm_start) and start_powerSGD_iter <= 1:
-            raise ValueError(
-                "Expect `start_powerSGD_iter` > 1 if `use_error_feedback` or `warm_start` is enabled, "
-                "because PowerSGD can only be applied after the first two iterations in DDP."
-            )
-        self.start_powerSGD_iter = start_powerSGD_iter
-        self.use_error_feedback = use_error_feedback
-        self.warm_start = warm_start
-        self.rng = np.random.RandomState(random_seed)
-        self.error_dict = {}
-        self.p_memory_dict = {}
-        self.q_memory_dict = {}
-        self.iter = 0
-
-    def maybe_increase_iter(self, bucket):
-        if bucket.get_index() == 0:
-            self.iter += 1
-        if self.iter == self.start_powerSGD_iter:
-            logging.info(
-                "Start to apply PowerSGD after {} iterations.".format(self.iter)
-            )
-
-
-def powerSGD_hook(state: PowerSGDState, bucket) -> torch.futures.Future:
+def powerSGD_hook(state, bucket) -> torch.futures.Future:
     process_group = state.process_group
     group_to_use = process_group if process_group is not None else dist.group.WORLD
     world_size = group_to_use.size()
+
+    # The input tensor is a flattened 1D tensor.
     input_tensor = bucket.get_tensors()[0]
 
+    # Run vanilla allreduce in the first `start_powerSGD_iter` iterations.
     if state.iter < state.start_powerSGD_iter:
         state.maybe_increase_iter(bucket)
         return default._allreduce_fut(group_to_use, input_tensor)
 
+    # Apply PowerSGD after `start_powerSGD_iter` iterations.
     device = input_tensor.device
     dtype = input_tensor.dtype
 
+    # Incorporate the error from the previous state into the gradients.
     bucket_index = bucket.get_index()
     input_tensor_cp = None
     total_length = input_tensor.shape[0]
@@ -95,8 +65,13 @@ def powerSGD_hook(state: PowerSGDState, bucket) -> torch.futures.Future:
             state.error_dict[bucket_index] = torch.zeros(
                 total_length, device=device, dtype=dtype
             )
+
+        # Keep a copy of the input tensor,
+        # so that we can compute the local error caused by compression later,
+        # by comparing this copy and the input tensor updated after decompression.
         input_tensor_cp = torch.clone(input_tensor).detach()
 
+    # Unflatten the input tensor into per-parameter tensors, for layer-wise compression.
     tensors = [
         input_tensor[offset : offset + length].view(sizes)
         for offset, length, sizes in zip(
