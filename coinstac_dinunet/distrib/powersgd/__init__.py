@@ -63,7 +63,7 @@ class PowerSGDLearner(_COINNLearner):
             if param.ndimension() <= 1:
                 self.rank1_tensors[key] = param.detach().cpu().numpy()
             else:
-                self.high_rank_tensors[key] = param
+                self.high_rank_tensors[key] = param.detach()
 
         dtype = torch.float16 if self.dtype == 'float16' else torch.float32
         for param_key, M in self.high_rank_tensors.items():
