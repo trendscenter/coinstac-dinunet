@@ -85,7 +85,7 @@ class COINNRemote:
 
         self.cache['folds'] = self.cache['folds'][::-1]
 
-    def _next_run(self):
+    def _next_run(self, trainer):
         """
         This function pops a new fold, lock parameters, and forward init_nn signal to all sites
         """
@@ -94,6 +94,7 @@ class COINNRemote:
             log_dir=self.state['outputDirectory'] + _os.sep + self.cache[
                 'task_id'] + _os.sep + f"fold_{self.cache['fold']['split_ix']}")
         _os.makedirs(self.cache['log_dir'], exist_ok=True)
+        trainer.init_nn(init_model=False, init_optim=False, set_devices=True, init_weights=False)
 
         metric_direction = self.cache['metric_direction']
         self.cache.update(epoch=0, best_val_epoch=0)

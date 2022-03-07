@@ -85,8 +85,8 @@ class DADReducer(_COINNReducer):
         reduced_data = []
         for d in list(zip(*site_data)):
             grad, act = list(zip(*d))
-            grad = _torch.cat([_torch.from_numpy(g).to(_config.DEVICE) for g in grad], 1).squeeze(-1)
-            act = _torch.cat([_torch.from_numpy(a).to(_config.DEVICE) for a in act], 1)
+            grad = _torch.cat([_torch.from_numpy(g).to(self.device) for g in grad], 1).squeeze(-1)
+            act = _torch.cat([_torch.from_numpy(a).to(self.device) for a in act], 1)
             if _config.CUDA_AVAILABLE:
                 grad, act = power_iteration_BC(
                     grad, act,
