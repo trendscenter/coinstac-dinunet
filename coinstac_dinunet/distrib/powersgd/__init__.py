@@ -133,7 +133,9 @@ class PowerSGDLearner(_COINNLearner):
             file_Ps = self.state['baseDirectory'] + _os.sep + self.input['powerSGD_P_file_AGG']
             received_Ps = _tu.load_arrays(file_Ps)
             for k, new_p in zip(self.powerSGD_state.p_memory_dict, received_Ps):
-                self.powerSGD_state.p_memory_dict[k] = _orthogonalize(_torch.from_numpy(new_p).to(self.device))
+                new_p = _torch.from_numpy(new_p).to(self.device)
+                _orthogonalize(new_p)
+                self.powerSGD_state.p_memory_dict[k] = new_p
 
             """Send all Qs"""
             for param_key, M in self.powerSGD_state.high_rank_tensors.items():
