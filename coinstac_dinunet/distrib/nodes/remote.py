@@ -94,7 +94,7 @@ class COINNRemote:
             log_dir=self.state['outputDirectory'] + _os.sep + self.cache[
                 'task_id'] + _os.sep + f"fold_{self.cache['fold']['split_ix']}")
         _os.makedirs(self.cache['log_dir'], exist_ok=True)
-        trainer.init_nn(init_model=False, init_optim=False, set_devices=True, init_weights=False)
+        trainer.init_nn(set_devices=True)
 
         metric_direction = self.cache['metric_direction']
         self.cache.update(epoch=0, best_val_epoch=0)
@@ -219,7 +219,7 @@ class COINNRemote:
             Initialize all folds and loggers
             """
             self._init_runs()
-            self.out['global_runs'] = self._next_run()
+            self.out['global_runs'] = self._next_run(trainer)
             self.out['phase'] = Phase.NEXT_RUN
 
         if check(all, 'phase', Phase.PRE_COMPUTATION, self.input):

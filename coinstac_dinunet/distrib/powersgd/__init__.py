@@ -5,8 +5,8 @@ import torch as _torch
 from coinstac_dinunet import config as _conf
 from coinstac_dinunet.utils import tensorutils as _tu
 
-from .. import COINNLearner as _COINNLearner
-from .. import COINNReducer as _COINNReducer
+from ..learner import COINNLearner as _COINNLearner
+from ..reducer import COINNReducer as _COINNReducer
 from torch.distributed.algorithms.ddp_comm_hooks.powerSGD_hook import _orthogonalize
 from functools import partial as _partial
 
@@ -77,18 +77,17 @@ class PowerSGDLearner(_COINNLearner):
         first_model = list(self.trainer.nn.keys())[0]
         for key, param in self.trainer.nn[first_model].named_parameters():
             if param.ndimension() <= 1:
-                self.rank1_tensors[key] = param.grad.detach().cpu().numpy()
+                self.rank1_tensors[key] = param.grad.detach().cpu().numpy().astype(self.dtype)
             else:
                 self.high_rank_tensors[key] = param.grad.detach()
 
-        dtype = _torch.float16 if self.dtype == 'float16' else _torch.float32
         for param_key, M in self.high_rank_tensors.items():
             if self.use_error_feedback:
                 self.params_clone[param_key] = _torch.clone(M).detach()
                 if param_key in self.error_dict:
                     M._add(self.error_dict[param_key])
                 else:
-                    self.error_dict[param_key] = _torch.zeros(M, device=self.device, dtype=dtype)
+                    self.error_dict[param_key] = _torch.zeros(M, device=self.device, dtype=param.dtype)
 
             need_randomize_qs = not self.warm_start or param_key not in self.p_memory_dict
             if need_randomize_qs:
@@ -96,10 +95,10 @@ class PowerSGDLearner(_COINNLearner):
             else:
                 n, m = M.shape
                 matrix_approximation_rank = min(n, m, self.matrix_approximation_rank)
-                self.p_memory_dict[param_key] = _torch.randn(
+                self.q_memory_dict[param_key] = _torch.randn(
                     (n, matrix_approximation_rank),
                     device=self.device,
-                    dtype=dtype,
+                    dtype=param.dtype,
                 )
                 _orthogonalize(self.q_memory_dict[param_key])
 
@@ -117,7 +116,7 @@ class PowerSGDLearner(_COINNLearner):
         if self.input.get('powerSGD_phase', 'phase_P_sync') == 'phase_P_sync':
             """We orthogonalize P in the remote"""
             it, out = self._prepare_parameters()
-            Ps = [p.detach().cpu().numpy() for p in self.p_memory_dict.values()]
+            Ps = [p.detach().cpu().numpy().astype(self.dtype) for p in self.p_memory_dict.values()]
             out['powerSGD_P_file'] = f"powerSGD_P_{_conf.grads_file}"
             _tu.save_arrays(
                 self.state['transferDirectory'] + _sep + out['powerSGD_P_file'],
@@ -140,7 +139,7 @@ class PowerSGDLearner(_COINNLearner):
             """Send all Qs"""
             for param_key, M in self.high_rank_tensors.items():
                 self.q_memory_dict[param_key] = _torch.matmul(M.t(), self.p_memory_dict[param_key])
-            Qs = [p.detach().cpu().numpy() for p in self.q_memory_dict.values()]
+            Qs = [p.detach().cpu().numpy().astype(self.dtype) for p in self.q_memory_dict.values()]
             out['powerSGD_Q_file'] = f"powerSGD_Q_{_conf.grads_file}"
             _tu.save_arrays(
                 self.state['transferDirectory'] + _sep + out['powerSGD_Q_file'],

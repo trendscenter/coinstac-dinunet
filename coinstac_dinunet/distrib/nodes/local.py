@@ -115,6 +115,8 @@ class COINNLocal:
         out.update(trainer.data_handle.prepare_data())
         self.cache['num_folds'] = len(self.cache['splits'])
 
+        trainer.init_nn(set_devices=True)
+
         out['data_size'] = {}
         for k, sp in self.cache['splits'].items():
             sp = _json.loads(open(self.cache['split_dir'] + _os.sep + sp).read())
@@ -129,7 +131,7 @@ class COINNLocal:
         self.cache['log_dir'] = self.state['outputDirectory'] + _sep + self.cache[
             'task_id'] + _sep + f"fold_{self.cache['split_ix']}"
         _os.makedirs(self.cache['log_dir'], exist_ok=True)
-        trainer.init_nn(init_weights=True)
+        trainer.init_nn(init_model=True, init_optim=True, set_devices=True, init_weights=True)
         self.cache['best_nn_state'] = f"best.{self.cache['task_id']}-{self.cache['split_ix']}.pt"
         self.cache['latest_nn_state'] = f"latest.{self.cache['task_id']}-{self.cache['split_ix']}.pt"
         out['phase'] = Phase.COMPUTATION

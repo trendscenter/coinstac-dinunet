@@ -53,7 +53,7 @@ class NNTrainer:
         self.optimizer['adam'] = _torch.optim.Adam(self.nn[first_model].parameters(),
                                                    lr=self.cache['learning_rate'])
 
-    def init_nn(self, init_model=True, init_optim=True, set_devices=True, init_weights=True):
+    def init_nn(self, init_model=False, init_optim=False, set_devices=False, init_weights=False):
         if init_model: self._init_nn_model()
         if init_optim: self._init_optimizer()
         if init_weights: self._init_nn_weights(init_weights=init_weights)

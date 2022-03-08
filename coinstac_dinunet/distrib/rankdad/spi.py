@@ -106,8 +106,8 @@ class DADParallel(_torch.nn.Module):
         self.dtype = dtype
         self._is_dad_module = self.cache.setdefault('is_dad_module', {})
         self._reset()
-        self.rank = self.cache.setdefault('dad_reduction_rank', 10),
-        self.num_pow_iters = self.cache.setdefault('dad_num_pow_iters', 5),
+        self.rank = self.cache.setdefault('dad_reduction_rank', 10)
+        self.num_pow_iters = self.cache.setdefault('dad_num_pow_iters', 5)
         self.dad_tol = self.cache.setdefault('dad_tol', 1e-3)
 
     def _reset(self):
