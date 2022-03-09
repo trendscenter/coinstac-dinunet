@@ -93,10 +93,10 @@ class COINNLocal:
         if not self.cache.get(Key.ARGS_CACHED):
             self.cache.update(**self.input)
             self.cache.update(
-                **self.input.get(f"{self.input['task_id']}_args", {})
+                **self.input.get(f"{self.input.get('task_id')}_args", {})
             )
             self.cache.update(
-                **self.input.get(f"{self.input['agg_engine']}_args", {})
+                **self.input.get(f"{self.input.get('agg_engine')}_args", {})
             )
 
             for k in self._args:
