@@ -40,32 +40,25 @@ class PowerSGDLearner(_COINNLearner):
             return super(PowerSGDLearner, self).step()
 
         out = {}
-        file_Qs = self.powerSGD_state['baseDirectory'] + _os.sep + self.input['powerSGD_Q_file_AGG']
+        file_Qs = self.state['baseDirectory'] + _os.sep + self.input['powerSGD_Q_file_AGG']
         received_Qs = _tu.load_arrays(file_Qs)
         for k, new_q in zip(self.powerSGD_state.p_memory_dict, received_Qs):
             self.powerSGD_state.q_memory_dict[k] = _torch.from_numpy(new_q).to(self.device)
 
-        file_rank_1 = self.powerSGD_state['baseDirectory'] + _os.sep + self.input['rank_1_grads_file_AGG']
-        rank_1_params = [_torch.from_numpy(t).to(self.device).float() for t in _tu.load_arrays(file_rank_1)]
-
-        high_rank_params = []
-        for param_key, M in self.powerSGD_state.high_rank_tensors.items():
-            recon_param = _torch.matmul(self.powerSGD_state.p_memory_dict[param_key],
-                                        self.powerSGD_state.q_memory_dict[param_key].t()).float()
-            high_rank_params.append(recon_param)
-            if self.use_error_feedback:
-                self.powerSGD_state.error_dict[param_key] = self.powerSGD_state.params_clone[param_key] - recon_param
+        file_rank_1 = self.state['baseDirectory'] + _os.sep + self.input['rank_1_grads_file_AGG']
+        rank_1_grads = [_torch.from_numpy(t).to(self.device).float()
+                        for t in _tu.load_arrays(file_rank_1)][::-1]
 
         first_model = list(self.trainer.nn.keys())[0]
-
-        rank_1_params = rank_1_params[::-1]
-        high_rank_params = high_rank_params[::-1]
         for param_key, param in self.trainer.nn[first_model].named_parameters():
-            if param_key in self.powerSGD_state.rank1_tensors:
-                param.grad = rank_1_params.pop()
-
-            elif param_key in high_rank_params:
-                param.grad = high_rank_params.pop()
+            if param.grad.ndimension() <= 1:
+                param.grad = rank_1_grads.pop()
+            else:
+                param.grad = _torch.matmul(self.powerSGD_state.p_memory_dict[param_key],
+                                           self.powerSGD_state.q_memory_dict[param_key].t()).float()
+                if self.use_error_feedback:
+                    self.powerSGD_state.error_dict[param_key] = self.powerSGD_state.params_clone[
+                                                                    param_key] - param.grad.detach().clone()
 
         first_optim = list(self.trainer.optimizer.keys())[0]
         self.trainer.optimizer[first_optim].step()
@@ -77,7 +70,7 @@ class PowerSGDLearner(_COINNLearner):
         first_model = list(self.trainer.nn.keys())[0]
         for key, param in self.trainer.nn[first_model].named_parameters():
             if param.ndimension() <= 1:
-                self.powerSGD_state.rank1_tensors[key] = param.grad.detach().cpu().numpy().astype(self.dtype)
+                self.powerSGD_state.rank1_tensors[key] = param.grad.detach()
             else:
                 self.powerSGD_state.high_rank_tensors[key] = param.grad.detach()
 
@@ -85,7 +78,7 @@ class PowerSGDLearner(_COINNLearner):
             if self.use_error_feedback:
                 self.powerSGD_state.params_clone[param_key] = _torch.clone(M).detach()
                 if param_key in self.powerSGD_state.error_dict:
-                    M._add(self.powerSGD_state.error_dict[param_key])
+                    M += self.powerSGD_state.error_dict[param_key]
                 else:
                     self.powerSGD_state.error_dict[param_key] = _torch.zeros(M.shape, device=self.device, dtype=M.dtype)
 
@@ -101,8 +94,10 @@ class PowerSGDLearner(_COINNLearner):
             else:
                 _orthogonalize(self.powerSGD_state.q_memory_dict[param_key])
 
-            self.powerSGD_state.p_memory_dict[param_key] = _torch.matmul(M,
-                                                                         self.powerSGD_state.q_memory_dict[param_key])
+            self.powerSGD_state.p_memory_dict[param_key] = _torch.matmul(
+                M,
+                self.powerSGD_state.q_memory_dict[param_key]
+            )
 
         return it, out
 
@@ -115,7 +110,8 @@ class PowerSGDLearner(_COINNLearner):
         it, out = {}, {}
         if self.input.get('powerSGD_phase', 'phase_P_sync') == 'phase_P_sync':
             it, out = self._prepare_parameters()
-            Ps = [p.detach().cpu().numpy().astype(self.dtype) for p in self.powerSGD_state.p_memory_dict.values()]
+            Ps = [p.clone().detach().cpu().numpy().astype(self.dtype)
+                  for p in self.powerSGD_state.p_memory_dict.values()]
             out['powerSGD_P_file'] = f"powerSGD_P_{_conf.grads_file}"
             _tu.save_arrays(
                 self.state['transferDirectory'] + _sep + out['powerSGD_P_file'],
@@ -124,18 +120,20 @@ class PowerSGDLearner(_COINNLearner):
 
         elif self.input.get('powerSGD_phase') == 'phase_Q_sync':
             out['rank1_grads_file'] = f"rank1_{_conf.grads_file}"
+            rank1_grads = [g.clone().detach().cpu().numpy().astype(self.dtype)
+                           for g in self.powerSGD_state.rank1_tensors.values()]
             _tu.save_arrays(
                 self.state['transferDirectory'] + _sep + out['rank1_grads_file'],
-                _np.array(list(self.powerSGD_state.rank1_tensors.values()), dtype=object)
+                _np.array(rank1_grads, dtype=object)
             )
+            del rank1_grads
 
             """Recev all Ps"""
             file_Ps = self.state['baseDirectory'] + _os.sep + self.input['powerSGD_P_file_AGG']
             received_Ps = _tu.load_arrays(file_Ps)
             for k, new_p in zip(self.powerSGD_state.p_memory_dict, received_Ps):
-                new_p = _torch.from_numpy(new_p).to(self.device)
-                _orthogonalize(new_p)
-                self.powerSGD_state.p_memory_dict[k] = new_p
+                self.powerSGD_state.p_memory_dict[k] = _torch.from_numpy(new_p).to(self.device)
+                _orthogonalize(self.powerSGD_state.p_memory_dict[k])
 
             """Send all Qs"""
             for param_key, M in self.powerSGD_state.high_rank_tensors.items():
@@ -143,7 +141,8 @@ class PowerSGDLearner(_COINNLearner):
                     M.t(),
                     self.powerSGD_state.p_memory_dict[param_key]
                 )
-            Qs = [p.detach().cpu().numpy().astype(self.dtype) for p in self.powerSGD_state.q_memory_dict.values()]
+            Qs = [p.cpu().numpy().astype(self.dtype)
+                  for p in self.powerSGD_state.q_memory_dict.values()]
             out['powerSGD_Q_file'] = f"powerSGD_Q_{_conf.grads_file}"
             _tu.save_arrays(
                 self.state['transferDirectory'] + _sep + out['powerSGD_Q_file'],
@@ -191,12 +190,12 @@ class PowerSGDReducer(_COINNReducer):
             )
             out['powerSGD_phase'] = 'phase_Q_sync'
 
-        elif site.get('powerSGD_P_file'):
+        elif site.get('powerSGD_Q_file'):
             """Average Qs and rank1_grads_file"""
 
             out['rank_1_grads_file_AGG'] = f"rank1_AGG_{_conf.avg_grads_file}"
             _tu.save_arrays(
-                self.state['transferDirectory'] + _os.sep + out['powerSGD_P_file_AGG'],
+                self.state['transferDirectory'] + _os.sep + out['rank_1_grads_file_AGG'],
                 _np.array(self._average('rank1_grads_file'), dtype=object)
             )
 
