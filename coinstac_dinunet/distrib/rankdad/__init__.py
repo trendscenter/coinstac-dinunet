@@ -6,7 +6,7 @@ from coinstac_dinunet.distrib.learner import COINNLearner as _COINNLearner
 from coinstac_dinunet.distrib.reducer import COINNReducer as _COINNReducer
 from coinstac_dinunet.utils import tensorutils as _tu
 import coinstac_dinunet.config as _config
-from .spi import DADParallel as _DADParallel, power_iteration_BC as _SPI
+from .spi import DADParallel as DADParallel, power_iteration_BC
 import torch as _torch
 
 
@@ -19,7 +19,7 @@ class DADLearner(_COINNLearner):
     def __init__(self, **kw):
         super().__init__(**kw)
         for fk in self.trainer.nn:
-            self.trainer.nn[fk] = _DADParallel(
+            self.trainer.nn[fk] = DADParallel(
                 self.trainer.nn[fk],
                 cache=self.cache,
                 input=self.input,
@@ -69,6 +69,9 @@ class DADLearner(_COINNLearner):
 class DADReducer(_COINNReducer):
     def __init__(self, **kw):
         super().__init__(**kw)
+        self.rank = self.cache.setdefault('dad_reduction_rank', 10),
+        self.num_pow_iters = self.cache.setdefault('dad_num_pow_iters', 5),
+        self.dad_tol = self.cache.setdefault('dad_tol', 1e-3)
 
     def reduce(self):
         out = {'reduced_dad_data': 'reduced_dad_data.npy'}
@@ -82,15 +85,12 @@ class DADReducer(_COINNReducer):
         reduced_data = []
         for d in list(zip(*site_data)):
             grad, act = list(zip(*d))
-            grad = _torch.cat([_torch.from_numpy(g).to(_config.DEVICE) for g in grad], 1).squeeze(-1)
-            act = _torch.cat([_torch.from_numpy(a).to(_config.DEVICE) for a in act], 1)
+            grad = _torch.cat([_torch.from_numpy(g).to(self.device) for g in grad], 1).squeeze(-1)
+            act = _torch.cat([_torch.from_numpy(a).to(self.device) for a in act], 1)
             if _config.CUDA_AVAILABLE:
-                grad, act = _SPI(
-                    grad,
-                    act,
-                    self.cache.setdefault('dad_reduction_rank', 10),
-                    self.cache.setdefault('dad_num_pow_iters', 5),
-                    self.cache.setdefault('dad_tol', 1e-3)
+                grad, act = power_iteration_BC(
+                    grad, act,
+                    self.rank, self.num_pow_iters, self.dad_tol
                 )
             reduced_data.append([
                 grad.cpu().numpy().astype(self.dtype),

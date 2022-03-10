@@ -15,13 +15,10 @@ class COINNLearner:
         self.global_modes = self.input.get('global_modes', {})
         self.pool = mp_pool
         self.dtype = f"float{self.cache['precision_bits']}"
+        self.device = trainer.device["gpu"]
 
     def step(self) -> dict:
         out = {}
-        """
-        If condition checks if it is first learning step, where there is no averaged_gradient[
-        available from the remote
-        """
         grads = _tu.load_arrays(self.state['baseDirectory'] + _sep + self.input['avg_grads_file'])
 
         first_model = list(self.trainer.nn.keys())[0]

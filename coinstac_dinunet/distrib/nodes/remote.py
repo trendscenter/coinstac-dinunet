@@ -14,8 +14,9 @@ from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.utils import performance_improved_, stop_training_
 from coinstac_dinunet.utils.logger import *
 from coinstac_dinunet.vision import plotter as _plot
-from .reducer import COINNReducer as _dSGDReducer
-from .dad import DADReducer as _DADReducer
+from ..reducer import COINNReducer as _dSGDReducer
+from ..rankdad import DADReducer as _DADReducer
+from ..powersgd import PowerSGDReducer as _PowerSGDReducer
 
 
 class EmptyDataHandle:
@@ -84,7 +85,7 @@ class COINNRemote:
 
         self.cache['folds'] = self.cache['folds'][::-1]
 
-    def _next_run(self):
+    def _next_run(self, trainer):
         """
         This function pops a new fold, lock parameters, and forward init_nn signal to all sites
         """
@@ -93,6 +94,7 @@ class COINNRemote:
             log_dir=self.state['outputDirectory'] + _os.sep + self.cache[
                 'task_id'] + _os.sep + f"fold_{self.cache['fold']['split_ix']}")
         _os.makedirs(self.cache['log_dir'], exist_ok=True)
+        trainer.init_nn(set_devices=True)
 
         metric_direction = self.cache['metric_direction']
         self.cache.update(epoch=0, best_val_epoch=0)
@@ -217,7 +219,7 @@ class COINNRemote:
             Initialize all folds and loggers
             """
             self._init_runs()
-            self.out['global_runs'] = self._next_run()
+            self.out['global_runs'] = self._next_run(trainer)
             self.out['phase'] = Phase.NEXT_RUN
 
         if check(all, 'phase', Phase.PRE_COMPUTATION, self.input):
@@ -253,7 +255,7 @@ class COINNRemote:
             """
             self._on_run_end(trainer)
             if len(self.cache['folds']) > 0:
-                self.out['global_runs'] = self._next_run()
+                self.out['global_runs'] = self._next_run(trainer)
                 self.out['phase'] = Phase.NEXT_RUN
             else:
                 self.out.update(**self._send_global_scores(trainer))
@@ -279,8 +281,12 @@ class COINNRemote:
     def _get_reducer_cls(self, reducer_cls):
         if self.cache.get('agg_engine') == AGG_Engine.dSGD:
             return _dSGDReducer
+
         elif self.cache.get('agg_engine') == AGG_Engine.rankDAD:
             return _DADReducer
+
+        elif self.cache.get('agg_engine') == AGG_Engine.powerSGD:
+            return _PowerSGDReducer
 
         return reducer_cls
 

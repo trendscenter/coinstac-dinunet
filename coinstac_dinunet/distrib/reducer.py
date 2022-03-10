@@ -21,6 +21,7 @@ class COINNReducer:
         self.trainer = trainer
         self.pool = mp_pool
         self.dtype = f"float{self.cache['precision_bits']}"
+        self.device = trainer.device['gpu']
 
     def reduce(self):
         """ Average each sites gradients and pass it to all sites. """
@@ -34,7 +35,7 @@ class COINNReducer:
 
         avg_grads = []
         for data in list(zip(*grads)):
-            data = _torch.from_numpy(_np.array(data)).to(_conf.DEVICE).mean(0)
+            data = _torch.from_numpy(_np.array(data)).to(self.device).mean(0)
             avg_grads.append(data.cpu().numpy().astype(self.dtype))
 
         _tu.save_arrays(

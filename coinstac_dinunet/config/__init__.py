@@ -17,7 +17,6 @@ score_low = 0.0
 
 CUDA_AVAILABLE = _torch.cuda.is_available()
 NUM_GPUS = _torch.cuda.device_count()
-DEVICE = 'cuda' if CUDA_AVAILABLE else 'cpu'
 
 max_size = _sys.maxsize
 

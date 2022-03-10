@@ -15,9 +15,11 @@ import coinstac_dinunet.config as _conf
 import coinstac_dinunet.utils as _utils
 from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.data import COINNDataHandle as _DataHandle
-from coinstac_dinunet.distrib.learner import COINNLearner as _dSGDLearner
 from coinstac_dinunet.utils import FrozenDict as _FrozenDict
-from .dad import DADLearner as _DADLearner
+
+from ..learner import COINNLearner as _dSGDLearner
+from ..rankdad import DADLearner as _DADLearner
+from ..powersgd import PowerSGDLearner as _PowerSGDLearner
 
 
 class COINNLocal:
@@ -90,10 +92,12 @@ class COINNLocal:
         """Cache args from input specifications"""
         if not self.cache.get(Key.ARGS_CACHED):
             self.cache.update(**self.input)
-            if self.input.get('task_id'):
-                self.cache.update(
-                    **self.input.get(f"{self.input['task_id']}_args", {})
-                )
+            self.cache.update(
+                **self.input.get(f"{self.input.get('task_id')}_args", {})
+            )
+            self.cache.update(
+                **self.input.get(f"{self.input.get('agg_engine')}_args", {})
+            )
 
             for k in self._args:
                 if self.cache.get(k) is None:
@@ -113,6 +117,8 @@ class COINNLocal:
         out.update(trainer.data_handle.prepare_data())
         self.cache['num_folds'] = len(self.cache['splits'])
 
+        trainer.init_nn(set_devices=True)
+
         out['data_size'] = {}
         for k, sp in self.cache['splits'].items():
             sp = _json.loads(open(self.cache['split_dir'] + _os.sep + sp).read())
@@ -127,7 +133,7 @@ class COINNLocal:
         self.cache['log_dir'] = self.state['outputDirectory'] + _sep + self.cache[
             'task_id'] + _sep + f"fold_{self.cache['split_ix']}"
         _os.makedirs(self.cache['log_dir'], exist_ok=True)
-        trainer.init_nn(init_weights=True)
+        trainer.init_nn(init_model=True, init_optim=True, set_devices=True, init_weights=True)
         self.cache['best_nn_state'] = f"best.{self.cache['task_id']}-{self.cache['split_ix']}.pt"
         self.cache['latest_nn_state'] = f"latest.{self.cache['task_id']}-{self.cache['split_ix']}.pt"
         out['phase'] = Phase.COMPUTATION
@@ -267,8 +273,12 @@ class COINNLocal:
 
         if self.cache.get('agg_engine') == AGG_Engine.dSGD:
             return _dSGDLearner
+
         elif self.cache.get('agg_engine') == AGG_Engine.rankDAD:
             return _DADLearner
+
+        elif self.cache.get('agg_engine') == AGG_Engine.powerSGD:
+            return _PowerSGDLearner
 
         return learner_cls
 
