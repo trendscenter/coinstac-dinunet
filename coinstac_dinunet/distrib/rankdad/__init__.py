@@ -1,6 +1,5 @@
 import numpy as _np
 import os as _os
-from functools import partial as _partial
 
 from coinstac_dinunet.distrib.learner import COINNLearner as _COINNLearner
 from coinstac_dinunet.distrib.reducer import COINNReducer as _COINNReducer
@@ -8,11 +7,6 @@ from coinstac_dinunet.utils import tensorutils as _tu
 import coinstac_dinunet.config as _config
 from .spi import DADParallel as DADParallel, power_iteration_BC
 import torch as _torch
-
-
-def _load(state, site, site_vars):
-    grads_file = state['baseDirectory'] + _os.sep + site + _os.sep + site_vars['dad_data']
-    return _tu.load_arrays(grads_file)
 
 
 class DADLearner(_COINNLearner):
@@ -76,22 +70,21 @@ class DADReducer(_COINNReducer):
     def reduce(self):
         out = {'reduced_dad_data': 'reduced_dad_data.npy'}
 
-        site_data = list(
-            self.pool.starmap(
-                _partial(_load, self.state), self.input.items()
-            )
-        )
-
-        reduced_data = []
+        site_data = self._load("dad_data")
+        gpu_data = []
         for d in list(zip(*site_data)):
             grad, act = list(zip(*d))
-            grad = _torch.cat([_torch.from_numpy(g).to(self.device) for g in grad], 1).squeeze(-1)
-            act = _torch.cat([_torch.from_numpy(a).to(self.device) for a in act], 1)
+            grad = _torch.cat([_torch.from_numpy(g).to(self.device, non_blocking=True) for g in grad], 1).squeeze(-1)
+            act = _torch.cat([_torch.from_numpy(a).to(self.device, non_blocking=True) for a in act], 1)
             if _config.CUDA_AVAILABLE:
                 grad, act = power_iteration_BC(
                     grad, act,
                     self.rank, self.num_pow_iters, self.dad_tol
                 )
+            gpu_data.append([grad, act])
+
+        reduced_data = []
+        for grad, act in gpu_data[::-1]:
             reduced_data.append([
                 grad.cpu().numpy().astype(self.dtype),
                 act.cpu().numpy().astype(self.dtype)
@@ -99,7 +92,7 @@ class DADReducer(_COINNReducer):
 
         _tu.save_arrays(
             self.state['transferDirectory'] + _os.sep + out['reduced_dad_data'],
-            _np.array(reduced_data, dtype=object)
+            _np.array(reduced_data[::-1], dtype=object)
         )
         out['update'] = True
         return out

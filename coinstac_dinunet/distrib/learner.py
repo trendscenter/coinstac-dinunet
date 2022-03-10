@@ -23,7 +23,7 @@ class COINNLearner:
 
         first_model = list(self.trainer.nn.keys())[0]
         for i, param in enumerate(self.trainer.nn[first_model].parameters()):
-            param.grad = _torch.tensor(grads[i], dtype=_torch.float32).to(self.trainer.device['gpu'])
+            param.grad = _torch.tensor(grads[i], dtype=_torch.float32).to(self.device)
 
         first_optim = list(self.trainer.optimizer.keys())[0]
         self.trainer.optimizer[first_optim].step()

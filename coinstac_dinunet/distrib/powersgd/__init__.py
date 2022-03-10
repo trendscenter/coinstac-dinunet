@@ -7,7 +7,6 @@ from coinstac_dinunet.utils import tensorutils as _tu
 
 from ..learner import COINNLearner as _COINNLearner
 from ..reducer import COINNReducer as _COINNReducer
-from functools import partial as _partial
 from collections import OrderedDict as _Dict
 
 _sep = _os.sep
@@ -182,25 +181,7 @@ class PowerSGDLearner(_COINNLearner):
         return it, out
 
 
-def _load(state, file_key, site, site_vars):
-    grads_file = state['baseDirectory'] + _os.sep + site + _os.sep + site_vars[file_key]
-    return _tu.load_arrays(grads_file)
-
-
 class PowerSGDReducer(_COINNReducer):
-
-    def _average(self, file_key):
-        grads = list(
-            self.pool.starmap(
-                _partial(_load, self.state, file_key), self.input.items()
-            )
-        )
-
-        avg_grads = []
-        for data in list(zip(*grads)):
-            data = _torch.from_numpy(_np.array(data)).to(self.device).mean(0)
-            avg_grads.append(data.cpu().numpy().astype(self.dtype))
-        return avg_grads
 
     def reduce(self):
         """ Average each sites gradients and pass it to all sites. """
