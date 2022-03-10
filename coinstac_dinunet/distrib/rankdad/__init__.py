@@ -69,7 +69,7 @@ class DADLearner(_COINNLearner):
 class DADReducer(_COINNReducer):
     def __init__(self, **kw):
         super().__init__(**kw)
-        self.rank = self.cache.setdefault('dad_reduction_rank', 10),
+        self.rank = self.cache.setdefault('dad_reduction_rank', 10)
         self.num_pow_iters = self.cache.setdefault('dad_num_pow_iters', 5)
         self.dad_tol = self.cache.setdefault('dad_tol', 1e-3)
 
