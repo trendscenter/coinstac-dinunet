@@ -7,11 +7,36 @@ from coinstac_dinunet.utils import tensorutils as _tu
 
 from ..learner import COINNLearner as _COINNLearner
 from ..reducer import COINNReducer as _COINNReducer
-from torch.distributed.algorithms.ddp_comm_hooks.powerSGD_hook import _orthogonalize
 from functools import partial as _partial
 from collections import OrderedDict as _Dict
 
 _sep = _os.sep
+
+
+def _orthogonalize(matrix, epsilon=1e-8):
+    """
+    Reference: torch.com: torch.distributed.algorithms.commn_hook.powerGSD_hooks"""
+    """
+    Applies Gram-Schmidt procedure to orthogonalize a given 2D tensor.
+    If epsilon is 0, this is equivalent to `torch.qr(matrix, out=(matrix, _))`,
+    but `torch.qr` is very slow, probably because it is not optimized for a matrix that has a small number of columns.
+    """
+    num_cols = matrix.shape[1]
+    for i in range(num_cols):
+        # Normalize the i'th column.
+        col = matrix[:, i: i + 1]
+        # If no epsilon is added here, division by zero may be caused by vanishing gradients.
+        # This epsilon is not needed if the input matrix covers the gradients of at least one entire layer in the neural network.
+        if epsilon == 0:
+            # Note that col ** 2 can underflow/overflow if we use FP16.
+            # May need to consider multiplying a scaling factor and dividing it later, or using bfloat16 instead.
+            col /= _torch.norm(col)
+        else:
+            col /= _torch.norm(col) + epsilon
+        # Project it on the rest and remove it.
+        if i + 1 < num_cols:
+            rest = matrix[:, i + 1:]
+            rest -= _torch.sum(col * rest, dim=0) * col
 
 
 class PowerSGDState:
