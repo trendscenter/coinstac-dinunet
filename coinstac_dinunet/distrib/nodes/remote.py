@@ -255,7 +255,7 @@ class COINNRemote:
             """
             self._on_run_end(trainer)
             if len(self.cache['folds']) > 0:
-                self.out['global_runs'] = self._next_run()
+                self.out['global_runs'] = self._next_run(trainer)
                 self.out['phase'] = Phase.NEXT_RUN
             else:
                 self.out.update(**self._send_global_scores(trainer))
