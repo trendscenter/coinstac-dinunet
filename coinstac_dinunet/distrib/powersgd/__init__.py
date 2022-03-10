@@ -147,7 +147,8 @@ class PowerSGDLearner(_COINNLearner):
 
         elif self.input.get('powerSGD_phase') == 'phase_Q_sync':
             out['rank1_grads_file'] = f"rank1_{_conf.grads_file}"
-            rank1_grads = [g.numpy().astype(self.dtype) for g in self.powerSGD_state.rank1_tensors.values()]
+            rank1_grads = [g.cpu().numpy().astype(self.dtype)
+                           for g in self.powerSGD_state.rank1_tensors.values()]
             _tu.save_arrays(
                 self.state['transferDirectory'] + _sep + out['rank1_grads_file'],
                 _np.array(rank1_grads, dtype=object)
