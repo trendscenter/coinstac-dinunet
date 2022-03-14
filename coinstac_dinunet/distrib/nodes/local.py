@@ -89,7 +89,7 @@ class COINNLocal:
         self._pretrain_args = pretrain_args if pretrain_args else {}
         self._dataloader_args = dataloader_args if dataloader_args else {}
 
-        """Cache args from input specifications"""
+        """ ############### Cache args from input specifications ########### """
         if not self.cache.get(Key.ARGS_CACHED):
             self.cache.update(**self.input)
             self.cache.update(
@@ -109,9 +109,8 @@ class COINNLocal:
             if self.cache['mode'] == Mode.TRAIN:
                 assert self.cache['split_ratio'] or self.cache["num_folds"], "Split ratio or K(num k-folds) is needed."
 
-            self.cache['task_id'] = f"{self.cache['task_id']}-{self.cache['agg_engine']}"
             self.cache[Key.ARGS_CACHED] = True
-        """######################################"""
+        """####################################################################"""
 
     def _init_runs(self, trainer):
         out = {}
@@ -132,9 +131,14 @@ class COINNLocal:
         self.cache.update(cursor=0)
         self.cache[Key.TRAIN_SERIALIZABLE] = []
         self.cache['split_file'] = self.cache['splits'][self.cache['split_ix']]
-        self.cache['log_dir'] = self.state['outputDirectory'] + _sep + self.cache[
-            'task_id'] + _sep + f"fold_{self.cache['split_ix']}"
+        self.cache['log_dir'] = _os.path.join(
+            self.state['outputDirectory'],
+            self.cache['task_id'] + '-' + self.cache['agg_engine'],
+            f"fold_{self.cache['split_ix']}"
+        )
+
         _os.makedirs(self.cache['log_dir'], exist_ok=True)
+
         trainer.init_nn(init_model=True, init_optim=True, set_devices=True, init_weights=True)
         self.cache['best_nn_state'] = f"best.{self.cache['task_id']}-{self.cache['split_ix']}.pt"
         self.cache['latest_nn_state'] = f"latest.{self.cache['task_id']}-{self.cache['split_ix']}.pt"

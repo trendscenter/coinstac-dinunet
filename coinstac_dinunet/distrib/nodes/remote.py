@@ -90,9 +90,11 @@ class COINNRemote:
         This function pops a new fold, lock parameters, and forward init_nn signal to all sites
         """
         self.cache['fold'] = self.cache['folds'].pop()
-        self.cache.update(
-            log_dir=self.state['outputDirectory'] + _os.sep + self.cache[
-                'task_id'] + _os.sep + f"fold_{self.cache['fold']['split_ix']}")
+        self.cache['log_dir'] = _os.path.join(
+            self.state['outputDirectory'],
+            self.cache['task_id'] + '-' + self.cache['agg_engine'],
+            f"fold_{self.cache['fold']['split_ix']}"
+        )
         _os.makedirs(self.cache['log_dir'], exist_ok=True)
         trainer.init_nn(set_devices=True)
 
