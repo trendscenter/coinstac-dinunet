@@ -92,14 +92,13 @@ class COINNLocal:
         """Cache args from input specifications"""
         if not self.cache.get(Key.ARGS_CACHED):
             self.cache.update(**self.input)
-            self.cache['task_id'] = f"{self.cache['task_id']}-{self.cache['agg_engine']}"
-
             self.cache.update(
                 **self.input.get(f"{self.input.get('task_id')}_args", {})
             )
             self.cache.update(
                 **self.input.get(f"{self.input.get('agg_engine')}_args", {})
             )
+            self.cache['task_id'] = f"{self.cache['task_id']}-{self.cache['agg_engine']}"
 
             for k in self._args:
                 if self.cache.get(k) is None:
