@@ -219,7 +219,8 @@ class DADParallel(_torch.nn.Module):
                     self.num_pow_iters,
                     self.dad_tol
                 )
-                data.append([grad.unsqueeze(-1), act])
+                grad = grad.unsqueeze(-1)
+                data.append([grad, act])
 
         out, data = {}, []
         for ch_name, ch in list(self.module.named_children())[::-1]:
