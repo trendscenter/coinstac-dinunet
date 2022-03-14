@@ -26,7 +26,8 @@ class COINNReducer:
         sites_data = self._load(file_key)
         gpu_data = []
         for data in list(zip(*sites_data)):
-            gpu_data.append(_torch.from_numpy(_np.array(data)).to(self.device, non_blocking=True).mean(0))
+            avg = _torch.from_numpy(_np.array(data)).to(self.device, non_blocking=True).mean(0)
+            gpu_data.append(avg)
 
         return [data.cpu().numpy().astype(self.dtype) for data in gpu_data]
 
