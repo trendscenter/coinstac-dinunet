@@ -98,7 +98,6 @@ class COINNLocal:
             self.cache.update(
                 **self.input.get(f"{self.input.get('agg_engine')}_args", {})
             )
-            self.cache['task_id'] = f"{self.cache['task_id']}-{self.cache['agg_engine']}"
 
             for k in self._args:
                 if self.cache.get(k) is None:
@@ -109,6 +108,8 @@ class COINNLocal:
 
             if self.cache['mode'] == Mode.TRAIN:
                 assert self.cache['split_ratio'] or self.cache["num_folds"], "Split ratio or K(num k-folds) is needed."
+
+            self.cache['task_id'] = f"{self.cache['task_id']}-{self.cache['agg_engine']}"
             self.cache[Key.ARGS_CACHED] = True
         """######################################"""
 
