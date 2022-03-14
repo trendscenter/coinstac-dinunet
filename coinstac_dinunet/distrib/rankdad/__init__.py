@@ -84,7 +84,7 @@ class DADReducer(_COINNReducer):
             gpu_data.append([grad, act])
 
         reduced_data = []
-        for grad, act in gpu_data[::-1]:
+        for grad, act in gpu_data:
             reduced_data.append([
                 grad.cpu().numpy().astype(self.dtype),
                 act.cpu().numpy().astype(self.dtype)
@@ -92,7 +92,7 @@ class DADReducer(_COINNReducer):
 
         _tu.save_arrays(
             self.state['transferDirectory'] + _os.sep + out['reduced_dad_data'],
-            _np.array(reduced_data[::-1], dtype=object)
+            _np.array(reduced_data, dtype=object)
         )
         out['update'] = True
         return out
