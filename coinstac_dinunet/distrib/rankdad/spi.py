@@ -219,16 +219,18 @@ class DADParallel(_torch.nn.Module):
                     self.num_pow_iters,
                     self.dad_tol
                 )
-                data.append([
-                    grad.unsqueeze(-1).cpu().numpy().astype(self.dtype),
-                    act.cpu().numpy().astype(self.dtype)
-                ])
+                data.append([grad.unsqueeze(-1), act])
 
         out, data = {}, []
         for ch_name, ch in list(self.module.named_children())[::-1]:
             _backward(ch_name, ch, data)
 
         out['dad_data'] = 'dad_data.npy'
+        data = [[
+            grad.cpu().numpy().astype(self.dtype),
+            act.cpu().numpy().astype(self.dtype)
+        ] for grad, act in data]
+
         _tu.save_arrays(
             self.state['transferDirectory'] + _os.sep + out['dad_data'],
             _np.array(data, dtype=object)
