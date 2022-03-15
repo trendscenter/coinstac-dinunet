@@ -114,7 +114,6 @@ class COINNLocal:
 
     def _init_runs(self, trainer):
         out = {}
-        """Data related initializations."""
         out.update(trainer.data_handle.prepare_data())
         self.cache['num_folds'] = len(self.cache['splits'])
 
@@ -133,7 +132,7 @@ class COINNLocal:
         self.cache['split_file'] = self.cache['splits'][self.cache['split_ix']]
         self.cache['log_dir'] = _os.path.join(
             self.state['outputDirectory'],
-            self.cache['task_id'] + '-' + self.cache['agg_engine'],
+            self.cache['task_id'],
             f"fold_{self.cache['split_ix']}"
         )
 
@@ -262,18 +261,12 @@ class COINNLocal:
 
         elif self.out['phase'] == Phase.SUCCESS:
             """ This phase receives global scores from the aggregator."""
-            done = False
             zip_path = f"{self.state['baseDirectory']}{_sep}{self.input['results_zip']}.zip"
             for i in range(3):
-                if done:
-                    break
-
                 _time.sleep(i)
                 if _os.path.exists(zip_path):
-                    _shutil.copy(zip_path,
-                                 f"{self.state['outputDirectory'] + _sep + self.cache['task_id']}{_sep}"
-                                 f"{self.input['results_zip']}.zip")
-                    done = True
+                    _shutil.copy(zip_path, f"{self.state['outputDirectory']}{_sep}{self.input['results_zip']}.zip")
+                    break
 
     def _get_learner_cls(self, learner_cls):
 
