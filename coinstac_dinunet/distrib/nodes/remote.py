@@ -72,7 +72,7 @@ class COINNRemote:
             self.cache[Key.ARGS_CACHED] = True
 
     def _init_runs(self):
-        self.cache.update(seed=_conf.current_seed)
+        self.cache.update(seed=self.cache.setdefault('seed', _conf.current_seed))
         self.cache[Key.GLOBAL_TEST_SERIALIZABLE] = []
 
         self.cache['data_size'] = {}
