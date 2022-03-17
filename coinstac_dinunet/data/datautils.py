@@ -14,6 +14,7 @@ def create_ratio_split(files, cache, shuffle_files=True, name='SPLIT'):
     first_key = cache.get('first_key', 'train')
 
     if shuffle_files:
+        _rd.seed(len(files))
         _rd.shuffle(files)
 
     keys = [first_key]
@@ -40,7 +41,9 @@ def create_k_fold_splits(files, cache, shuffle_files=True, name='SPLIT'):
     k = cache['num_folds']
     save_to_dir = cache['split_dir']
     if shuffle_files:
+        _rd.seed(len(files))
         _rd.shuffle(files)
+
     file_ix = _np.arange(len(files))
     ix_splits = _np.array_split(file_ix, k)
     for i in range(len(ix_splits)):
@@ -80,7 +83,7 @@ def init_k_folds(files, cache, state):
 
     elif cache.get('split_files'):
         [_shutil.copy(state['baseDirectory'] + _sep + f, cache['split_dir'] + _sep + f) for f in cache['split_files']]
-    
+
     elif cache.get('num_folds'):
         create_k_fold_splits(files, cache)
 
