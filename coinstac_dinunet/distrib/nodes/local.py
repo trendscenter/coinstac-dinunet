@@ -99,6 +99,9 @@ class COINNLocal:
                 **self.input.get(f"{self.input.get('agg_engine')}_args", {})
             )
 
+            if self.input.get("config_file"):
+                self.cache.update(**_json.load(open(self.state['baseDirectory'] + _sep + self.input["config_file"])))
+
             for k in self._args:
                 if self.cache.get(k) is None:
                     self.cache[k] = self._args[k]

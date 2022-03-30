@@ -9,6 +9,7 @@ import coinstac_dinunet.config as _conf
 from coinstac_dinunet.config.keys import *
 from coinstac_dinunet.utils.utils import performance_improved_
 from .nn import NNTrainer as _NNTrainer
+import coinstac_dinunet.metrics as _metrics
 
 
 class COINNTrainer(_NNTrainer, ABC):
@@ -66,3 +67,14 @@ class COINNTrainer(_NNTrainer, ABC):
     def set_log_headers(self):
         """Must be set from COINNLocal's constructor"""
         pass
+
+    def new_metrics(self):
+        if self.cache.get('num_class') == 2:
+            if self.cache.get("monitor_metric") in ["precision", "recall", "accuracy", "overlap", 'f1']:
+                return _metrics.Prf1a()
+
+            elif self.cache.get("monitor_metric") == "auc":
+                return _metrics.AUCROCMetrics()
+
+        elif self.cache.get('num_class') > 2:
+            return _metrics.ConfusionMatrix(num_classes=self.cache['num_class'])
