@@ -95,6 +95,13 @@ def _dad_trainable_module(module):
     return len(list(module.parameters())) > 0
 
 
+def _mm_flatten(*tensors):
+    if len(tensors[0].shape) > 2:
+        dims = list(range(len(tensors[0].shape)))
+        return [t.flatten(*dims[:-1]) for t in tensors]
+    return tensors
+
+
 class DADParallel(_torch.nn.Module):
     def __init__(self, module, cache=None, input=None, state=None, device=None, dtype='float32', **kw):
         super().__init__()
@@ -212,9 +219,13 @@ class DADParallel(_torch.nn.Module):
                     _backward(self._hierarchy_key(module_name, child_name), child, data)
 
             elif self._is_dad_module.get(module_name):
+                grad, act = _mm_flatten(
+                    self._local_grads[module_name].detach(),
+                    self._activations[module_name].detach()
+                )
                 grad, act = power_iteration_BC(
-                    self._local_grads[module_name].detach().T,
-                    self._activations[module_name].detach().T,
+                    grad.T,
+                    act.T,
                     self.rank,
                     self.num_pow_iters,
                     self.dad_tol
