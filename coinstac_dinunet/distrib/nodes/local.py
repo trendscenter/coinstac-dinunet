@@ -92,15 +92,17 @@ class COINNLocal:
         """ ############### Cache args from input specifications ########### """
         if not self.cache.get(Key.ARGS_CACHED):
             self.cache.update(**self.input)
-            self.cache.update(
-                **self.input.get(f"{self.input.get('task_id')}_args", {})
-            )
-            self.cache.update(
-                **self.input.get(f"{self.input.get('agg_engine')}_args", {})
-            )
 
-            if self.input.get("config_file"):
-                self.cache.update(**_json.load(open(self.state['baseDirectory'] + _sep + self.input["config_file"])))
+            task_args = self.input.get(f"{self.input.get('task_id')}_args", {})
+            self.cache.update(**task_args)
+
+            agg_engine_args = self.input.get(f"{self.input.get('agg_engine')}_args", {})
+            self.cache.update(**agg_engine_args)
+
+            data_conf = self.input.get(f"{self.input.get('task_id')}_data_conf", {})
+            for k, v in data_conf.items():
+                if k not in task_args and k not in agg_engine_args:
+                    self.cache[k] = v
 
             for k in self._args:
                 if self.cache.get(k) is None:
