@@ -11,7 +11,7 @@ README = (HERE / "README.md").read_text()
 # This call to setup() does all the work
 setup(
     name="coinstac-dinunet",
-    version="2.5.0",
+    version="2.5.1",
     description="Distributed Neural Network implementation on COINSTAC.",
     long_description=README,
     long_description_content_type="text/markdown",
