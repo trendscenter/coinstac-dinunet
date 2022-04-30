@@ -1,4 +1,6 @@
 import os as _os
+
+import torch
 import torch as _torch
 import numpy as _np
 from coinstac_dinunet.utils import tensorutils as _tu
@@ -128,12 +130,16 @@ class DADParallel(_torch.nn.Module):
             if hook_type.lower() == 'forward':
                 for i, b in enumerate(in_grad):
                     if b is not None:
-                        self._activations[hook_key] = b
+                        if not self._activations.get(hook_key):
+                            self._activations[hook_key] = [b.detach().unsqueeze(1)]
+                        self._activations[hook_key].append(b.detach().unsqueeze(1))
                     break
             if hook_type.lower() == 'backward':
                 for i, c in enumerate(out_grad):
                     if c is not None:
-                        self._local_grads[hook_key] = c
+                        if not self._local_grads.get(hook_key):
+                            self._local_grads[hook_key] = [c.detach().unsqueeze(1)]
+                        self._local_grads[hook_key].append(c.detach().unsqueeze(1))
                     break
 
         return get
@@ -219,10 +225,8 @@ class DADParallel(_torch.nn.Module):
                     _backward(self._hierarchy_key(module_name, child_name), child, data)
 
             elif self._is_dad_module.get(module_name):
-                grad, act = _mm_flatten(
-                    self._local_grads[module_name].detach(),
-                    self._activations[module_name].detach()
-                )
+                grad, act = self._local_grads[module_name], self._activations[module_name]
+                grad, act = _mm_flatten(torch.cat(grad, 1), torch.cat(act, 1))
                 grad, act = power_iteration_BC(
                     grad.T,
                     act.T,
