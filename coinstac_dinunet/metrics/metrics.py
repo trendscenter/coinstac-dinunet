@@ -9,7 +9,7 @@ import typing as _typing
 
 import numpy as _np
 import torch as _torch
-from sklearn import metrics as _metrics
+from scikit-learn import metrics as _metrics
 
 from coinstac_dinunet.config import metrics_num_precision as _nump, metrics_eps as _eps
 
